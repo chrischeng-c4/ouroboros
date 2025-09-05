@@ -26,3 +26,15 @@ Thumbs.db
 
 # Docker
 *.log
+
+# Claude Code tool files
+.claude/
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Backup files
+*.bak
+*.orig
