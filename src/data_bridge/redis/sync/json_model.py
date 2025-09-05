@@ -32,7 +32,7 @@ class JSONModel(BaseModel):
 
     def get_key(self) -> str:
         """Get the Redis key for this model instance."""
-        if not hasattr(self, '_pk_field') or not self._pk_field:
+        if not hasattr(self.__class__, '_pk_field') or not self.__class__._pk_field:
             raise ValueError("Cannot generate key without primary key field")
 
         pk_field_name = next(
