@@ -42,6 +42,24 @@ class CompoundExpression:
         return CompoundExpression("not", [self])
 
 
+@dataclass(slots=True, frozen=True)
+class UpdateExpression:
+    """Represents a single database update operation."""
+
+    field: str
+    operator: str  # Update operator like set, inc, push, etc.
+    value: Any
+    modifiers: dict[str, Any] | None = None  # For complex operations with additional parameters
+
+    def __post_init__(self) -> None:
+        """Validate the update expression."""
+        if not self.field:
+            raise ValueError("Field cannot be empty")
+        
+        if not self.operator:
+            raise ValueError("Operator cannot be empty")
+
+
 class Field[T]:
     """Base field descriptor with operator support for query building."""
 
@@ -141,17 +159,58 @@ class Field[T]:
         """Check if field exists (for document databases)."""
         return QueryExpression(self.db_field or self.name or "", "exists", value)
 
+    # Update operations
+    def set(self, value: T) -> UpdateExpression:
+        """Set field to a value."""
+        return UpdateExpression(self.db_field or self.name or "", "set", value)
+    
+    def unset(self) -> UpdateExpression:
+        """Remove field from document."""
+        return UpdateExpression(self.db_field or self.name or "", "unset", "")
+    
+    def rename(self, new_name: str) -> UpdateExpression:
+        """Rename field."""
+        return UpdateExpression(self.db_field or self.name or "", "rename", new_name)
+
 
 class IntField(Field[int]):
-    """Integer field."""
+    """Integer field with numeric update operations."""
 
-    pass
+    def inc(self, value: int = 1) -> UpdateExpression:
+        """Increment field by value."""
+        return UpdateExpression(self.db_field or self.name or "", "inc", value)
+    
+    def mul(self, value: int) -> UpdateExpression:
+        """Multiply field by value."""
+        return UpdateExpression(self.db_field or self.name or "", "mul", value)
+    
+    def min(self, value: int) -> UpdateExpression:
+        """Set field to minimum of current value and provided value."""
+        return UpdateExpression(self.db_field or self.name or "", "min", value)
+    
+    def max(self, value: int) -> UpdateExpression:
+        """Set field to maximum of current value and provided value."""
+        return UpdateExpression(self.db_field or self.name or "", "max", value)
 
 
 class FloatField(Field[float]):
-    """Float field."""
+    """Float field with numeric update operations."""
 
-    pass
+    def inc(self, value: float) -> UpdateExpression:
+        """Increment field by value."""
+        return UpdateExpression(self.db_field or self.name or "", "inc", value)
+    
+    def mul(self, value: float) -> UpdateExpression:
+        """Multiply field by value."""
+        return UpdateExpression(self.db_field or self.name or "", "mul", value)
+    
+    def min(self, value: float) -> UpdateExpression:
+        """Set field to minimum of current value and provided value."""
+        return UpdateExpression(self.db_field or self.name or "", "min", value)
+    
+    def max(self, value: float) -> UpdateExpression:
+        """Set field to maximum of current value and provided value."""
+        return UpdateExpression(self.db_field or self.name or "", "max", value)
 
 
 class StringField(Field[str]):
@@ -175,9 +234,13 @@ class StringField(Field[str]):
 
 
 class BoolField(Field[bool]):
-    """Boolean field."""
+    """Boolean field with toggle operation."""
 
-    pass
+    def toggle(self) -> UpdateExpression:
+        """Toggle boolean field value."""
+        # This will require special handling in the translator
+        # For MongoDB, this would use an aggregation pipeline or conditional logic
+        return UpdateExpression(self.db_field or self.name or "", "toggle", None)
 
 
 class ListField[T](Field[list[T]]):
@@ -200,6 +263,69 @@ class ListField[T](Field[list[T]]):
         """Check if list contains any of the specified values."""
         return QueryExpression(self.db_field or self.name or "", "contains_any", values)
 
+    # Array update operations
+    def push(
+        self, 
+        value: T, 
+        *, 
+        position: int | None = None, 
+        slice: int | None = None, 
+        sort: int | None = None
+    ) -> UpdateExpression:
+        """Add element to array."""
+        modifiers = {}
+        if position is not None:
+            modifiers["$position"] = position
+        if slice is not None:
+            modifiers["$slice"] = slice
+        if sort is not None:
+            modifiers["$sort"] = sort
+        
+        return UpdateExpression(
+            self.db_field or self.name or "", 
+            "push", 
+            value,
+            modifiers or None
+        )
+    
+    def push_all(self, values: list[T]) -> UpdateExpression:
+        """Add multiple elements to array."""
+        modifiers = {"$each": True}  # Marker for translator
+        return UpdateExpression(
+            self.db_field or self.name or "", 
+            "push", 
+            values,
+            modifiers
+        )
+    
+    def pull(self, value: T) -> UpdateExpression:
+        """Remove matching elements from array."""
+        return UpdateExpression(self.db_field or self.name or "", "pull", value)
+    
+    def pull_all(self, values: list[T]) -> UpdateExpression:
+        """Remove multiple matching elements from array."""
+        return UpdateExpression(self.db_field or self.name or "", "pullAll", values)
+    
+    def add_to_set(self, value: T) -> UpdateExpression:
+        """Add element to array only if it doesn't exist."""
+        return UpdateExpression(self.db_field or self.name or "", "addToSet", value)
+    
+    def add_to_set_each(self, values: list[T]) -> UpdateExpression:
+        """Add multiple unique elements to array."""
+        modifiers = {"$each": True}  # Marker for translator
+        return UpdateExpression(
+            self.db_field or self.name or "", 
+            "addToSet", 
+            values,
+            modifiers
+        )
+    
+    def pop(self, position: int = 1) -> UpdateExpression:
+        """Remove first (-1) or last (1) element from array."""
+        if position not in [-1, 1]:
+            raise ValueError("Position must be -1 (first) or 1 (last)")
+        return UpdateExpression(self.db_field or self.name or "", "pop", position)
+
 
 class DictField(Field[dict[str, Any]]):
     """Dictionary/object field for nested data."""
@@ -208,6 +334,22 @@ class DictField(Field[dict[str, Any]]):
         """Access nested field for queries."""
         full_path = f"{self.db_field or self.name or ''}.{path}"
         return NestedFieldProxy(full_path)
+
+    # Nested update operations
+    def set_field(self, path: str, value: Any) -> UpdateExpression:
+        """Set nested field value."""
+        full_path = f"{self.db_field or self.name or ''}.{path}"
+        return UpdateExpression(full_path, "set", value)
+    
+    def unset_field(self, path: str) -> UpdateExpression:
+        """Remove nested field."""
+        full_path = f"{self.db_field or self.name or ''}.{path}"
+        return UpdateExpression(full_path, "unset", "")
+    
+    def inc_field(self, path: str, value: int | float) -> UpdateExpression:
+        """Increment nested numeric field."""
+        full_path = f"{self.db_field or self.name or ''}.{path}"
+        return UpdateExpression(full_path, "inc", value)
 
 
 class NestedFieldProxy:

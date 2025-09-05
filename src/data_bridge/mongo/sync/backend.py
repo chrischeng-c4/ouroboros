@@ -7,7 +7,8 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 
 from ...base.backends.sync import SyncBackend
-from ..translator import MongoQueryTranslator
+from ...base.fields import UpdateExpression
+from ..translator import MongoQueryTranslator, MongoUpdateTranslator
 
 if TYPE_CHECKING:
     from .document import Document
@@ -141,13 +142,13 @@ class MongoSyncBackend(SyncBackend):
         result = collection.delete_many(filter_query)
         return result.deleted_count
 
-    def update_query(self, query: MongoQuery[T], updates: dict[str, Any]) -> int:
+    def update_query(self, query: MongoQuery[T], updates: list[UpdateExpression]) -> int:
         """Update documents matching a query."""
         collection = self.get_collection(query.model_class)
         filter_query = MongoQueryTranslator.translate(query.expressions)
 
-        # Convert updates to MongoDB update operations
-        update_doc = {"$set": updates}
+        # Convert update expressions to MongoDB update document
+        update_doc = MongoUpdateTranslator.translate(updates)
 
         result = collection.update_many(filter_query, update_doc)
         return result.modified_count

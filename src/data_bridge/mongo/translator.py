@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from ..base.fields import CompoundExpression, QueryExpression
+from ..base.fields import CompoundExpression, QueryExpression, UpdateExpression
 
 
 class MongoQueryTranslator:
@@ -97,3 +97,100 @@ class MongoQueryTranslator:
         for field in fields:
             projection[field] = 1
         return projection
+
+
+class MongoUpdateTranslator:
+    """Translates update expressions to MongoDB update document format."""
+
+    # Map internal operators to MongoDB update operators
+    OPERATOR_MAPPING: ClassVar[dict[str, str]] = {
+        "set": "$set",
+        "unset": "$unset",
+        "rename": "$rename",
+        "inc": "$inc",
+        "mul": "$mul",
+        "min": "$min",
+        "max": "$max",
+        "push": "$push",
+        "pull": "$pull",
+        "pullAll": "$pullAll",
+        "addToSet": "$addToSet",
+        "pop": "$pop",
+        "toggle": "toggle",  # Special handling required
+    }
+
+    @classmethod
+    def translate(cls, expressions: list[UpdateExpression]) -> dict[str, Any]:
+        """Translate a list of update expressions to MongoDB update document."""
+        if not expressions:
+            return {}
+
+        update_doc: dict[str, dict[str, Any]] = {}
+        
+        for expr in expressions:
+            # Special handling for toggle operation
+            if expr.operator == "toggle":
+                # MongoDB toggle requires aggregation pipeline update
+                # Use $set with conditional expression to flip boolean value
+                if "$set" not in update_doc:
+                    update_doc["$set"] = {}
+                update_doc["$set"][expr.field] = {
+                    "$not": f"${expr.field}"
+                }
+                continue
+            
+            mongo_operator = cls._get_mongo_operator(expr.operator)
+            
+            # Initialize operator section if not exists
+            if mongo_operator not in update_doc:
+                update_doc[mongo_operator] = {}
+            
+            # Handle complex operations with modifiers
+            if expr.modifiers:
+                update_doc[mongo_operator][expr.field] = cls._apply_modifiers(
+                    expr.value, expr.modifiers
+                )
+            else:
+                update_doc[mongo_operator][expr.field] = expr.value
+
+        return update_doc
+
+    @classmethod
+    def _get_mongo_operator(cls, operator: str) -> str:
+        """Get the MongoDB operator for an internal operator."""
+        if operator.startswith("$"):
+            return operator  # Already a MongoDB operator
+        
+        if operator in cls.OPERATOR_MAPPING:
+            return cls.OPERATOR_MAPPING[operator]
+        
+        raise ValueError(f"Unsupported update operator: {operator}")
+
+    @classmethod
+    def _apply_modifiers(cls, value: Any, modifiers: dict[str, Any]) -> dict[str, Any] | Any:
+        """Apply modifiers to an update operation value."""
+        if not modifiers:
+            return value
+        
+        # Handle special marker for $each operations
+        if modifiers.get("$each") is True:
+            # This is a marker from push_all or add_to_set_each
+            if isinstance(value, list):
+                return {"$each": value}
+            else:
+                return {"$each": [value]}
+        
+        # For operations like $push with $position, $slice, $sort modifiers
+        result = dict(modifiers)
+        
+        # If we have positioning/sorting modifiers, we need $each
+        if any(k in modifiers for k in ["$position", "$slice", "$sort"]):
+            if isinstance(value, list):
+                result["$each"] = value
+            else:
+                result["$each"] = [value]
+        else:
+            # Direct modifiers without $each
+            return result
+        
+        return result

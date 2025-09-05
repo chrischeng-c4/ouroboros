@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
 
 from ...base.backends.async_ import AsyncBackend
-from ..translator import MongoQueryTranslator
+from ...base.fields import UpdateExpression
+from ..translator import MongoQueryTranslator, MongoUpdateTranslator
 
 if TYPE_CHECKING:
     from .document import AsyncDocument
@@ -139,13 +140,13 @@ class MongoAsyncBackend(AsyncBackend):
         result = await collection.delete_many(filter_query)
         return result.deleted_count
 
-    async def update_query(self, query: AsyncMongoQuery[T], updates: dict[str, Any]) -> int:
+    async def update_query(self, query: AsyncMongoQuery[T], updates: list[UpdateExpression]) -> int:
         """Update documents matching a query."""
         collection = await self.get_collection(query.model_class)
         filter_query = MongoQueryTranslator.translate(query.expressions)
 
-        # Convert updates to MongoDB update operations
-        update_doc = {"$set": updates}
+        # Convert update expressions to MongoDB update document
+        update_doc = MongoUpdateTranslator.translate(updates)
 
         result = await collection.update_many(filter_query, update_doc)
         return result.modified_count
