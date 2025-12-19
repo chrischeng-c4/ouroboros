@@ -1,0 +1,14 @@
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/thiserror-9d3fbaa1948cc659.d: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /Users/chris.cheng/chris-project/data-bridge/target/release/build/thiserror-951829dda3cc2a0d/out/private.rs
+
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/libthiserror-9d3fbaa1948cc659.rlib: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /Users/chris.cheng/chris-project/data-bridge/target/release/build/thiserror-951829dda3cc2a0d/out/private.rs
+
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/libthiserror-9d3fbaa1948cc659.rmeta: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs /Users/chris.cheng/chris-project/data-bridge/target/release/build/thiserror-951829dda3cc2a0d/out/private.rs
+
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/lib.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/aserror.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/display.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/var.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.17/src/private.rs:
+/Users/chris.cheng/chris-project/data-bridge/target/release/build/thiserror-951829dda3cc2a0d/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/chris.cheng/chris-project/data-bridge/target/release/build/thiserror-951829dda3cc2a0d/out

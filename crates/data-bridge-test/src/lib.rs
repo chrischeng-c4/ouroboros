@@ -21,6 +21,7 @@
 
 pub mod assertions;
 pub mod benchmark;
+pub mod discovery;
 pub mod http_server;
 pub mod reporter;
 pub mod runner;
@@ -30,6 +31,10 @@ pub use assertions::{Expectation, AssertionError, AssertionResult};
 pub use benchmark::{
     BenchmarkConfig, BenchmarkResult, BenchmarkStats, Benchmarker, compare_results,
     print_comparison_table, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
+};
+pub use discovery::{
+    DiscoveryConfig, FileType, FileInfo, TestRegistry, BenchmarkRegistry, DiscoveryStats,
+    walk_files, filter_files,
 };
 pub use http_server::{TestServer, TestServerHandle, RouteConfig};
 pub use reporter::{Reporter, ReportFormat, TestReport, CoverageInfo, FileCoverage, EnvironmentInfo};

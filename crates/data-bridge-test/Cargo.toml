@@ -26,6 +26,8 @@ anyhow.workspace = true
 # Utilities
 chrono.workspace = true
 regex.workspace = true
+walkdir.workspace = true
+tracing.workspace = true
 
 # HTTP Server (for test server)
 axum.workspace = true
@@ -33,6 +35,9 @@ tower.workspace = true
 
 # Optional: HTTP client for API testing
 data-bridge-http = { path = "../data-bridge-http", optional = true }
+
+[dev-dependencies]
+reqwest.workspace = true
 
 [features]
 default = ["http"]

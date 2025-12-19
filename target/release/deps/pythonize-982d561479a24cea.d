@@ -1,0 +1,11 @@
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/pythonize-982d561479a24cea.d: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/de.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/error.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/ser.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/../README.md
+
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/libpythonize-982d561479a24cea.rlib: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/de.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/error.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/ser.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/../README.md
+
+/Users/chris.cheng/chris-project/data-bridge/target/release/deps/libpythonize-982d561479a24cea.rmeta: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/de.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/error.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/ser.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/../README.md
+
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/lib.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/de.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/error.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/ser.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pythonize-0.24.0/src/../README.md:

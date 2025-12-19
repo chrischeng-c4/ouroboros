@@ -1,0 +1,10 @@
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/compression_core-55930f65460787f6.d: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/level.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/unshared.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/util.rs
+
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/libcompression_core-55930f65460787f6.rlib: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/level.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/unshared.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/util.rs
+
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/libcompression_core-55930f65460787f6.rmeta: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/level.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/unshared.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/util.rs
+
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/lib.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/level.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/unshared.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.31/src/util.rs:

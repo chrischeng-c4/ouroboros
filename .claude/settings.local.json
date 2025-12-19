@@ -15,7 +15,15 @@
       "Bash(uv run maturin:*)",
       "Bash(uvx maturin develop:*)",
       "Bash(SKIP_INTEGRATION=true uv run pytest:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(just bench-insert:*)",
+      "Bash(wc:*)",
+      "Bash(cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(gh pr create:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }

@@ -1,0 +1,14 @@
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/pyo3_build_config-c8cbebfa6fdf621c.d: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/errors.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/impl_.rs /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config-file.txt /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config.txt
+
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/libpyo3_build_config-c8cbebfa6fdf621c.rlib: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/errors.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/impl_.rs /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config-file.txt /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config.txt
+
+/Users/chris.cheng/chris-project/data-bridge/target/debug/deps/libpyo3_build_config-c8cbebfa6fdf621c.rmeta: /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/lib.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/errors.rs /Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/impl_.rs /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config-file.txt /Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config.txt
+
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/lib.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/errors.rs:
+/Users/chris.cheng/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.24.2/src/impl_.rs:
+/Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config-file.txt:
+/Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out/pyo3-build-config.txt:
+
+# env-dep:CARGO_PKG_VERSION=0.24.2
+# env-dep:OUT_DIR=/Users/chris.cheng/chris-project/data-bridge/target/debug/build/pyo3-build-config-c9e8ed059bd033ce/out
