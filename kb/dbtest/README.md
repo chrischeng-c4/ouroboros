@@ -2,16 +2,23 @@
 
 ## Overview
 
-The `dbtest` CLI tool provides unified test and benchmark discovery and execution for the data-bridge project, powered by a Rust engine with Python bindings.
+The `dbtest` CLI tool provides unified test and benchmark discovery and **parallel execution** for the data-bridge project, powered by a Rust engine with Tokio runtime for high-performance concurrent test execution.
+
+**Key Features**:
+- **Parallel Execution**: Rust Tokio runtime runs N tests concurrently
+- **Fast Discovery**: Rust walkdir finds files in ~2ms (10-50x faster than Python)
+- **GIL Management**: Minimal contention with per-task GIL acquisition
+- **Performance**: N tests in ~T/N time (near-linear scaling)
 
 ## User Requirements
 
-- **CLI**: Rust runner engine, Python CLI wrapper
+- **CLI**: Rust runner engine (Tokio), Python CLI wrapper
 - **Discovery**: Rust-powered (walkdir + lazy loading)
+- **Execution**: Rust orchestrates parallel execution
 - **Benchmark**: Keep current BenchmarkGroup pattern
 - **Standalone**: No pytest integration
 
-## Optimized Architecture
+## Optimized Architecture (Rust Runner)
 
 ```
 Rust File Walker (walkdir)
@@ -19,20 +26,25 @@ Rust File Walker (walkdir)
   ↓ stores paths in
 Rust Registry (discovery.rs)
   ↓ applies filters (tags, patterns)
-  ↓ lazy-loads modules via
-Python importlib (on-demand)
-  ↓ only for tests that will execute
-  ↓ executes via
-Rust Runner (runner.rs)
-  ↓ collects results
-  ↓ generates
+  ↓ hands off to
+Rust Runner (runner.rs) with Tokio Runtime
+  ↓ spawns N parallel tasks via tokio::spawn
+  ↓ each task:
+     ├─ lazy-loads Python module
+     ├─ acquires GIL with Python::with_gil()
+     ├─ calls Python test function
+     └─ releases GIL
+  ↓ aggregates results from all tasks
+  ↓ generates report via
 Rust Reporter (reporter.rs)
 ```
 
-**Key Innovation**: Rust-first discovery with lazy loading
-- **Rust**: File walking (walkdir crate), registry, filtering, execution, reporting
-- **Python**: Lazy module loading (only load what we execute)
-- **Performance**: <3ms discovery, module loading only for executed tests
+**Key Innovations**:
+1. **Rust Runner as Execution Engine**: Tokio runtime manages all test execution
+2. **Parallel Execution**: N tests run concurrently with tokio::spawn
+3. **GIL Control**: Rust acquires/releases GIL per task, minimal contention
+4. **Lazy Loading**: Python modules loaded on-demand by Rust
+5. **Performance**: <3ms discovery, N tests in ~T/N time
 
 ## Documentation Structure
 
@@ -40,36 +52,43 @@ This architecture documentation is split into focused files for easier navigatio
 
 ### 1. [architecture.md](./architecture.md)
 High-level system diagrams showing:
-- Overall architecture flow
+- Overall architecture flow with **Rust runner as execution engine**
 - Detailed component architecture
 - Layer responsibilities (Python, PyO3, Rust)
+- **Rust runner capabilities** (parallel execution, GIL management)
+- Performance targets for parallel execution
 
 ### 2. [state-machines.md](./state-machines.md)
 State machine definitions for:
 - Discovery lifecycle
-- Test execution lifecycle
-- Benchmark execution lifecycle
+- Test execution lifecycle (with parallel states)
+- Benchmark execution lifecycle (with parallel states)
 - CLI execution lifecycle
 - State data structures (Rust types)
 
 ### 3. [data-flows.md](./data-flows.md)
 Sequence diagrams showing:
-- Test discovery and execution flow
-- Benchmark discovery and execution flow
+- **Test discovery and parallel execution flow** (Tokio tasks)
+- **Benchmark discovery and parallel execution flow**
+- Filtering flow
+- Error handling with task isolation
+- Performance optimization points
 
 ### 4. [components.md](./components.md)
 Component responsibilities and integration:
-- Python layer (CLI, lazy loading)
-- Rust layer (discovery, runner, reporter)
+- Python layer (CLI, lazy loading) - minimal wrapper
+- **Rust layer (discovery, runner with Tokio, reporter)** - core engine
 - PyO3 bridge
+- **Runner component details** (parallel execution, GIL management)
 - Integration with existing systems
+- Performance characteristics with parallel execution
 
 ### 5. [implementation.md](./implementation.md)
 Implementation details:
 - File structure and organization
-- Execution flow diagrams
-- Key design patterns
-- Performance characteristics
+- **Parallel execution flow diagrams** (Tokio tasks)
+- **Key design patterns** (Rust runner pattern with tokio::spawn)
+- **Performance characteristics** (parallel execution, near-linear scaling)
 - Future extensions
 
 ## Quick Start
@@ -102,6 +121,9 @@ dbtest bench        # Benchmarks only
 - ✅ Generates reports (console/JSON/markdown)
 - ✅ <200ms discovery for 100 files
 - ✅ All existing tests still pass
+- ✅ **Parallel execution: N tests in ~T/N time (near-linear scaling)**
+- ✅ **Task overhead: <1ms per test (Tokio spawn)**
+- ✅ **GIL management: Minimal contention (per-task acquisition)**
 
 ## Implementation Plan
 

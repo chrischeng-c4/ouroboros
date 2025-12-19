@@ -27,6 +27,10 @@ dependencies = [
     "uvloop>=0.21.0",
 ]
 
+# Console scripts
+[project.scripts]
+dbtest = "data_bridge.test.cli:main"
+
 # Optional dependencies for different data sources
 [project.optional-dependencies]
 mongodb = []      # MongoDB support (included by default)

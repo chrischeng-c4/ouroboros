@@ -64,6 +64,16 @@ CoverageInfo = _test.CoverageInfo
 TestServer = _test.TestServer
 TestServerHandle = _test.TestServerHandle
 
+# Discovery types from Rust
+FileType = _test.FileType
+FileInfo = _test.FileInfo
+DiscoveryConfig = _test.DiscoveryConfig
+TestRegistry = _test.TestRegistry
+BenchmarkRegistry = _test.BenchmarkRegistry
+DiscoveryStats = _test.DiscoveryStats
+discover_files = _test.discover_files
+filter_files_by_pattern = _test.filter_files_by_pattern
+
 # Import Python layer
 from .decorators import test, profile, stress, security
 from .suite import (
@@ -82,6 +92,7 @@ from .benchmark import (
     clear_registry,
 )
 from .http_benchmark import HttpBenchmark
+from .lazy_loader import lazy_load_test_suite, lazy_load_benchmark, lazy_load_test_module
 
 __all__ = [
     # Enums
@@ -137,4 +148,17 @@ __all__ = [
     "TestServerHandle",
     # HTTP Benchmark
     "HttpBenchmark",
+    # Discovery
+    "FileType",
+    "FileInfo",
+    "DiscoveryConfig",
+    "TestRegistry",
+    "BenchmarkRegistry",
+    "DiscoveryStats",
+    "discover_files",
+    "filter_files_by_pattern",
+    # Lazy Loading
+    "lazy_load_test_suite",
+    "lazy_load_benchmark",
+    "lazy_load_test_module",
 ]

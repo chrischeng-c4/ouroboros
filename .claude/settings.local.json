@@ -23,7 +23,11 @@
       "Bash(gh pr create:*)",
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(uv run:*)",
+      "Bash(uv pip install:*)",
+      "Bash(just dbtest-unit:*)",
+      "Bash(gh issue create:*)"
     ]
   }
 }

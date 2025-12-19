@@ -106,6 +106,8 @@ class TestSuite:
         self,
         runner: Optional[TestRunner] = None,
         verbose: bool = False,
+        parallel: bool = False,
+        max_workers: int = 4,
     ) -> TestReport:
         """
         Run all tests in this suite.
@@ -113,12 +115,25 @@ class TestSuite:
         Args:
             runner: Optional test runner with filters. If None, runs all tests.
             verbose: Whether to print verbose output
+            parallel: Enable parallel test execution (default: False)
+            max_workers: Maximum number of concurrent tests when parallel=True (default: 4)
 
         Returns:
             TestReport with all results
         """
         if runner is None:
-            runner = TestRunner()
+            # Create runner with appropriate config for parallel/sequential execution
+            runner = TestRunner(parallel=parallel, max_workers=max_workers)
+        elif parallel:
+            # If runner provided but parallel requested, create a new runner with parallel config
+            # This ensures max_workers is respected
+            runner = TestRunner(parallel=parallel, max_workers=max_workers)
+
+        # If parallel execution is requested, use Rust parallel runner
+        if parallel:
+            return await self._run_parallel(runner, verbose, max_workers)
+
+        # Otherwise, use sequential execution (existing behavior)
 
         runner.start()
 
@@ -212,12 +227,95 @@ class TestSuite:
 
         return TestReport(self.suite_name, runner.results())
 
+    async def _run_parallel(
+        self,
+        runner: TestRunner,
+        verbose: bool,
+        max_workers: int,
+    ) -> TestReport:
+        """
+        Run tests in parallel using Rust Tokio runtime.
+
+        Args:
+            runner: Test runner with configuration
+            verbose: Whether to print verbose output
+            max_workers: Maximum concurrent tests
+
+        Returns:
+            TestReport with all results
+        """
+        runner.start()
+
+        # Filter tests based on runner configuration
+        tests_to_run = []
+        skipped_results = []
+
+        for test_desc in self._tests:
+            meta = test_desc.get_meta()
+
+            # Check if test should run based on filters
+            if not runner.should_run(meta):
+                continue
+
+            # Check if skipped
+            if meta.is_skipped():
+                result = TestResult.skipped(meta, meta.skip_reason or "Skipped")
+                skipped_results.append(result)
+                if verbose:
+                    print(f"  SKIPPED: {meta.name}")
+                continue
+
+            tests_to_run.append(test_desc)
+
+        if verbose and tests_to_run:
+            print(f"  Running {len(tests_to_run)} tests in parallel (max_workers={max_workers})...")
+
+        # Run tests in parallel using Rust runner
+        if tests_to_run:
+            try:
+                # Call Rust parallel runner
+                # Note: max_workers is used via the runner's config
+                results = await runner.run_parallel_async(
+                    suite_instance=self,
+                    test_descriptors=tests_to_run,
+                )
+
+                # Record all results
+                for result in results:
+                    runner.record(result)
+                    if verbose:
+                        status_str = str(result.status).upper()
+                        duration = result.duration_ms
+                        print(f"  {status_str}: {result.meta.name} ({duration}ms)")
+                        if result.error_message and result.status != "SKIPPED":
+                            print(f"    Error: {result.error_message}")
+
+            except Exception as e:
+                # If parallel execution fails, mark all tests as error
+                if verbose:
+                    print(f"  ERROR: Parallel execution failed: {e}")
+                    traceback.print_exc()
+
+                for test_desc in tests_to_run:
+                    meta = test_desc.get_meta()
+                    result = TestResult.error(meta, 0, f"Parallel execution failed: {e}")
+                    result.set_stack_trace(traceback.format_exc())
+                    runner.record(result)
+
+        # Record skipped tests
+        for result in skipped_results:
+            runner.record(result)
+
+        return TestReport(self.suite_name, runner.results())
+
 
 def run_suite(
     suite_class: Type[TestSuite],
     output_format: ReportFormat = ReportFormat.Markdown,
     output_file: Optional[str] = None,
     verbose: bool = True,
+    parallel: bool = False,
+    max_workers: int = 4,
     **runner_kwargs: Any,
 ) -> TestReport:
     """
@@ -228,6 +326,8 @@ def run_suite(
         output_format: Report output format (default: Markdown)
         output_file: Optional file path to write report
         verbose: Whether to print verbose output
+        parallel: Enable parallel test execution (default: False)
+        max_workers: Maximum number of concurrent tests when parallel=True (default: 4)
         **runner_kwargs: Additional arguments for TestRunner
 
     Returns:
@@ -236,16 +336,24 @@ def run_suite(
     Example:
         from data_bridge.test import run_suite, ReportFormat
 
+        # Sequential execution (default)
         report = run_suite(MyTests, output_format=ReportFormat.Html, output_file="report.html")
+
+        # Parallel execution
+        report = run_suite(MyTests, parallel=True, max_workers=8)
     """
     suite = suite_class()
     runner = TestRunner(**runner_kwargs)
 
     if verbose:
         print(f"\nRunning: {suite.suite_name}")
+        if parallel:
+            print(f"Mode: Parallel (max_workers={max_workers})")
+        else:
+            print("Mode: Sequential")
         print("=" * 50)
 
-    report = asyncio.run(suite.run(runner=runner, verbose=verbose))
+    report = asyncio.run(suite.run(runner=runner, verbose=verbose, parallel=parallel, max_workers=max_workers))
 
     if verbose:
         print("=" * 50)

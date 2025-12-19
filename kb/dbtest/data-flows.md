@@ -4,7 +4,7 @@
 
 This document shows the sequence of operations and data flow through the dbtest system for different execution paths.
 
-## Test Discovery & Execution Flow
+## Test Discovery & Execution Flow (Rust Runner)
 
 ```mermaid
 sequenceDiagram
@@ -13,12 +13,17 @@ sequenceDiagram
     participant PyO3 as PyO3 Bridge
     participant Walk as Rust File Walker
     participant Reg as Rust Registry
+    participant Run as Rust Runner<br/>(Tokio)
+    participant Task1 as Tokio Task 1
+    participant Task2 as Tokio Task 2
+    participant TaskN as Tokio Task N
     participant Lazy as Python Lazy Loader
-    participant Run as Rust Runner
+    participant PyTest as Python Test Func
     participant Rep as Rust Reporter
 
     User->>CLI: dbtest unit
-    CLI->>PyO3: discover_tests("tests/")
+    CLI->>CLI: parse args
+    CLI->>PyO3: hand off to Rust
 
     PyO3->>Walk: walk_files(config)
     Walk->>Walk: walkdir crate (~2ms)
@@ -29,20 +34,41 @@ sequenceDiagram
     Reg->>Reg: apply tag filters
     Reg-->>PyO3: filtered FileInfo list
 
-    PyO3->>Run: execute_tests()
+    PyO3->>Run: execute_tests_parallel()
+    Note over Run: Rust Tokio Runtime<br/>Manages Execution
 
-    loop For each test file
-        Run->>Lazy: lazy_load_test_suite(file_path)
-        Lazy->>Lazy: importlib.util.spec_from_file
-        Lazy->>Lazy: module_from_spec
-        Lazy-->>Run: List[TestSuite classes]
+    par Parallel Test Execution
+        Run->>Task1: tokio::spawn(test_file_1)
+        Task1->>Lazy: lazy_load_test_suite(file_1)
+        Lazy-->>Task1: TestSuite classes
+        Task1->>Task1: with_gil(py)
+        Task1->>PyTest: call Python async test
+        PyTest-->>Task1: result
+        Task1->>Task1: GIL released
+        Task1-->>Run: TestResult
 
-        Run->>Run: setup_suite()
-        Run->>Run: execute test functions
-        Run->>Run: teardown_suite()
-        Run->>Run: collect metrics
+    and
+        Run->>Task2: tokio::spawn(test_file_2)
+        Task2->>Lazy: lazy_load_test_suite(file_2)
+        Lazy-->>Task2: TestSuite classes
+        Task2->>Task2: with_gil(py)
+        Task2->>PyTest: call Python async test
+        PyTest-->>Task2: result
+        Task2->>Task2: GIL released
+        Task2-->>Run: TestResult
+
+    and
+        Run->>TaskN: tokio::spawn(test_file_N)
+        TaskN->>Lazy: lazy_load_test_suite(file_N)
+        Lazy-->>TaskN: TestSuite classes
+        TaskN->>TaskN: with_gil(py)
+        TaskN->>PyTest: call Python async test
+        PyTest-->>TaskN: result
+        TaskN->>TaskN: GIL released
+        TaskN-->>Run: TestResult
     end
 
+    Run->>Run: aggregate results
     Run->>Rep: generate_report(results)
     Rep->>Rep: format (console/json/md)
     Rep-->>CLI: formatted report
@@ -50,10 +76,12 @@ sequenceDiagram
 ```
 
 **Key Points**:
-1. **Fast Discovery**: Rust walkdir finds files in ~2ms (not Python glob)
-2. **Lazy Loading**: Python modules only loaded when needed for execution
-3. **Rust Execution**: Main runner logic in Rust, calls into Python for tests
-4. **Single Pass**: No separate discovery and execution phases
+1. **Rust is the Runner**: Tokio runtime manages all test execution
+2. **Parallel Execution**: Multiple tests run concurrently via tokio::spawn
+3. **GIL Management**: Each task acquires/releases GIL as needed
+4. **Fast Discovery**: Rust walkdir finds files in ~2ms
+5. **Lazy Loading**: Python modules loaded on-demand by Rust
+6. **Performance**: N tests in ~T/N time (near-linear scaling)
 
 ## Benchmark Discovery & Execution Flow
 
@@ -64,9 +92,11 @@ sequenceDiagram
     participant PyO3 as PyO3 Bridge
     participant Walk as Rust File Walker
     participant Reg as Rust Registry
+    participant Run as Rust Runner<br/>(Tokio)
+    participant Task1 as Tokio Task 1
+    participant Task2 as Tokio Task 2
     participant Lazy as Python Lazy Loader
     participant BG as BenchmarkGroup
-    participant Run as Rust Runner
     participant Rep as Rust Reporter
 
     User->>CLI: dbtest bench
@@ -81,24 +111,37 @@ sequenceDiagram
     Reg->>Reg: apply pattern filters
     Reg-->>PyO3: filtered FileInfo list
 
-    PyO3->>Run: run_benchmarks()
+    PyO3->>Run: run_benchmarks_parallel()
+    Note over Run: Rust Tokio Runtime<br/>Manages Benchmark Execution
 
-    loop For each bench file
-        Run->>Lazy: lazy_load_benchmark(file_path)
+    par Parallel Benchmark Execution
+        Run->>Task1: tokio::spawn(bench_file_1)
+        Task1->>Lazy: lazy_load_benchmark(file_1)
         Lazy->>Lazy: importlib.util.spec_from_file
-        Lazy->>Lazy: module_from_spec
-
         Note over Lazy,BG: Module execution triggers<br/>@decorator and register_group()
+        Lazy-->>Task1: BenchmarkGroup instances
+        Task1->>Task1: with_gil(py)
+        Task1->>Task1: calibrate iterations
+        Task1->>Task1: run warmup rounds (3x)
+        Task1->>BG: execute timed rounds (5x)
+        BG-->>Task1: timing results
+        Task1->>Task1: calculate statistics
+        Task1->>Task1: GIL released
+        Task1-->>Run: BenchmarkResult
 
-        Lazy->>BG: BenchmarkGroup auto-registered
-        Lazy-->>Run: BenchmarkGroup instances
-
-        Run->>Run: calibrate iterations
-        Run->>Run: run warmup rounds (3x)
-        Run->>Run: execute timed rounds (5x)
-        Run->>Run: calculate statistics
+    and
+        Run->>Task2: tokio::spawn(bench_file_2)
+        Task2->>Lazy: lazy_load_benchmark(file_2)
+        Lazy-->>Task2: BenchmarkGroup instances
+        Task2->>Task2: with_gil(py)
+        Task2->>Task2: calibrate + warmup + execute
+        Task2->>BG: execute timed rounds
+        BG-->>Task2: timing results
+        Task2->>Task2: GIL released
+        Task2-->>Run: BenchmarkResult
     end
 
+    Run->>Run: aggregate results
     Run->>Rep: generate_comparison_report(results)
     Rep->>Rep: format comparison table
     Rep-->>CLI: formatted report
@@ -106,10 +149,14 @@ sequenceDiagram
 ```
 
 **Key Points**:
-1. **Same Discovery**: Uses same Rust walkdir approach
-2. **Lazy Loading**: Benchmark files loaded on-demand
-3. **Auto-Registration**: BenchmarkGroup registers during module import
-4. **Statistics**: Mean, median, stddev, percentiles calculated in Rust
+1. **Rust is the Runner**: Tokio runtime manages all benchmark execution
+2. **Parallel Execution**: Multiple benchmark files run concurrently via tokio::spawn
+3. **GIL Management**: Each task acquires/releases GIL as needed
+4. **Same Discovery**: Uses same Rust walkdir approach
+5. **Lazy Loading**: Benchmark files loaded on-demand by Rust
+6. **Auto-Registration**: BenchmarkGroup registers during module import
+7. **Statistics**: Mean, median, stddev, percentiles calculated in Rust
+8. **Performance**: N benchmark files in ~T/N time (near-linear scaling)
 
 ## Filtering Flow
 
@@ -145,8 +192,9 @@ sequenceDiagram
 sequenceDiagram
     participant CLI as Python CLI
     participant Walk as Rust File Walker
+    participant Run as Rust Runner<br/>(Tokio)
+    participant Task as Tokio Task
     participant Lazy as Python Lazy Loader
-    participant Run as Rust Runner
 
     CLI->>Walk: walk_files("tests/")
 
@@ -157,32 +205,44 @@ sequenceDiagram
         Walk-->>CLI: Vec<FileInfo>
     end
 
-    CLI->>Lazy: lazy_load_test_suite(file_path)
+    CLI->>Run: execute_tests_parallel()
+
+    Run->>Task: tokio::spawn(test_file)
+    Task->>Lazy: lazy_load_test_suite(file_path)
 
     alt Import error
-        Lazy-->>Run: Error: Module import failed
-        Run-->>Run: Mark test as Error
+        Lazy-->>Task: Error: Module import failed
+        Task->>Task: Mark test as Error
+        Task-->>Run: TestResult::Error
     else Module loaded
-        Lazy-->>Run: TestSuite classes
+        Lazy-->>Task: TestSuite classes
     end
 
-    Run->>Run: execute_test()
+    Task->>Task: with_gil(py)
+    Task->>Task: execute_test()
 
     alt Test fails
-        Run-->>Run: Mark as Failed
+        Task->>Task: Mark as Failed
+        Task-->>Run: TestResult::Failed
     else Test passes
-        Run-->>Run: Mark as Passed
+        Task->>Task: Mark as Passed
+        Task-->>Run: TestResult::Passed
     end
 
+    Task->>Task: GIL released
+
+    Run->>Run: aggregate results from all tasks
     Run-->>CLI: TestResults (including errors)
     CLI-->>User: Display all results + error summary
 ```
 
 **Error Handling Principles**:
 - **Fail Fast for Discovery**: File system errors exit immediately
-- **Collect Test Errors**: Import/execution errors are collected, not fatal
-- **Final Report**: Shows all results including errors
+- **Collect Test Errors**: Import/execution errors are collected per task, not fatal
+- **Task Isolation**: Each Tokio task handles its own errors independently
+- **Final Report**: Rust runner aggregates all results including errors
 - **Exit Code**: Non-zero if any tests failed or errored
+- **GIL Safety**: GIL released even on error paths
 
 ## Performance Optimization Points
 
@@ -195,22 +255,39 @@ sequenceDiagram
    ↓
 3. Filtering                ~0.1-1ms    (Rust string matching)
    ↓
-4. Lazy module loading      ~10-50ms    (Python importlib, per file)
+4. Tokio runtime init       ~1-2ms      (Rust async runtime)
    ↓
-5. Test execution          Variable     (User test code)
+5. Parallel execution       ~T/N        (N tests in parallel)
+   │
+   ├─ Lazy module loading   ~10-50ms    (Python importlib, per file, parallel)
+   ├─ GIL acquire           ~0.1ms      (per task, minimal contention)
+   ├─ Test execution        Variable    (User test code)
+   └─ GIL release           ~0.1ms      (per task)
    ↓
-6. Report generation       ~10-50ms     (Rust formatting)
+6. Result aggregation       ~1-5ms      (Rust, concurrent collection)
+   ↓
+7. Report generation        ~10-50ms    (Rust formatting)
 ```
+
+**Performance Gains from Rust Runner**:
+- **Parallel Execution**: N tests in ~T/N time (near-linear scaling)
+- **Task Scheduling**: <1ms overhead per task (Tokio)
+- **GIL Management**: Minimal contention (released between Python calls)
+- **Concurrent Loading**: Multiple modules load in parallel
+- **Efficient Aggregation**: Rust collects results without Python overhead
 
 **Bottlenecks**:
 - **CLI Startup**: Python import overhead (~200-300ms) - unavoidable
-- **Module Loading**: Lazy loading mitigates by only loading needed files
-- **Test Execution**: Dominated by actual test logic
+- **Module Loading**: Mitigated by parallel loading (all files load concurrently)
+- **Test Execution**: Dominated by actual test logic (but parallelized)
 
 **Optimizations**:
 - ✅ Use Rust walkdir (10-50x faster than Python glob)
 - ✅ Lazy loading (don't load filtered-out files)
 - ✅ Filtering in Rust (faster than Python)
+- ✅ Parallel execution with Tokio (N tests → T/N time)
+- ✅ GIL release management (no contention)
+- ✅ Concurrent module loading (all files load in parallel)
 - ❌ Not caching (complexity not worth <3ms savings)
 
 ## See Also

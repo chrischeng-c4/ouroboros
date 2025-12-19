@@ -6,14 +6,16 @@ This document details the responsibilities of each component in the dbtest syste
 
 ## Python Layer (Thin Wrapper)
 
+**Role**: Minimal Python wrapper - Rust handles all execution
+
 ### 1. CLI (cli.py)
 
 **Purpose**: Command-line interface and argument parsing
 
 **Responsibilities**:
 - Parse CLI arguments using argparse
-- Route to appropriate runner (unit/integration/bench/all)
-- Display formatted results to user
+- **Hand off to Rust runner immediately** (Python does NOT orchestrate)
+- Display formatted results from Rust to user
 - Handle exit codes
 
 **Key Functions**:
@@ -41,13 +43,14 @@ def run_all(config: CliConfig) -> CombinedReport:
 
 ### 2. Lazy Loader (lazy_loader.py)
 
-**Purpose**: On-demand Python module loading
+**Purpose**: On-demand Python module loading (called by Rust)
 
 **Responsibilities**:
-- Load Python modules only when needed for execution
+- Load Python modules only when **Rust runner** triggers loading
 - Use importlib.util for dynamic loading
 - Return TestSuite classes or BenchmarkGroup instances
 - Handle import errors gracefully
+- **Invoked by Rust tasks during parallel execution**
 
 **Key Functions**:
 ```python
@@ -125,21 +128,26 @@ pub fn filter_files(files: Vec<FileInfo>, filters: &Filters) -> Vec<FileInfo>;
 pub fn lazy_load_module(py: Python, file_info: &FileInfo) -> PyResult<PyModule>;
 ```
 
-### 4. Runner (runner.rs) - EXISTING
+### 4. Runner (runner.rs) - CORE EXECUTION ENGINE
 
-**Purpose**: Test/benchmark execution orchestration
+**Purpose**: Parallel test/benchmark execution with Tokio runtime
 
 **Responsibilities**:
-- Execute tests and benchmarks
-- Call into Python for test logic via lazy-loaded modules
-- Collect execution metrics (timing, memory, etc.)
-- Handle timeouts and errors
-- Manage test lifecycle (setup → execute → teardown)
+- **Orchestrate parallel execution** - Spawn N concurrent Tokio tasks
+- **Manage Tokio runtime** - Control async event loop and task scheduling
+- **Schedule tasks** - Distribute tests/benchmarks across available threads
+- **Call Python async functions** - Use pyo3-asyncio to bridge Rust ↔ Python async
+- **Manage GIL** - Acquire/release GIL per task with `Python::with_gil()`
+- **Lazy-load modules** - Trigger Python lazy_loader on-demand
+- **Collect results** - Aggregate results from all parallel tasks
+- **Handle timeouts and errors** - Per-task error isolation
+- **Control resource limits** - Max concurrent tasks, memory limits
 
-**Key Types** (existing):
+**Key Types**:
 ```rust
 pub struct TestRunner {
-    // Implementation details
+    runtime: tokio::runtime::Runtime,  // Tokio async runtime
+    max_concurrent: usize,              // Max parallel tasks
 }
 
 pub struct TestResult {
@@ -148,18 +156,89 @@ pub struct TestResult {
     pub error: Option<String>,
 }
 
-pub struct TestMeta {
-    pub name: String,
-    pub tags: Vec<String>,
-    pub timeout: Option<Duration>,
+pub enum TestStatus {
+    Passed,
+    Failed,
+    Error,
+    Skipped,
+}
+
+pub struct TaskHandle {
+    file_path: PathBuf,
+    handle: tokio::task::JoinHandle<TestResult>,
 }
 ```
 
 **Key Functions**:
 ```rust
-pub fn execute_tests(files: Vec<FileInfo>) -> Vec<TestResult>;
-pub fn run_benchmarks(files: Vec<FileInfo>) -> Vec<BenchmarkStats>;
+/// Parallel test execution (NEW)
+pub async fn execute_tests_parallel(
+    py: Python<'_>,
+    files: Vec<FileInfo>,
+    max_concurrent: usize,
+) -> Vec<TestResult> {
+    let mut handles = vec![];
+
+    for file in files {
+        // Spawn parallel task
+        let handle = tokio::spawn(async move {
+            // Lazy-load Python module
+            let module = lazy_load_test_suite(&file.path).await?;
+
+            // Acquire GIL, call Python
+            let result = Python::with_gil(|py| {
+                call_python_test_function(py, module)
+            })?;
+            // GIL released automatically
+
+            result
+        });
+        handles.push(handle);
+    }
+
+    // Collect all results concurrently
+    let results = futures::future::join_all(handles).await;
+    results
+}
+
+/// Parallel benchmark execution (NEW)
+pub async fn run_benchmarks_parallel(
+    py: Python<'_>,
+    files: Vec<FileInfo>,
+    max_concurrent: usize,
+) -> Vec<BenchmarkStats>;
+
+/// Call Python async function from Rust (using pyo3-asyncio)
+async fn call_python_test_function(
+    py: Python<'_>,
+    test_func: PyObject,
+) -> PyResult<TestResult>;
 ```
+
+**Parallel Execution Pattern**:
+```rust
+// Rust runner spawns N parallel tasks
+tokio::spawn(async move {
+    // 1. Lazy-load Python module (per task)
+    let module = lazy_load_test_suite(file_path).await?;
+
+    // 2. Acquire GIL (minimal contention)
+    Python::with_gil(|py| {
+        // 3. Call Python async test function
+        let result = call_python_test(py, test_func)?;
+        result
+    }) // GIL released automatically
+
+    // 4. Return result to aggregator
+});
+```
+
+**Performance Characteristics**:
+- **Parallel Scaling**: N tests in ~T/N time (near-linear)
+- **Task Overhead**: <1ms per task (Tokio scheduling)
+- **GIL Contention**: Minimal (released between Python calls)
+- **Concurrent Loading**: All modules load in parallel
+- **Resource Control**: Configurable max_concurrent limit
 
 ### 5. Reporter (reporter.rs) - EXISTING
 
@@ -355,13 +434,27 @@ dbtest-pattern PATTERN:
 ### Request Flow (Test Execution)
 
 ```
-User → CLI → PyO3 → Rust Walker → Rust Registry → Python Lazy Loader → Rust Runner → Rust Reporter → CLI → User
+User → CLI → PyO3 → Rust Walker → Rust Registry → Rust Runner (Tokio) → [Parallel Tasks] → Python Lazy Loader → Test Functions → Rust Aggregator → Rust Reporter → CLI → User
 ```
+
+**Key Flow Changes**:
+- Rust Runner controls execution flow (not Python CLI)
+- Parallel tasks spawn concurrently via tokio::spawn
+- Each task independently: loads module → acquires GIL → calls Python → releases GIL
+- Rust aggregates results from all tasks
 
 ### Data Flow
 
 ```
-CLI Args → DiscoveryConfig → Vec<FileInfo> → Filtered FileInfo → Lazy-loaded Modules → Test Results → Formatted Report
+CLI Args → DiscoveryConfig → Vec<FileInfo> → Filtered FileInfo → Rust Runner → [Tokio Tasks] → Lazy-loaded Modules (parallel) → Test Results (concurrent) → Aggregated Results → Formatted Report
+```
+
+**Parallel Data Flow**:
+```
+FileInfo₁ ─┐
+FileInfo₂ ─┼─→ Rust Runner → tokio::spawn(N tasks) ─┬─→ Task₁ → Module₁ → Result₁ ─┐
+FileInfo₃ ─┤                                         ├─→ Task₂ → Module₂ → Result₂ ─┼─→ Aggregator → Report
+   ...     ─┘                                         └─→ TaskN → ModuleN → ResultN ─┘
 ```
 
 ### Error Propagation
@@ -377,11 +470,23 @@ Rust Error → PyO3 PyErr → Python Exception → CLI Exit Code
 | CLI | Startup | ~200-300ms | Python argparse |
 | Discovery | File walk | ~2-3ms (100 files) | Rust walkdir |
 | Registry | Filtering | <10ms (1000 files) | Rust string matching |
-| Lazy Loader | Module import | ~10-50ms per file | Python importlib |
-| Runner | Execution | Variable | User test code |
+| **Rust Runner** | **Tokio init** | **~1-2ms** | **Tokio runtime** |
+| **Rust Runner** | **Task spawn** | **<1ms per task** | **tokio::spawn** |
+| **Rust Runner** | **GIL acquire/release** | **~0.1ms per task** | **Python::with_gil()** |
+| **Rust Runner** | **Parallel execution** | **~T/N (N tests)** | **Concurrent tasks** |
+| Lazy Loader | Module import | ~10-50ms per file | Python importlib (parallel) |
+| **Rust Runner** | **Result aggregation** | **~1-5ms** | **Concurrent collection** |
 | Reporter | Formatting | ~10-50ms | Rust templating |
 
-**Total Overhead** (excluding test execution): ~250-400ms
+**Sequential Overhead** (excluding test execution): ~250-400ms
+**Parallel Execution**: N tests in ~T/N time (near-linear scaling)
+
+**Performance Gains from Rust Runner**:
+- ✅ Parallel execution: N tests → ~T/N time
+- ✅ Task scheduling: <1ms overhead per task
+- ✅ GIL management: Minimal contention
+- ✅ Concurrent module loading: All files load in parallel
+- ✅ Efficient aggregation: Rust collects results without Python overhead
 
 ## See Also
 

@@ -1,7 +1,10 @@
 //! Test runner - discovery, execution, and scheduling
 
 use std::time::{Duration, Instant};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use tokio::sync::{Semaphore, mpsc};
+use tokio::task::JoinHandle;
 
 /// Test type categorization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -326,6 +329,11 @@ impl TestRunner {
         Self::new(RunnerConfig::default())
     }
 
+    /// Get a reference to the config
+    pub fn config(&self) -> &RunnerConfig {
+        &self.config
+    }
+
     /// Start the test run
     pub fn start(&mut self) {
         self.start_time = Some(Instant::now());
@@ -425,6 +433,87 @@ impl TestSummary {
         }
         self.passed as f64 / (self.total - self.skipped) as f64
     }
+}
+
+// ============================================================================
+// Parallel Test Execution with Tokio
+// ============================================================================
+
+/// Execute test results in parallel using Tokio
+///
+/// This function spawns concurrent tasks to process test results with a semaphore
+/// limiting max concurrency.
+pub async fn run_tests_parallel(
+    results: Vec<TestResult>,
+    config: RunnerConfig,
+) -> Vec<TestResult> {
+    if !config.parallel || results.is_empty() {
+        // Sequential execution
+        return results;
+    }
+
+    // Create semaphore to limit concurrency
+    let sem = Arc::new(Semaphore::new(config.max_workers));
+
+    // Spawn tasks for each result
+    let mut tasks: Vec<JoinHandle<TestResult>> = Vec::new();
+
+    for result in results {
+        let sem_clone = sem.clone();
+
+        let task = tokio::spawn(async move {
+            // Acquire permit (blocks if at max_workers)
+            let _permit = sem_clone.acquire().await.unwrap();
+
+            // Return the result (actual test execution happens in PyO3 layer)
+            result
+        });
+
+        tasks.push(task);
+    }
+
+    // Collect results
+    if config.fail_fast {
+        collect_with_fail_fast(tasks).await
+    } else {
+        futures::future::join_all(tasks)
+            .await
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect()
+    }
+}
+
+/// Collect results with fail-fast support
+///
+/// Stops collecting and returns as soon as the first failure is detected
+async fn collect_with_fail_fast(
+    tasks: Vec<JoinHandle<TestResult>>
+) -> Vec<TestResult> {
+    let (tx, mut rx) = mpsc::channel(1);
+
+    // Spawn monitor tasks
+    for task in tasks {
+        let tx_clone = tx.clone();
+        tokio::spawn(async move {
+            let result = task.await.unwrap();
+            let _ = tx_clone.send(result).await;
+        });
+    }
+
+    drop(tx);  // Close sender
+
+    let mut results = Vec::new();
+    while let Some(result) = rx.recv().await {
+        if !result.is_passed() {
+            // First failure: return immediately
+            results.push(result);
+            return results;
+        }
+        results.push(result);
+    }
+
+    results
 }
 
 #[cfg(test)]

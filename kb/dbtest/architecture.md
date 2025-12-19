@@ -8,30 +8,33 @@
 graph TB
     User[User: dbtest command]
     CLI[Python CLI Wrapper<br/>data_bridge.test.cli]
-    Discovery[Rust File Walker<br/>walkdir crate]
-    Registry[Rust Registry<br/>discovery.rs]
-    Runner[Rust Runner<br/>runner.rs]
-    Reporter[Rust Reporter<br/>reporter.rs]
+    Discovery[Rust Discovery Engine<br/>walkdir + registry]
+    Runner[Rust Runner Engine<br/>Parallel Execution]
+    TestFuncs[Python Test Functions<br/>Executed by Rust]
+    Reporter[Rust Reporter<br/>Results & Formatting]
 
     User --> CLI
     CLI --> Discovery
-    Discovery --> Registry
-    Registry --> Runner
+    Discovery --> Runner
+    Runner --> TestFuncs
+    TestFuncs -.results.-> Runner
     Runner --> Reporter
     Reporter --> User
 
     style CLI fill:#e1f5ff
     style Discovery fill:#ffe1e1
-    style Registry fill:#ffe1e1
-    style Runner fill:#ffe1e1
+    style Runner fill:#ff9999
+    style TestFuncs fill:#c8e6c9
     style Reporter fill:#ffe1e1
 ```
 
 **Architecture Principles**:
-- **Rust-First Discovery**: File walking in Rust using walkdir crate (~2ms for 100 files)
-- **Lazy Loading**: Python modules loaded on-demand during execution
-- **Performance**: Minimal Python overhead, most work in Rust
-- **Simplicity**: Thin Python CLI wrapper over Rust engine
+- **Rust Engine**: All orchestration, scheduling, and execution in Rust
+- **Parallel Execution**: Tokio-based task scheduling for concurrent test runs
+- **Minimal Python**: Python only for CLI and test function definitions
+- **Performance**: Rust manages event loop, GIL release, and resource allocation
+- **Fast Discovery**: Rust walkdir (~2ms for 100 files)
+- **Lazy Loading**: Modules loaded on-demand by Rust via PyO3
 
 ## Detailed Component Architecture
 
@@ -144,59 +147,123 @@ graph TB
 
 ### Python Layer (Thin Wrapper)
 - **cli.py**: CLI argument parsing, command routing
-- **lazy_loader.py**: On-demand module loading (called by Rust)
-- Minimal logic, delegates to Rust engine
+- **Test Functions**: Actual test/benchmark implementations
+- **Minimal Orchestration**: Delegates to Rust engine immediately
+- **Zero Execution Logic**: Rust handles all scheduling and execution
 
 ### PyO3 Bridge Layer
 - **test.rs**: Python bindings for Rust types
-- Wraps Rust registries, stats, and metadata
-- Handles Python ↔ Rust conversions
-- Thread-safe with Arc<Mutex<>>
+- **Async Python Calls**: Bridge Rust Tokio ↔ Python async functions
+- **pyo3-asyncio**: Handles async Python function execution from Rust
+- **Type Conversion**: Rust ↔ Python data conversion
+- **Thread-safe**: Arc<Mutex<>> for shared state
 
-### Rust Engine Layer
-- **File Walker**: Fast file discovery using walkdir crate
-- **discovery.rs**: Registries, filtering, metadata storage
-- **runner.rs**: Test/benchmark execution
+### Rust Engine Layer (THE RUNNER)
+- **discovery.rs**: Fast file discovery (walkdir), registries, filtering
+- **runner.rs**: **CORE EXECUTION ENGINE**
+  - Parallel test execution with Tokio
+  - Task scheduling and resource management
+  - Calls Python async functions via pyo3-asyncio
+  - GIL release management
+  - Event loop control
 - **reporter.rs**: Report generation and formatting
-- **Performance-critical operations**: All in Rust
+- **Performance-critical**: All orchestration in Rust
 
 ## Performance Targets
 
 | Operation | Target | Implementation |
 |-----------|--------|----------------|
 | Discovery | <3ms for 100 files | Rust walkdir |
-| Module Loading | On-demand only | Python importlib (lazy) |
+| Module Loading | On-demand only | Rust-triggered lazy loading |
 | Filtering | <10ms for 1000 tests | Rust registry operations |
-| Execution | Variable | Rust runner with Python callbacks |
+| **Parallel Execution** | **N tests in T/N time** | **Rust Tokio task scheduler** |
+| **Task Scheduling** | **<1ms overhead** | **Rust async runtime** |
+| GIL Management | Minimal contention | Rust controls GIL release |
 | Reporting | <50ms | Rust reporter with formatting |
-| CLI Startup | <500ms cold | Python argparse |
+| CLI Startup | <200ms cold | Python argparse → Rust |
+
+## Rust Runner Capabilities
+
+### Parallel Test Execution
+```rust
+// Rust runner spawns parallel tasks
+tokio::spawn(async move {
+    // Call Python test function
+    let result = call_python_test(test_func).await;
+    results.lock().await.push(result);
+});
+```
+
+**Benefits:**
+- ✅ Run N tests concurrently (configurable parallelism)
+- ✅ Efficient task scheduling with Tokio
+- ✅ Automatic load balancing
+- ✅ Resource limits (max concurrent tasks)
+
+### GIL Management
+```rust
+// Rust releases GIL between Python calls
+Python::with_gil(|py| {
+    // Acquire GIL, call Python
+    call_test_function(py, test)
+}); // GIL released
+// Other tasks can run while waiting
+```
+
+**Benefits:**
+- ✅ No GIL contention between tests
+- ✅ Rust manages when Python runs
+- ✅ Better CPU utilization
 
 ## Key Architectural Decisions
 
-### 1. Rust-First Discovery (NEW)
+### 1. Rust as the Runner/Execution Engine (NEW)
+**Decision**: Rust orchestrates all test execution, not Python
+- **Rationale**:
+  - Parallel execution with Tokio (N tests concurrently)
+  - Better task scheduling and resource management
+  - GIL control for minimal contention
+  - Reduced Python overhead
+- **Implementation**:
+  - Rust runner.rs with Tokio runtime
+  - pyo3-asyncio for calling Python async functions
+  - Task spawning with configurable parallelism
+- **Performance Gain**: N tests in ~T/N time (near-linear scaling)
+
+### 2. Rust-First Discovery
 **Decision**: Use Rust walkdir crate for file discovery, not Python glob
 - **Rationale**: 10-50x faster (~2ms vs 50-100ms for 100 files)
 - **Trade-off**: More complex than pure Python, but worth the performance gain
 
-### 2. Lazy Module Loading (NEW)
+### 3. Lazy Module Loading
 **Decision**: Only load Python modules that will be executed
 - **Rationale**: Don't pay import cost for filtered-out tests
-- **Implementation**: Rust calls back to Python lazy_loader when needed
+- **Implementation**: Rust triggers Python lazy_loader when needed
 
-### 3. Console Script, Not Rust Binary
+### 4. Console Script, Not Rust Binary
 **Decision**: Python CLI wrapper, not standalone Rust binary
 - **Rationale**: Easier install (pip/uv), works with venv, simpler distribution
-- **Trade-off**: Python startup overhead (~200-300ms) vs Rust binary
+- **Trade-off**: Python startup overhead (~200ms) vs Rust binary
+- **Note**: CLI hands off to Rust runner immediately
 
-### 4. Standalone, Not pytest Plugin
+### 5. Standalone, Not pytest Plugin
 **Decision**: Independent tool, doesn't integrate with pytest
-- **Rationale**: User requirement, simpler implementation, full control
+- **Rationale**: User requirement, simpler implementation, full control over execution
 - **Coexistence**: Can run both pytest and dbtest in same project
+- **Benefit**: Rust can fully control the execution model
 
-### 5. No Registry Cache
+### 6. No Registry Cache
 **Decision**: Discover fresh on each run, no persistent cache
 - **Rationale**: Fast enough (<3ms), simpler, no stale cache issues
 - **Trade-off**: Repeat work vs cache invalidation complexity
+
+### 7. Tokio Runtime for Async
+**Decision**: Use Tokio for async runtime, not Python asyncio
+- **Rationale**:
+  - Better performance and scheduling
+  - Control over parallelism
+  - GIL release between tasks
+- **Implementation**: pyo3-asyncio bridges Tokio ↔ Python async
 
 ## See Also
 
