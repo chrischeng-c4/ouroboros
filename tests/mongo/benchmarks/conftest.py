@@ -16,7 +16,7 @@ from data_bridge import init, close, is_connected
 # Constants
 # =====================
 
-MONGODB_URI = "mongodb://shopee:shopee@localhost:27017/data-bridge-benchmark?authSource=admin"
+MONGODB_URI = "mongodb://localhost:27017/data-bridge-benchmark"
 DATABASE_NAME = "data-bridge-benchmark"
 
 # Batch sizes for parametrized tests

@@ -503,6 +503,30 @@ MongoDB → BSON bytes → Rust structs → Python objects
 - Memory-mapped operations where possible
 - Zero-copy deserialization for large documents
 
+### Validation Architecture
+
+**data-bridge uses Rust-only validation for performance and security:**
+
+1. **Python layer**: Type hints for IDE support (NOT runtime validation)
+2. **Rust layer**: All runtime validation happens here
+3. **Zero Python validation overhead**: No Pydantic, no runtime type checking in Python
+
+**Key Innovation:**
+- Python does less: Just type hints for model definition
+- Rust does more: All runtime validation (type checking, security, BSON conversion)
+- Same developer experience as Pydantic, but 10x faster
+
+**Validation Flow:**
+```
+User.save() → PyO3 Bridge → Rust Validation → MongoDB
+                              ↓
+                       - Type checking
+                       - Security validation
+                       - BSON conversion (GIL-free)
+```
+
+See [docs/architecture/validation-flow.md](docs/architecture/validation-flow.md) for detailed documentation.
+
 ## Development
 
 ### Prerequisites

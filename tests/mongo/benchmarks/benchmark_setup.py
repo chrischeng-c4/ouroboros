@@ -19,7 +19,7 @@ def get_mongodb_uri() -> str:
     """Get MongoDB URI from environment or use default."""
     return os.environ.get(
         "MONGODB_URI",
-        "mongodb://shopee:shopee@localhost:27017/data-bridge-benchmark?authSource=admin"
+        "mongodb://localhost:27017/data-bridge-benchmark"
     )
 
 
@@ -36,6 +36,12 @@ async def _async_setup():
     from .models import BEANIE_MODELS
 
     mongodb_uri = get_mongodb_uri()
+    
+    # Extract database name from URI if possible
+    # e.g., mongodb://localhost:27017/my_db -> my_db
+    import urllib.parse
+    parsed = urllib.parse.urlparse(mongodb_uri)
+    db_name = parsed.path.strip("/") or "data-bridge-benchmark"
 
     # Initialize data-bridge
     if is_connected():
@@ -45,7 +51,7 @@ async def _async_setup():
     # Initialize Beanie
     _motor_client = AsyncIOMotorClient(mongodb_uri)
     await init_beanie(
-        database=_motor_client["data-bridge-benchmark"],
+        database=_motor_client[db_name],
         document_models=BEANIE_MODELS,
     )
 

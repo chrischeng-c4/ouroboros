@@ -27,7 +27,15 @@
       "Bash(uv run:*)",
       "Bash(uv pip install:*)",
       "Bash(just dbtest-unit:*)",
-      "Bash(gh issue create:*)"
+      "Bash(gh issue create:*)",
+      "Skill(speckit.specify)",
+      "Bash(ls:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo tree:*)",
+      "Bash(just bench:*)"
     ]
   }
 }

@@ -56,12 +56,9 @@ async def find_one(
     Returns:
         Document dict or None
     """
-    # Use the Rust Document.find_one static method
+    # T044-T045: Rust find_one now returns PyDict directly (GIL-free conversion)
     result = await _rust.Document.find_one(collection, filter or {})
-    if result is None:
-        return None
-    # Convert RustDocument to dict
-    return result.to_dict()
+    return result  # Already a dict, no .to_dict() needed
 
 
 async def find(
@@ -176,8 +173,13 @@ async def insert_one(
     # Create a RustDocument
     doc = _rust.Document(collection, document)
 
-    # Use validated save if document_class is provided and save_validated exists
-    if document_class and hasattr(doc, 'save_validated'):
+    # Check if validation is enabled in Settings
+    use_validation = False
+    if document_class and hasattr(document_class, 'Settings'):
+        use_validation = getattr(document_class.Settings, 'use_validation', False)
+
+    # Use validated save if document_class is provided, validation is enabled, and save_validated exists
+    if document_class and use_validation and hasattr(doc, 'save_validated'):
         from .type_extraction import extract_schema
         schema = extract_schema(document_class)
         return await doc.save_validated(schema)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -24,6 +25,53 @@ from . import (
     run_benchmarks,
     clear_registry,
 )
+
+
+async def ensure_mongodb_initialized(verbose: bool = False) -> None:
+    """
+    Ensure MongoDB is initialized before running benchmarks or integration tests.
+    
+    Uses environment variables for connection string or a default value.
+    Attempts to use benchmark_setup if available to initialize multiple frameworks (e.g., Beanie).
+    """
+    from data_bridge import init, is_connected
+    
+    if is_connected():
+        return
+        
+    # Try to use benchmark_setup if it exists in the discovery path
+    # This is useful for cross-framework benchmarks that need multiple inits
+    try:
+        # Check if we are running in the mongo benchmarks directory
+        # This is a bit of a hack but common for these benchmarks
+        import importlib
+        try:
+            setup_mod = importlib.import_module("tests.mongo.benchmarks.benchmark_setup")
+            if verbose:
+                print(f"🔌 Using benchmark_setup for multi-framework initialization")
+            await setup_mod.async_ensure_setup()
+            return
+        except (ImportError, AttributeError):
+            pass
+    except Exception as e:
+        if verbose:
+            print(f"⚠️  Could not use benchmark_setup: {e}")
+
+    # Fallback to standard data-bridge initialization
+    uri = os.environ.get("MONGODB_BENCHMARK_URI") or os.environ.get("MONGODB_URI")
+    if not uri:
+        uri = "mongodb://localhost:27017/data-bridge"
+        
+    if verbose:
+        print(f"🔌 Initializing data-bridge MongoDB connection: {uri}")
+    else:
+        print(f"🔌 Initializing MongoDB connection...")
+        
+    try:
+        await init(uri)
+    except Exception as e:
+        print(f"❌ Failed to initialize MongoDB: {e}")
+        raise
 
 
 class CLIConfig:
@@ -97,6 +145,10 @@ async def run_tests_only(cli_config: CLIConfig) -> int:
         return 1
 
     print(f"✅ Found {len(test_files)} test file(s)")
+
+    # Ensure MongoDB is initialized for integration tests
+    if cli_config.test_type == "integration":
+        await ensure_mongodb_initialized(cli_config.verbose)
 
     # Load and run test suites
     total_passed = 0
@@ -222,6 +274,9 @@ async def run_benchmarks_only(cli_config: CLIConfig) -> int:
         print("❌ No benchmark groups found")
         return 1
 
+    # Ensure MongoDB is initialized
+    await ensure_mongodb_initialized(cli_config.verbose)
+
     # Run all benchmarks
     print(f"\n🏃 Running {len(all_groups)} benchmark group(s)...")
 
@@ -230,10 +285,31 @@ async def run_benchmarks_only(cli_config: CLIConfig) -> int:
         # This will run all registered groups
         report = await run_benchmarks()
 
+        # Handle report output
+        output_path = cli_config.output_file
+
+        if output_path:
+            # User explicitly specified output file - save to file
+            print(f"\n💾 Saving report to {output_path}...")
+            report.save(output_path, format=cli_config.format)
+        else:
+            # No output file specified - print to console
+            if cli_config.format == "json":
+                output = report.to_json()
+            elif cli_config.format == "markdown":
+                output = report.to_markdown()
+            else:  # console (default)
+                output = report.to_console()
+
+            print(f"\n{output}")
+
         if cli_config.verbose:
             print(f"\n📊 Benchmark Report:")
             print(f"  Total groups: {len(all_groups)}")
-            # Report contains results - could display more details here
+            if output_path:
+                print(f"  Output: {output_path}")
+            else:
+                print(f"  Output: console")
 
         print("\n✅ Benchmarks completed")
         return 0
@@ -326,7 +402,7 @@ Examples:
     parser.add_argument("--fail-fast", action="store_true", help="Stop on first failure")
     parser.add_argument("--format", choices=["console", "json", "markdown"], default="console",
                         help="Output format (default: console)")
-    parser.add_argument("--output", "-o", help="Output file (default: stdout)")
+    parser.add_argument("--output", "-o", help="Output file path (if not specified, prints to console)")
 
     parsed = parser.parse_args(args)
 

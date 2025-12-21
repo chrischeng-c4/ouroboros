@@ -24,6 +24,13 @@ use crate::validation::ValidatedCollectionName;
 use crate::config::{get_config, ObjectIdConversionMode, SecurityConfig};
 use crate::error_handling::sanitize_mongodb_error;
 
+// Import GIL-free conversion functions (Feature 201)
+use crate::conversion::{
+    extract_dict_items, items_to_bson_document,
+    bson_to_serializable, serializable_to_py_dict,
+    ConversionContext,
+};
+
 // Global connection instance (Week 10: Changed to RwLock for close/reset support)
 use std::sync::RwLock as StdRwLock;
 static CONNECTION: StdRwLock<Option<Arc<Connection>>> = StdRwLock::new(None);
@@ -1171,15 +1178,33 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = match filter {
-            Some(dict) => py_dict_to_bson(py, dict)?,
-            None => doc! {},
+
+        // T041: Phase 1 - Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,        // MongoDB default nesting limit
+            max_size: 16 * 1024 * 1024,  // 16MB MongoDB document limit
+            strict_types: true,
         };
 
-        // Security: Validate query for dangerous operators
-        validate_query_if_enabled(&filter_doc)?;
+        let filter_items = match filter {
+            Some(dict) => extract_dict_items(py, dict, &context)?,
+            None => vec![],
+        };
 
         future_into_py(py, async move {
+            // T042: Phase 2 - Convert to BSON (pure Rust, no GIL needed)
+            let filter_doc = if filter_items.is_empty() {
+                doc! {}
+            } else {
+                items_to_bson_document(&filter_items)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+            };
+
+            // Security: Validate query for dangerous operators
+            validate_query_if_enabled(&filter_doc)?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 
@@ -1188,14 +1213,17 @@ impl RustDocument {
                 .await
                 .map_err(sanitize_mongodb_error)?;
 
+            // T043: Convert BSON result to PyDict
             match result {
                 Some(doc) => {
-                    let id = doc.get("_id").and_then(|v| v.as_object_id());
-                    Ok(Some(RustDocument {
-                        collection_name: validated_name.clone(),
-                        data: doc,
-                        id,
-                    }))
+                    // Pure Rust conversion (no GIL needed)
+                    let serializable = bson_to_serializable(&Bson::Document(doc));
+
+                    // Only acquire GIL for creating Python objects
+                    Python::with_gil(|py| {
+                        let py_dict = serializable_to_py_dict(py, &serializable)?;
+                        Ok(Some(py_dict.unbind()))
+                    })
                 }
                 None => Ok(None),
             }
@@ -1320,11 +1348,29 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = py_dict_to_bson(py, filter)?;
-        validate_query_if_enabled(&filter_doc)?;
-        let update_doc = py_dict_to_bson(py, update)?;
+
+        // Phase 1: Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,
+            max_size: 16 * 1024 * 1024,
+            strict_types: true,
+        };
+
+        let filter_items = extract_dict_items(py, filter, &context)?;
+        let update_items = extract_dict_items(py, update, &context)?;
 
         future_into_py(py, async move {
+            // Phase 2: Convert to BSON (pure Rust, no GIL)
+            let filter_doc = items_to_bson_document(&filter_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            validate_query_if_enabled(&filter_doc)?;
+
+            let update_doc = items_to_bson_document(&update_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 
@@ -1355,10 +1401,25 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = py_dict_to_bson(py, filter)?;
-        validate_query_if_enabled(&filter_doc)?;
+
+        // Phase 1: Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,
+            max_size: 16 * 1024 * 1024,
+            strict_types: true,
+        };
+
+        let filter_items = extract_dict_items(py, filter, &context)?;
 
         future_into_py(py, async move {
+            // Phase 2: Convert to BSON (pure Rust, no GIL)
+            let filter_doc = items_to_bson_document(&filter_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            validate_query_if_enabled(&filter_doc)?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 
@@ -1390,15 +1451,32 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = match filter {
-            Some(dict) => py_dict_to_bson(py, dict)?,
-            None => doc! {},
+
+        // Phase 1: Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,
+            max_size: 16 * 1024 * 1024,
+            strict_types: true,
         };
 
-        // Security: Validate query for dangerous operators
-        validate_query_if_enabled(&filter_doc)?;
+        let filter_items = match filter {
+            Some(dict) => extract_dict_items(py, dict, &context)?,
+            None => vec![],
+        };
 
         future_into_py(py, async move {
+            // Phase 2: Convert to BSON (pure Rust, no GIL)
+            let filter_doc = if filter_items.is_empty() {
+                doc! {}
+            } else {
+                items_to_bson_document(&filter_items)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+            };
+
+            validate_query_if_enabled(&filter_doc)?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 
@@ -1604,11 +1682,29 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = py_dict_to_bson(py, filter)?;
-        validate_query_if_enabled(&filter_doc)?;
-        let update_doc = py_dict_to_bson(py, update)?;
+
+        // Phase 1: Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,
+            max_size: 16 * 1024 * 1024,
+            strict_types: true,
+        };
+
+        let filter_items = extract_dict_items(py, filter, &context)?;
+        let update_items = extract_dict_items(py, update, &context)?;
 
         future_into_py(py, async move {
+            // Phase 2: Convert to BSON (pure Rust, no GIL needed)
+            let filter_doc = items_to_bson_document(&filter_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            validate_query_if_enabled(&filter_doc)?;
+
+            let update_doc = items_to_bson_document(&update_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 
@@ -1646,10 +1742,25 @@ impl RustDocument {
         let validated_name = validate_collection_name(&collection_name)?.into_string();
 
         let conn = get_connection()?;
-        let filter_doc = py_dict_to_bson(py, filter)?;
-        validate_query_if_enabled(&filter_doc)?;
+
+        // Phase 1: Extract Python data (GIL held, minimal work)
+        let config = get_config();
+        let context = ConversionContext {
+            security_config: config,
+            max_depth: 100,
+            max_size: 16 * 1024 * 1024,
+            strict_types: true,
+        };
+
+        let filter_items = extract_dict_items(py, filter, &context)?;
 
         future_into_py(py, async move {
+            // Phase 2: Convert to BSON (pure Rust, no GIL)
+            let filter_doc = items_to_bson_document(&filter_items)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+            validate_query_if_enabled(&filter_doc)?;
+
             let db = conn.database();
             let collection = db.collection::<BsonDocument>(&validated_name);
 

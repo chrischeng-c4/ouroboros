@@ -1,4 +1,4 @@
-# CLAUDE.md
+# GEMINI.md
 
 <language>
 Respond in English (U.S.) by default. Use Traditional Chinese only when user writes in Traditional Chinese.
@@ -245,7 +245,8 @@ perf(201): optimize bulk insert for 50K+ documents
 <repository-structure>
 data-bridge/
 ├── Cargo.toml                      # Workspace root
-├── CLAUDE.md                       # This file
+├── GEMINI.md                       # This file
+├── CLAUDE.md                       # Agent instructions (Reference)
 ├── pyproject.toml                  # Python package config (Maturin)
 ├── .specify/                       # SDD artifacts
 │   ├── ROADMAP.md                  # Feature roadmap
@@ -388,45 +389,36 @@ Bulk Operations:
 </performance-targets>
 
 <architecture-principles>
-1. Python Do Less, Rust Do More (Validation)
-   - Python: Type hints ONLY (for IDE/editor, NOT runtime validation)
-   - Rust: ALL runtime validation (type checking, security, BSON conversion)
-   - Same developer experience as Pydantic, but 10x faster
-   - Errors at save() instead of __init__ (acceptable for async ORM)
-   - Zero Python validation overhead
-
-2. Zero Python Byte Handling
+1. Zero Python Byte Handling
    - All BSON serialization/deserialization in Rust
    - Python receives only typed, validated objects
    - Minimizes Python heap pressure
 
-3. GIL Release Strategy
+2. GIL Release Strategy
    - Release GIL during BSON conversion
    - Release GIL during network I/O
    - Hold GIL only for Python object construction
 
-4. Parallel Processing
+3. Parallel Processing
    - Rayon for batches ≥50 documents
    - Two-phase pattern: extract Python objects → convert in parallel
    - Vector pre-allocation to avoid reallocation
 
-5. Copy-on-Write State Management
+4. Copy-on-Write State Management
    - Field-level change tracking (not full deepcopy)
    - 10x faster than deepcopy
    - 50% memory reduction
 
-6. Validation Architecture
-   - Type validation during BSON conversion (conversion.rs)
-   - Security validation before MongoDB operations (validation.rs)
-   - Structure validation (document size, nesting depth)
-   - Validation CANNOT be skipped (even with fast-path)
+5. Lazy Validation
+   - Defer validation until save()
+   - Reduces overhead on document load
+   - Type validation in Rust (faster than Python)
 
-7. Security First
+6. Security First
    - Collection name validation (no system collections)
    - Field name validation (no $ operators)
    - NoSQL injection prevention
    - Context-aware ObjectId parsing
-   - Validation at native code boundary
 </architecture-principles>
 
 </grounding>
@@ -771,10 +763,10 @@ data-bridge: MongoDB → BSON bytes → Rust structs → Python objects
 - Python 3.12+ with Maturin build system
 - uv package manager for Python dependencies
 - pytest for Python testing, cargo test for Rust testing
-- Rust 1.70+ (edition 2021), Python 3.12+ (201-gil-free-bson-conversion)
-- MongoDB 4.0+ (primary data store) (201-gil-free-bson-conversion)
 
 ## Recent Changes
 - Series 1xx (Type Validation): All completed ✅
 - Series 9xx (Infrastructure): HTTP client and test framework ✅
 - Series 2xx (Performance): In progress
+
+```

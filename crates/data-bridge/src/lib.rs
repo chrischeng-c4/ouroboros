@@ -33,6 +33,9 @@ pub mod validation;
 pub mod config;
 pub mod error_handling;
 
+// BSON conversion with GIL-free processing (Feature 201)
+pub mod conversion;
+
 #[cfg(feature = "mongodb")]
 mod mongodb;
 
