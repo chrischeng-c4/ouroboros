@@ -1,0 +1,44 @@
+site_name: data-bridge
+site_description: High-performance MongoDB ORM for Python with Rust backend
+site_author: Chris Cheng
+repo_url: https://github.com/chrischeng/data-bridge
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+
+nav:
+  - English:
+    - User Guide: en/user-guide.md
+  - 繁體中文:
+    - 使用指南: zh-tw/user-guide.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - toc:
+      permalink: true
