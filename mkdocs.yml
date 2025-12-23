@@ -1,7 +1,8 @@
 site_name: data-bridge
 site_description: High-performance MongoDB ORM for Python with Rust backend
 site_author: Chris Cheng
-repo_url: https://github.com/chrischeng/data-bridge
+site_url: https://chrischeng-c4.github.io/data-bridge/
+repo_url: https://github.com/chrischeng-c4/data-bridge
 
 theme:
   name: material
@@ -28,6 +29,7 @@ theme:
     - content.code.annotate
 
 nav:
+  - Home: index.md
   - English:
     - User Guide: en/user-guide.md
   - 繁體中文:
