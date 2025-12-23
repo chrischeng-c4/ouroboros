@@ -51,6 +51,66 @@ You MUST write out these 5 steps before writing any code.
 
 ---
 
+<agent-orchestration>
+The main conversation thread acts as an **Orchestrator/PM/Planner**. It should:
+
+1. **NEVER read code directly** - Delegate to `explorer` agent
+2. **NEVER write code directly** - Delegate to `implementer` agent
+3. **Plan and coordinate** - Break down tasks, sequence agent calls
+4. **Review and approve** - Validate agent outputs before proceeding
+
+## Agent Definitions
+
+| Agent | Model | Location | Purpose |
+|-------|-------|----------|---------|
+| explorer | haiku | .claude/agents/explorer.md | Fast reading and summarization |
+| implementer | sonnet | .claude/agents/implementer.md | Code writing and modification |
+
+## Delegation Rules
+
+| Task | Delegate To | Model |
+|------|-------------|-------|
+| Read files | explorer | haiku |
+| Search codebase | explorer | haiku |
+| Summarize code | explorer | haiku |
+| Understand patterns | explorer | haiku |
+| Find file locations | explorer | haiku |
+| Write code | implementer | sonnet |
+| Edit files | implementer | sonnet |
+| Fix bugs | implementer | sonnet |
+| Run tests | implementer | sonnet |
+| Refactor code | implementer | sonnet |
+
+## Workflow Pattern
+
+```
+User Request
+    ↓
+Orchestrator (main thread)
+    ├── Spawns explorer agent(s) for understanding
+    ├── Reviews explorer findings
+    ├── Creates implementation plan
+    ├── Spawns implementer agent(s) for execution
+    └── Reviews implementer results
+```
+
+## Example Orchestration
+
+```
+User: "Add email validation to the User document"
+
+Orchestrator:
+1. Spawn explorer → "Find existing validation patterns in crates/data-bridge/src/validation.rs and python/data_bridge/validation.py"
+2. Review findings → Understands pattern: Rust validates, Python defines schema
+3. Create plan → Task breakdown with file targets
+4. Spawn implementer → "Add email regex validation following the existing pattern. Files: validation.rs, validation.py, test_validation.py"
+5. Review result → Verify implementation matches plan
+```
+
+</agent-orchestration>
+
+---
+
 <decision-trees>
 
 <tree name="Which SDD Workflow">
@@ -447,6 +507,9 @@ Bulk Operations:
 <rule severity="NEVER">Add unwrap() in production code → Panics crash Python → Use proper error handling</rule>
 <rule severity="NEVER">Break Beanie compatibility → Users can't migrate → Maintain compatible API</rule>
 <rule severity="NEVER">Bypass type validation → Security risk → Validate at PyO3 boundary</rule>
+<rule severity="NEVER">Read code in main thread → Defeats orchestrator pattern → Delegate to explorer agent</rule>
+<rule severity="NEVER">Write code in main thread → Defeats orchestrator pattern → Delegate to implementer agent</rule>
+<rule severity="NEVER">Use Read/Edit/Write tools directly → Main thread is PM only → Spawn appropriate agent</rule>
 
 <bad-example name="Skip performance verification">
 User: "Optimize bulk insert"
@@ -485,6 +548,24 @@ def find_many(query):
 def find_many(query):
     return _engine.find_many(query)  # Returns typed Python objects directly
 ```
+</bad-example>
+
+<bad-example name="Read code directly in main thread">
+User: "What validation patterns exist?"
+Assistant: *Uses Read tool to read validation.rs directly*
+❌ WRONG: Main thread should not read code directly
+
+✅ CORRECT:
+Assistant: *Spawns explorer agent* → "Find and summarize validation patterns in crates/data-bridge/src/validation.rs"
+</bad-example>
+
+<bad-example name="Write code directly in main thread">
+User: "Add email validation"
+Assistant: *Uses Edit tool to modify validation.rs directly*
+❌ WRONG: Main thread should not write code directly
+
+✅ CORRECT:
+Assistant: *Spawns implementer agent* → "Add email validation to validation.rs following existing patterns"
 </bad-example>
 
 </negative-constraints>
