@@ -74,6 +74,19 @@ DiscoveryStats = _test.DiscoveryStats
 discover_files = _test.discover_files
 filter_files_by_pattern = _test.filter_files_by_pattern
 
+# Profiler types from Rust
+ProfilePhase = _test.ProfilePhase
+PhaseTiming = _test.PhaseTiming
+PhaseBreakdown = _test.PhaseBreakdown
+GilTestConfig = _test.GilTestConfig
+GilContentionResult = _test.GilContentionResult
+MemorySnapshot = _test.MemorySnapshot
+MemoryProfile = _test.MemoryProfile
+FlamegraphData = _test.FlamegraphData
+ProfileResult = _test.ProfileResult
+ProfileConfig = _test.ProfileConfig
+generate_flamegraph = _test.generate_flamegraph
+
 # Import Python layer
 from .decorators import test, profile, stress, security
 from .suite import (
@@ -93,6 +106,7 @@ from .benchmark import (
 )
 from .http_benchmark import HttpBenchmark
 from .lazy_loader import lazy_load_test_suite, lazy_load_benchmark, lazy_load_test_module
+from .profiler import ProfileRunner
 
 __all__ = [
     # Enums
@@ -161,4 +175,17 @@ __all__ = [
     "lazy_load_test_suite",
     "lazy_load_benchmark",
     "lazy_load_test_module",
+    # Profiler
+    "ProfilePhase",
+    "PhaseTiming",
+    "PhaseBreakdown",
+    "GilTestConfig",
+    "GilContentionResult",
+    "MemorySnapshot",
+    "MemoryProfile",
+    "FlamegraphData",
+    "ProfileResult",
+    "ProfileConfig",
+    "ProfileRunner",
+    "generate_flamegraph",
 ]

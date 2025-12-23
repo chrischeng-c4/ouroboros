@@ -29,6 +29,9 @@ regex.workspace = true
 walkdir.workspace = true
 tracing.workspace = true
 
+# Flamegraph generation
+inferno = "0.12"
+
 # HTTP Server (for test server)
 axum.workspace = true
 tower.workspace = true

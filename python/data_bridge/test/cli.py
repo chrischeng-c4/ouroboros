@@ -25,6 +25,12 @@ from . import (
     run_benchmarks,
     clear_registry,
 )
+from .profiler import (
+    ProfileRunner,
+    ProfileConfig,
+    GilTestConfig,
+    generate_flamegraph,
+)
 
 
 async def ensure_mongodb_initialized(verbose: bool = False) -> None:
@@ -85,12 +91,14 @@ class CLIConfig:
         self.test_type: Optional[str] = None  # unit, integration, all
         self.run_benchmarks_flag: bool = False
         self.run_tests_flag: bool = True
+        self.run_profile_flag: bool = False
         self.pattern_filter: Optional[str] = None
         self.tags: List[str] = []
         self.verbose: bool = False
         self.fail_fast: bool = False
         self.format: str = "console"  # console, json, markdown
         self.output_file: Optional[str] = None
+        self.parsed_args: Optional[argparse.Namespace] = None  # Store raw parsed args for profile
 
 
 def create_discovery_config(cli_config: CLIConfig) -> DiscoveryConfig:
@@ -348,6 +356,176 @@ async def run_all(cli_config: CLIConfig) -> int:
     return max(test_exit_code, bench_exit_code)
 
 
+async def run_profile(cli_config: CLIConfig) -> int:
+    """
+    Run profiling on a specific operation.
+
+    Args:
+        cli_config: CLI configuration with profile settings
+
+    Returns:
+        Exit code (0 = success, 1 = failures)
+    """
+    from data_bridge import Document, init, close
+
+    # Get profile-specific settings from parsed args
+    parsed = cli_config.parsed_args
+    target = parsed.target
+    enable_all = getattr(parsed, "all", False)
+    enable_phases = getattr(parsed, "phases", True) or enable_all
+    enable_gil = getattr(parsed, "gil", False) or enable_all
+    enable_memory = getattr(parsed, "memory", False) or enable_all
+    enable_flamegraph = getattr(parsed, "flamegraph", False) or enable_all
+    iterations = getattr(parsed, "iterations", 100)
+    warmup = getattr(parsed, "warmup", 10)
+    workers = getattr(parsed, "workers", 4)
+    output_dir = getattr(parsed, "output", None)
+
+    # Build config
+    if enable_all:
+        config = ProfileConfig.full()
+    else:
+        config = ProfileConfig(
+            enable_phase_breakdown=enable_phases,
+            enable_gil_analysis=enable_gil,
+            enable_memory_profile=enable_memory,
+            enable_flamegraph=enable_flamegraph,
+            iterations=iterations,
+            warmup=warmup,
+            output_dir=output_dir,
+        )
+
+    if enable_gil:
+        gil_config = GilTestConfig(
+            concurrent_workers=workers,
+            operations_per_worker=iterations // workers,
+        )
+        config = config.with_gil_config(gil_config)
+
+    # Initialize MongoDB
+    uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/profile_db")
+    if cli_config.verbose:
+        print(f"Connecting to MongoDB: {uri}")
+    else:
+        print(f"Connecting to MongoDB...")
+
+    try:
+        await init(uri)
+    except Exception as e:
+        print(f"Failed to connect to MongoDB: {e}")
+        return 1
+
+    # Create test document class
+    class ProfileDoc(Document):
+        name: str
+        value: int
+
+        class Settings:
+            name = "profile_test"
+
+    # Create output directory if needed
+    if output_dir:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    runner = ProfileRunner(config)
+
+    try:
+        print(f"\nProfiling: {target}")
+        print("=" * 60)
+
+        # Profile based on target
+        if target == "insert_one":
+            async def op():
+                await ProfileDoc(name="test", value=42).save()
+
+            result = await runner.profile_operation(op, "insert_one")
+
+        elif target == "find_one":
+            # Seed data first
+            await ProfileDoc(name="find_target", value=100).save()
+
+            async def op():
+                await ProfileDoc.find_one(ProfileDoc.value == 100)
+
+            result = await runner.profile_operation(op, "find_one")
+
+        elif target == "find_many":
+            # Seed data first
+            for i in range(100):
+                await ProfileDoc(name=f"bulk_{i}", value=i).save()
+
+            async def op():
+                await ProfileDoc.find(ProfileDoc.value >= 0).to_list()
+
+            result = await runner.profile_operation(op, "find_many")
+
+        elif target == "bulk_insert":
+            async def op():
+                docs = [ProfileDoc(name=f"bulk_{i}", value=i) for i in range(100)]
+                await ProfileDoc.insert_many(docs)
+
+            result = await runner.profile_operation(op, "bulk_insert")
+
+        elif target == "update_one":
+            # Seed data first
+            await ProfileDoc(name="update_target", value=100).save()
+
+            async def op():
+                await ProfileDoc.find_one(ProfileDoc.value == 100).update({"$set": {"value": 101}})
+
+            result = await runner.profile_operation(op, "update_one")
+
+        elif target == "delete_one":
+            async def op():
+                # Insert then delete
+                doc = ProfileDoc(name="delete_target", value=999)
+                await doc.save()
+                await doc.delete()
+
+            result = await runner.profile_operation(op, "delete_one")
+
+        else:
+            print(f"Unknown target: {target}")
+            return 1
+
+        # Print results
+        print(result.format())
+
+        # Save JSON if output directory specified
+        if output_dir:
+            json_path = Path(output_dir) / f"{target}_profile.json"
+            with open(json_path, "w") as f:
+                f.write(result.to_json())
+            print(f"Saved JSON: {json_path}")
+
+        # Generate flamegraph if enabled
+        if enable_flamegraph and output_dir:
+            try:
+                svg_path = str(Path(output_dir) / f"{target}_flamegraph.svg")
+                runner.generate_flamegraph_svg(svg_path, f"Profile: {target}")
+                print(f"Saved flamegraph: {svg_path}")
+            except Exception as e:
+                print(f"Failed to generate flamegraph: {e}")
+
+        print("\nProfile completed successfully")
+        return 0
+
+    except Exception as e:
+        print(f"Profile failed: {e}")
+        if cli_config.verbose:
+            import traceback
+            traceback.print_exc()
+        return 1
+
+    finally:
+        # Cleanup
+        try:
+            await ProfileDoc.delete_many({})
+        except Exception:
+            pass
+        await close()
+
+
 def parse_args(args: Optional[List[str]] = None) -> CLIConfig:
     """
     Parse command-line arguments.
@@ -394,6 +572,80 @@ Examples:
     bench_parser.add_argument("--pattern", help="File pattern to match")
     bench_parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
+    # dbtest profile
+    profile_parser = subparsers.add_parser(
+        "profile",
+        help="Profile data-bridge operations",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  dbtest profile insert_one                    # Profile insert_one with phase breakdown
+  dbtest profile find_one --iterations 200     # More iterations for statistical significance
+  dbtest profile bulk_insert --all             # Enable all profiling dimensions
+  dbtest profile insert_one --flamegraph       # Generate flamegraph SVG
+  dbtest profile find_one --gil                # Analyze GIL contention
+  dbtest profile bulk_insert -o ./profiles     # Output to directory
+        """,
+    )
+    profile_parser.add_argument(
+        "target",
+        choices=["insert_one", "find_one", "find_many", "bulk_insert", "update_one", "delete_one"],
+        help="Operation to profile",
+    )
+    profile_parser.add_argument(
+        "--phases", "-p",
+        action="store_true",
+        default=True,
+        help="Enable phase breakdown (default: enabled)",
+    )
+    profile_parser.add_argument(
+        "--gil", "-g",
+        action="store_true",
+        help="Enable GIL contention analysis",
+    )
+    profile_parser.add_argument(
+        "--memory", "-m",
+        action="store_true",
+        help="Enable memory profiling",
+    )
+    profile_parser.add_argument(
+        "--flamegraph", "-f",
+        action="store_true",
+        help="Generate flamegraph SVG",
+    )
+    profile_parser.add_argument(
+        "--all", "-a",
+        action="store_true",
+        help="Enable all profiling dimensions",
+    )
+    profile_parser.add_argument(
+        "--iterations", "-i",
+        type=int,
+        default=100,
+        help="Number of profiling iterations (default: 100)",
+    )
+    profile_parser.add_argument(
+        "--warmup", "-w",
+        type=int,
+        default=10,
+        help="Warmup iterations (default: 10)",
+    )
+    profile_parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Concurrent workers for GIL analysis (default: 4)",
+    )
+    profile_parser.add_argument(
+        "--output", "-o",
+        help="Output directory for profile results",
+    )
+    profile_parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Verbose output",
+    )
+
     # Global options (for main command without subcommand)
     parser.add_argument("--root", default="tests/", help="Root directory to search (default: tests/)")
     parser.add_argument("--pattern", help="File pattern to match (e.g., test_*crud*.py)")
@@ -438,6 +690,12 @@ Examples:
         config.run_benchmarks_flag = True
         config.patterns = ["bench_*.py"]
 
+    elif parsed.command == "profile":
+        config.run_tests_flag = False
+        config.run_benchmarks_flag = False
+        config.run_profile_flag = True
+        config.parsed_args = parsed
+
     else:
         # No subcommand: run all
         config.run_tests_flag = True
@@ -466,7 +724,11 @@ def main(args: Optional[List[str]] = None) -> int:
 
     # Run appropriate command
     try:
-        if config.run_benchmarks_flag and not config.run_tests_flag:
+        if config.run_profile_flag:
+            # Profile only
+            exit_code = asyncio.run(run_profile(config))
+
+        elif config.run_benchmarks_flag and not config.run_tests_flag:
             # Benchmarks only
             exit_code = asyncio.run(run_benchmarks_only(config))
 

@@ -23,6 +23,7 @@ pub mod assertions;
 pub mod benchmark;
 pub mod discovery;
 pub mod http_server;
+pub mod profiler;
 pub mod reporter;
 pub mod runner;
 
@@ -37,5 +38,10 @@ pub use discovery::{
     walk_files, filter_files,
 };
 pub use http_server::{TestServer, TestServerHandle, RouteConfig};
+pub use profiler::{
+    generate_flamegraph_svg, get_rss_bytes, FlamegraphData, GilContentionResult, GilTestConfig,
+    MemoryProfile, MemorySnapshot, PhaseBreakdown, PhaseTiming, ProfileConfig, ProfilePhase,
+    ProfileResult, Profiler,
+};
 pub use reporter::{Reporter, ReportFormat, TestReport, CoverageInfo, FileCoverage, EnvironmentInfo};
 pub use runner::{TestRunner, TestMeta, TestResult, TestStatus, TestType};
