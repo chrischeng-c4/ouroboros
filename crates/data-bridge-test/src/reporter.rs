@@ -6,8 +6,10 @@ use std::fmt::Write as FmtWrite;
 
 /// Report output format
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ReportFormat {
     /// Markdown format (human-readable)
+    #[default]
     Markdown,
     /// HTML format (interactive report)
     Html,
@@ -21,11 +23,6 @@ pub enum ReportFormat {
     Console,
 }
 
-impl Default for ReportFormat {
-    fn default() -> Self {
-        ReportFormat::Markdown
-    }
-}
 
 impl std::fmt::Display for ReportFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

@@ -3,7 +3,7 @@
 //! This module provides migration support for schema evolution,
 //! similar to Alembic/SQLAlchemy migrations but in Rust.
 
-use crate::{Connection, DataBridgeError, Result};
+use crate::{Connection, Result};
 use chrono::{DateTime, Utc};
 use std::path::Path;
 

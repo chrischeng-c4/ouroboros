@@ -861,4 +861,449 @@ mod tests {
         assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC, name ASC");
         assert_eq!(params.len(), 0);
     }
+
+    #[test]
+    fn test_complex_where_4_conditions() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("age", Operator::Gte, ExtractedValue::Int(18)).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string())).unwrap()
+            .where_clause("score", Operator::Lt, ExtractedValue::Int(100)).unwrap()
+            .where_clause("verified", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM users WHERE age >= $1 AND status = $2 AND score < $3 AND verified = $4"
+        );
+        assert_eq!(params.len(), 4);
+
+        // Verify parameter values
+        match &params[0] {
+            ExtractedValue::Int(18) => {},
+            _ => panic!("Expected Int(18)"),
+        }
+        match &params[1] {
+            ExtractedValue::String(s) if s == "active" => {},
+            _ => panic!("Expected String(active)"),
+        }
+        match &params[2] {
+            ExtractedValue::Int(100) => {},
+            _ => panic!("Expected Int(100)"),
+        }
+        match &params[3] {
+            ExtractedValue::Bool(true) => {},
+            _ => panic!("Expected Bool(true)"),
+        }
+    }
+
+    #[test]
+    fn test_schema_qualified_table_names() {
+        // Test SELECT with schema-qualified table
+        let qb = QueryBuilder::new("public.users").unwrap()
+            .select(vec!["id".to_string(), "name".to_string()]).unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT id, name FROM public.users WHERE active = $1");
+        assert_eq!(params.len(), 1);
+
+        // Test INSERT with schema-qualified table
+        let qb = QueryBuilder::new("myschema.products").unwrap();
+        let values = vec![
+            ("name".to_string(), ExtractedValue::String("Widget".to_string())),
+            ("price".to_string(), ExtractedValue::Int(999)),
+        ];
+        let (sql, params) = qb.build_insert(&values).unwrap();
+        assert_eq!(sql, "INSERT INTO myschema.products (name, price) VALUES ($1, $2) RETURNING *");
+        assert_eq!(params.len(), 2);
+
+        // Test UPDATE with schema-qualified table
+        let qb = QueryBuilder::new("analytics.events").unwrap()
+            .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
+        let values = vec![
+            ("processed".to_string(), ExtractedValue::Bool(true)),
+        ];
+        let (sql, params) = qb.build_update(&values).unwrap();
+        assert_eq!(sql, "UPDATE analytics.events SET processed = $1 WHERE id = $2");
+        assert_eq!(params.len(), 2);
+
+        // Test DELETE with schema-qualified table
+        let qb = QueryBuilder::new("logs.audit_log").unwrap()
+            .where_clause("created_at", Operator::Lt, ExtractedValue::String("2020-01-01".to_string())).unwrap();
+        let (sql, params) = qb.build_delete();
+        assert_eq!(sql, "DELETE FROM logs.audit_log WHERE created_at < $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_very_large_limit() {
+        // Test with i64::MAX
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(i64::MAX);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(val) if *val == i64::MAX => {},
+            _ => panic!("Expected BigInt(i64::MAX)"),
+        }
+
+        // Test with a very large but reasonable limit
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(1_000_000_000);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(1_000_000_000) => {},
+            _ => panic!("Expected BigInt(1_000_000_000)"),
+        }
+    }
+
+    #[test]
+    fn test_zero_limit() {
+        // Test LIMIT 0 behavior - should be valid SQL
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(0) => {},
+            _ => panic!("Expected BigInt(0)"),
+        }
+
+        // Test LIMIT 0 with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = $1 LIMIT $2");
+        assert_eq!(params.len(), 2);
+
+        // Test LIMIT 0 with ORDER BY
+        let qb = QueryBuilder::new("users").unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC LIMIT $1");
+        assert_eq!(params.len(), 1);
+
+        // Test LIMIT 0 with OFFSET
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(0)
+            .offset(10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(params.len(), 2);
+        match &params[0] {
+            ExtractedValue::BigInt(0) => {},
+            _ => panic!("Expected BigInt(0) for limit"),
+        }
+        match &params[1] {
+            ExtractedValue::BigInt(10) => {},
+            _ => panic!("Expected BigInt(10) for offset"),
+        }
+    }
+
+    #[test]
+    fn test_negative_offset() {
+        // PostgreSQL allows negative offsets (they're treated as 0)
+        // The query builder should accept them and let PostgreSQL handle it
+        let qb = QueryBuilder::new("users").unwrap()
+            .offset(-10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users OFFSET $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(-10) => {},
+            _ => panic!("Expected BigInt(-10)"),
+        }
+
+        // Test negative offset with positive limit
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(20)
+            .offset(-5);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_empty_select_columns() {
+        // When no columns are specified, should default to SELECT *
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec![]).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users");
+        assert_eq!(params.len(), 0);
+
+        // Empty select with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec![]).unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_in_operator_with_empty_list() {
+        // IN operator with empty array
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(vec![])).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        // Verify the parameter is an empty array
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.is_empty() => {},
+            _ => panic!("Expected empty Array"),
+        }
+
+        // NOT IN with empty array
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("user_role", Operator::NotIn, ExtractedValue::Array(vec![])).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE user_role NOT IN ($1)");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_in_operator_with_many_values() {
+        // Create an array with 150 values
+        let values: Vec<ExtractedValue> = (0..150)
+            .map(|i| ExtractedValue::Int(i))
+            .collect();
+
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("id", Operator::In, ExtractedValue::Array(values.clone())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE id IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        // Verify the parameter contains 150 values
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 150 => {},
+            _ => panic!("Expected Array with 150 elements"),
+        }
+
+        // Test with strings
+        let string_values: Vec<ExtractedValue> = (0..100)
+            .map(|i| ExtractedValue::String(format!("value_{}", i)))
+            .collect();
+
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(string_values)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 100 => {},
+            _ => panic!("Expected Array with 100 elements"),
+        }
+    }
+
+    #[test]
+    fn test_like_patterns_escaping() {
+        // Test basic LIKE patterns
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("name", Operator::Like, ExtractedValue::String("%John%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE name LIKE $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%John%" => {},
+            _ => panic!("Expected String(%John%)"),
+        }
+
+        // Test LIKE with special characters (underscore wildcard)
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("email", Operator::Like, ExtractedValue::String("user_@%.com".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE email LIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "user_@%.com" => {},
+            _ => panic!("Expected String(user_@%.com)"),
+        }
+
+        // Test ILIKE (case-insensitive)
+        let qb = QueryBuilder::new("products").unwrap()
+            .where_clause("description", Operator::ILike, ExtractedValue::String("%widget%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM products WHERE description ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%widget%" => {},
+            _ => panic!("Expected String(%widget%)"),
+        }
+
+        // Test multiple LIKE conditions
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("first_name", Operator::Like, ExtractedValue::String("J%".to_string())).unwrap()
+            .where_clause("last_name", Operator::Like, ExtractedValue::String("%son".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE first_name LIKE $1 AND last_name LIKE $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_ilike_case_insensitive() {
+        // Test ILIKE basic usage
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("name", Operator::ILike, ExtractedValue::String("%john%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE name ILIKE $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%john%" => {},
+            _ => panic!("Expected String(%john%)"),
+        }
+
+        // Test ILIKE with mixed case pattern
+        let qb = QueryBuilder::new("products").unwrap()
+            .where_clause("name", Operator::ILike, ExtractedValue::String("%WiDgEt%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM products WHERE name ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%WiDgEt%" => {},
+            _ => panic!("Expected String(%WiDgEt%)"),
+        }
+
+        // Test ILIKE with underscore wildcard
+        let qb = QueryBuilder::new("emails").unwrap()
+            .where_clause("address", Operator::ILike, ExtractedValue::String("USER_@example.com".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM emails WHERE address ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "USER_@example.com" => {},
+            _ => panic!("Expected String(USER_@example.com)"),
+        }
+
+        // Test combining ILIKE with other conditions
+        let qb = QueryBuilder::new("articles").unwrap()
+            .where_clause("title", Operator::ILike, ExtractedValue::String("%RUST%".to_string())).unwrap()
+            .where_clause("published", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .limit(10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM articles WHERE title ILIKE $1 AND published = $2 ORDER BY created_at DESC LIMIT $3"
+        );
+        assert_eq!(params.len(), 3);
+
+        // Test multiple ILIKE conditions
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("first_name", Operator::ILike, ExtractedValue::String("j%".to_string())).unwrap()
+            .where_clause("last_name", Operator::ILike, ExtractedValue::String("%SON".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE first_name ILIKE $1 AND last_name ILIKE $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_order_by_multiple_columns() {
+        // Test ORDER BY with 3 columns
+        let qb = QueryBuilder::new("users").unwrap()
+            .order_by("department", OrderDirection::Asc).unwrap()
+            .order_by("salary", OrderDirection::Desc).unwrap()
+            .order_by("name", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users ORDER BY department ASC, salary DESC, name ASC");
+        assert_eq!(params.len(), 0);
+
+        // Test with 5 columns
+        let qb = QueryBuilder::new("products").unwrap()
+            .order_by("category", OrderDirection::Asc).unwrap()
+            .order_by("subcategory", OrderDirection::Asc).unwrap()
+            .order_by("price", OrderDirection::Desc).unwrap()
+            .order_by("rating", OrderDirection::Desc).unwrap()
+            .order_by("name", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM products ORDER BY category ASC, subcategory ASC, price DESC, rating DESC, name ASC"
+        );
+        assert_eq!(params.len(), 0);
+
+        // Test ORDER BY with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .order_by("id", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM users WHERE active = $1 ORDER BY created_at DESC, id ASC");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_combined_query_builder() {
+        // Test combining all query options: SELECT columns, WHERE (multiple conditions),
+        // ORDER BY (multiple), LIMIT, and OFFSET
+        let qb = QueryBuilder::new("orders").unwrap()
+            .select(vec![
+                "id".to_string(),
+                "customer_id".to_string(),
+                "total".to_string(),
+                "status".to_string(),
+                "created_at".to_string(),
+            ]).unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(vec![
+                ExtractedValue::String("pending".to_string()),
+                ExtractedValue::String("processing".to_string()),
+                ExtractedValue::String("shipped".to_string()),
+            ])).unwrap()
+            .where_clause("total", Operator::Gte, ExtractedValue::Int(100)).unwrap()
+            .where_clause("customer_id", Operator::Ne, ExtractedValue::Int(0)).unwrap()
+            .where_not_null("payment_method").unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .order_by("total", OrderDirection::Desc).unwrap()
+            .order_by("id", OrderDirection::Asc).unwrap()
+            .limit(50)
+            .offset(100);
+
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT id, customer_id, total, status, created_at FROM orders WHERE status IN ($1) AND total >= $2 AND customer_id != $3 AND payment_method IS NOT NULL ORDER BY created_at DESC, total DESC, id ASC LIMIT $4 OFFSET $5"
+        );
+        assert_eq!(params.len(), 5);
+
+        // Verify parameter types
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 3 => {},
+            _ => panic!("Expected Array with 3 elements"),
+        }
+        match &params[1] {
+            ExtractedValue::Int(100) => {},
+            _ => panic!("Expected Int(100)"),
+        }
+        match &params[2] {
+            ExtractedValue::Int(0) => {},
+            _ => panic!("Expected Int(0)"),
+        }
+        match &params[3] {
+            ExtractedValue::BigInt(50) => {},
+            _ => panic!("Expected BigInt(50)"),
+        }
+        match &params[4] {
+            ExtractedValue::BigInt(100) => {},
+            _ => panic!("Expected BigInt(100)"),
+        }
+
+        // Test combined query with schema-qualified table
+        let qb = QueryBuilder::new("public.analytics_events").unwrap()
+            .select(vec!["event_type".to_string(), "user_id".to_string(), "timestamp".to_string()]).unwrap()
+            .where_clause("event_type", Operator::Like, ExtractedValue::String("click%".to_string())).unwrap()
+            .where_clause("timestamp", Operator::Gte, ExtractedValue::String("2024-01-01".to_string())).unwrap()
+            .order_by("timestamp", OrderDirection::Desc).unwrap()
+            .limit(1000);
+
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT event_type, user_id, timestamp FROM public.analytics_events WHERE event_type LIKE $1 AND timestamp >= $2 ORDER BY timestamp DESC LIMIT $3"
+        );
+        assert_eq!(params.len(), 3);
+    }
 }

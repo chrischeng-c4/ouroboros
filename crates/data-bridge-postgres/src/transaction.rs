@@ -2,7 +2,7 @@
 //!
 //! This module provides transaction support with ACID guarantees.
 
-use crate::{Connection, DataBridgeError, Result};
+use crate::{Connection, Result};
 
 /// Transaction isolation levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

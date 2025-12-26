@@ -733,7 +733,7 @@ impl BenchmarkReport {
 
         // Benchmark groups
         for (i, group) in self.groups.iter().enumerate() {
-            html.push_str(&format!("        <div class=\"group\">\n"));
+            html.push_str("        <div class=\"group\">\n");
             html.push_str(&format!("            <h2 class=\"group-title\">{}</h2>\n", group.name));
             html.push_str(&format!("            <div class=\"chart-container\"><canvas id=\"chart{}\"></canvas></div>\n", i));
 
@@ -868,7 +868,7 @@ impl BenchmarkReport {
                     result.stats.max_ms, result.stats.ops_per_second(), vs_baseline
                 ));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
 
         // Environment
@@ -946,7 +946,7 @@ impl BenchmarkReport {
                     result.stats.max_ms, result.stats.ops_per_second(),
                     color, vs_baseline, RESET));
             }
-            out.push_str("\n");
+            out.push('\n');
         }
 
         // Environment

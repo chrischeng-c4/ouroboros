@@ -50,7 +50,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
 
     async def setup(self):
         """Reset security config and cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         configure_security(
             objectid_mode=ObjectIdConversionMode.Lenient,
             validate_queries=True,
@@ -61,7 +61,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
         await _engine.delete_many("test_secure_products", {})
         configure_security(
@@ -108,7 +108,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
 
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one(
                 "test_secure_users",
                 {"$where": "this.email == 'test@example.com'"}
@@ -129,7 +129,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
 
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one(
                 "test_secure_users",
                 {
@@ -171,7 +171,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
                     }
                 }
             ]
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.aggregate("test_secure_products", pipeline)
         except Exception as e:
             error_caught = True
@@ -186,7 +186,7 @@ class TestNoSQLInjectionPrevention(MongoTestSuite):
         """Test that deeply nested dangerous operators are also blocked."""
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one(
                 "test_secure_users",
                 {
@@ -218,7 +218,7 @@ class TestCollectionNameValidation(MongoTestSuite):
         """CRITICAL: Block access to system.* collections."""
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one("system.users", {})
         except ValueError as e:
             error_caught = True
@@ -233,7 +233,7 @@ class TestCollectionNameValidation(MongoTestSuite):
         """CRITICAL: Block $ in collection names."""
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one("$cmd", {})
         except ValueError as e:
             error_caught = True
@@ -248,7 +248,7 @@ class TestCollectionNameValidation(MongoTestSuite):
         """CRITICAL: Block null bytes in collection names."""
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one("users\x00admin", {})
         except ValueError as e:
             error_caught = True
@@ -263,7 +263,7 @@ class TestCollectionNameValidation(MongoTestSuite):
         """Test that empty collection names are rejected."""
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one("", {})
         except ValueError as e:
             error_caught = True
@@ -279,7 +279,7 @@ class TestCollectionNameValidation(MongoTestSuite):
         long_name = "a" * 121
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one(long_name, {})
         except ValueError as e:
             error_caught = True
@@ -299,12 +299,12 @@ class TestFieldNameValidation(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
 
     @test(tags=["security", "field-validation"])
@@ -330,7 +330,7 @@ class TestFieldNameValidation(MongoTestSuite):
 
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.update_one(
                 "test_secure_users",
                 {"_id": user._id},
@@ -355,7 +355,7 @@ class TestErrorSanitization(MongoTestSuite):
     @test(tags=["security", "error-sanitization"])
     async def test_connection_string_redacted(self):
         """CRITICAL: Connection strings should not appear in error messages."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
 
         try:
             await _engine.find_one(
@@ -371,7 +371,7 @@ class TestErrorSanitization(MongoTestSuite):
     async def test_credentials_redacted(self):
         """CRITICAL: Usernames and passwords should be redacted."""
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.init("mongodb://myuser:mypassword@localhost:99999/test")
         except Exception as e:
             error_msg = str(e)
@@ -381,7 +381,7 @@ class TestErrorSanitization(MongoTestSuite):
     async def test_ip_address_redacted(self):
         """MEDIUM: IP addresses should be redacted to prevent network reconnaissance."""
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.init("mongodb://192.168.1.100:27017/test")
         except Exception as e:
             error_msg = str(e)
@@ -399,12 +399,12 @@ class TestSecurityConfiguration(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
 
     async def teardown(self):
         """Reset config and cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
         configure_security(
             objectid_mode=ObjectIdConversionMode.Lenient,
@@ -435,7 +435,7 @@ class TestSecurityConfiguration(MongoTestSuite):
         # $where should be blocked
         error_caught = False
         try:
-            from data_bridge import _engine
+            from data_bridge.mongodb import _engine
             await _engine.find_one(
                 "test_secure_users",
                 {"$where": "this.email == 'test'"}
@@ -462,12 +462,12 @@ class TestSecurityIntegration(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_secure_users", {})
 
     @test(tags=["security", "integration"])
@@ -500,7 +500,7 @@ class TestSecurityIntegration(MongoTestSuite):
         )
         await user.save()
 
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.update_one(
             "test_secure_users",
             {"_id": user._id},

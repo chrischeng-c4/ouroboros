@@ -38,3 +38,4 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4"
+data-bridge-test = { path = "../data-bridge-test" }

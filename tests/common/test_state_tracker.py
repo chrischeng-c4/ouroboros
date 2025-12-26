@@ -6,7 +6,7 @@ Migrated from pytest to data_bridge.test framework.
 """
 import time
 
-from data_bridge.state import StateTracker
+from data_bridge.mongodb.state import StateTracker
 from data_bridge.test import test, expect
 from tests.base import CommonTestSuite
 

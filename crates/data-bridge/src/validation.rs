@@ -204,11 +204,10 @@ impl ValidatedFieldName {
         }
 
         // If $ is allowed, verify it's a known operator
-        if name.starts_with('$') && allow_operators {
-            if !Self::is_known_operator(name) {
+        if name.starts_with('$') && allow_operators
+            && !Self::is_known_operator(name) {
                 eprintln!("WARNING: Unknown MongoDB operator: '{}'", name);
             }
-        }
 
         Ok(ValidatedFieldName {
             name: name.to_string(),

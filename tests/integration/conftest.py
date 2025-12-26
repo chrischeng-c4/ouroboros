@@ -29,7 +29,7 @@ async def mongodb_connection():
     await init(MONGODB_URI)
 
     # Clean up test collections before test
-    from data_bridge import _engine
+    from data_bridge.mongodb import _engine
     try:
         # Drop test collections to ensure clean state
         await _engine._rust.Document.drop_collection("test_conversion")

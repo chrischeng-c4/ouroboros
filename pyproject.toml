@@ -88,4 +88,6 @@ dev = [
     "asyncpg>=0.29.0",
     "psycopg2-binary>=2.9.0",
     "sqlalchemy[asyncio]>=2.0.0",
+    "bandit>=1.9.2",
+    "pre-commit>=4.5.1",
 ]

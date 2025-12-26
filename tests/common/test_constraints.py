@@ -19,7 +19,7 @@ from data_bridge import (
     Url,
     Constraint,
 )
-from data_bridge.type_extraction import (
+from data_bridge.mongodb.type_extraction import (
     python_type_to_bson_type,
     extract_constraints,
     is_annotated_type,

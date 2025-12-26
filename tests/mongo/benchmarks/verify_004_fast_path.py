@@ -10,7 +10,7 @@ import time
 from statistics import mean, stdev
 
 from data_bridge import init, close
-from data_bridge.document import Document
+from data_bridge.mongodb.document import Document
 
 
 class User(Document):

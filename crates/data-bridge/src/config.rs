@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_thread_safety() {
         use std::thread;
-        use std::sync::Arc;
+        
 
         let original = get_config();
 
@@ -284,7 +284,8 @@ mod tests {
             .map(|_| {
                 thread::spawn(|| {
                     let config = get_config();
-                    assert!(config.validate_queries || !config.validate_queries); // Just access it
+                    // Just verify we can access the config field
+                    let _ = config.validate_queries;
                 })
             })
             .collect();

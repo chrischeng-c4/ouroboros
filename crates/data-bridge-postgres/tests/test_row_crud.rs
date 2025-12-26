@@ -280,7 +280,7 @@ fn test_row_to_json() {
     let obj = json.as_object().unwrap();
     assert_eq!(obj.get("id").unwrap().as_i64().unwrap(), 42);
     assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "Test");
-    assert_eq!(obj.get("active").unwrap().as_bool().unwrap(), true);
+    assert!(obj.get("active").unwrap().as_bool().unwrap());
     assert!((obj.get("price").unwrap().as_f64().unwrap() - 99.99).abs() < 0.01);
 }
 

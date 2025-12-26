@@ -521,10 +521,10 @@ async def run_profile(cli_config: CLIConfig) -> int:
         return 1
 
     finally:
-        # Cleanup
+        # Cleanup - ignore errors during cleanup as we're exiting anyway
         try:
             await ProfileDoc.delete_many({})
-        except Exception:
+        except Exception:  # nosec B110 - cleanup during shutdown can fail safely
             pass
         await close()
 

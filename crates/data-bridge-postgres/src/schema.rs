@@ -3,7 +3,7 @@
 //! This module provides utilities for inspecting the database schema,
 //! useful for validation, documentation, and migration generation.
 
-use crate::{Connection, DataBridgeError, Result};
+use crate::{Connection, Result};
 use serde::{Deserialize, Serialize};
 
 /// PostgreSQL column data type.

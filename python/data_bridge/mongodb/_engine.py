@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 # Import the Rust module
 try:
-    from data_bridge import mongodb as _rust
+    from data_bridge.data_bridge import mongodb as _rust
 except ImportError as e:
     raise ImportError(
         "data_bridge Rust extension not found. "

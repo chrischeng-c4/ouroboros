@@ -126,12 +126,12 @@ class TestInheritanceCRUD(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collection."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_vehicles", {})
 
     async def teardown(self):
         """Clean up test collection."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_vehicles", {})
 
     @test(tags=["mongo", "inheritance", "crud"])
@@ -140,7 +140,7 @@ class TestInheritanceCRUD(MongoTestSuite):
         car = Car(name="Tesla Model S", wheels=4, doors=4)
         await car.save()
 
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         doc = await _engine.find_one("test_vehicles", {"_id": car._id})
         expect(doc["_class_id"]).to_equal("Car")
         expect(doc["name"]).to_equal("Tesla Model S")
@@ -278,7 +278,7 @@ class TestInheritanceFields(MongoTestSuite):
             download_url: str = ""
             file_size: int = 0
 
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_products_inherit", {})
 
         product = DigitalProduct(

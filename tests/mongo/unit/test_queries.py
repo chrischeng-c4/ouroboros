@@ -12,7 +12,7 @@ Migrated from test_comprehensive.py and split for maintainability.
 from typing import Optional
 
 from data_bridge import Document
-from data_bridge.query import QueryBuilder
+from data_bridge.mongodb.query import QueryBuilder
 from data_bridge.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 

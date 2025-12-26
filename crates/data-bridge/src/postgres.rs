@@ -425,7 +425,7 @@ fn insert_many<'py>(
         // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
         let result_rows: Vec<RowWrapper> = batch_results
             .iter()
-            .map(|row| RowWrapper::from_row(row))
+            .map(RowWrapper::from_row)
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(RowsWrapper(result_rows))

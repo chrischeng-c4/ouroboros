@@ -79,14 +79,14 @@ class TestEmbeddedDocumentBasics(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
         await _engine.delete_many("test_embedded_profiles", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
         await _engine.delete_many("test_embedded_profiles", {})
@@ -190,12 +190,12 @@ class TestEmbeddedSerialization(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "serialization"])
@@ -246,12 +246,12 @@ class TestEmbeddedRoundTrip(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "roundtrip"])
@@ -297,12 +297,12 @@ class TestEmbeddedQueries(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "query"])
@@ -356,13 +356,13 @@ class TestEmbeddedEdgeCases(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
 
