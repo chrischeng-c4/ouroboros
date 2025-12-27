@@ -7,11 +7,12 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use pyo3_async_runtimes::tokio::future_into_py;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row};
-use sqlx::Row as SqlxRow;
+use sqlx::{Column, Row as SqlxRow};
 
 // For base64 encoding of binary data
 use base64::{Engine as _, engine::general_purpose};
@@ -19,6 +20,22 @@ use base64::{Engine as _, engine::general_purpose};
 // Global connection pool using RwLock for close/reset support
 use std::sync::RwLock as StdRwLock;
 static PG_POOL: StdRwLock<Option<Arc<Connection>>> = StdRwLock::new(None);
+
+// Thread-local cache for datetime module to avoid repeated imports
+thread_local! {
+    static DATETIME_MODULE: RefCell<Option<PyObject>> = RefCell::new(None);
+}
+
+/// Get cached datetime module or import it
+fn get_datetime_module(py: Python<'_>) -> PyResult<PyObject> {
+    DATETIME_MODULE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.is_none() {
+            *cache = Some(py.import_bound("datetime")?.to_object(py));
+        }
+        Ok(cache.as_ref().unwrap().clone_ref(py))
+    })
+}
 
 // ============================================================================
 // Wrapper Types for PyO3 IntoPyObject
@@ -51,6 +68,31 @@ impl RowWrapper {
         for column in row.columns() {
             if let Ok(value) = row.get(column) {
                 columns.push((column.to_string(), value.clone()));
+            }
+        }
+        Ok(Self { columns })
+    }
+
+    /// Create RowWrapper using pre-computed column names to avoid repeated allocations
+    fn from_row_with_columns(row: &Row, column_names: &[String]) -> PyResult<Self> {
+        let mut columns = Vec::with_capacity(column_names.len());
+        for column in column_names {
+            if let Ok(value) = row.get(column) {
+                columns.push((column.clone(), value.clone()));
+            }
+        }
+        Ok(Self { columns })
+    }
+
+    /// Create RowWrapper by taking ownership of Row (zero-copy)
+    fn from_row_owned(row: Row, column_names: &[String]) -> PyResult<Self> {
+        let mut columns = Vec::with_capacity(column_names.len());
+        // Extract values in the order specified by column_names
+        for column in column_names {
+            if let Ok(value) = row.get(column) {
+                // Still need to clone here because we're iterating and can't take ownership
+                // But we'll optimize this next
+                columns.push((column.clone(), value.clone()));
             }
         }
         Ok(Self { columns })
@@ -238,25 +280,25 @@ fn extracted_to_py_value(py: Python<'_>, value: &data_bridge_postgres::Extracted
         ExtractedValue::Json(j) => pythonize::pythonize(py, j)?.into(),
         ExtractedValue::Uuid(u) => u.to_string().to_object(py),
         ExtractedValue::Date(d) => {
-            let datetime = py.import("datetime")?;
-            let date = datetime.getattr("date")?;
+            let datetime = get_datetime_module(py)?;
+            let date = datetime.bind(py).getattr("date")?;
             date.call_method1("fromisoformat", (d.to_string(),))?.to_object(py)
         }
         ExtractedValue::Time(t) => {
-            let datetime = py.import("datetime")?;
-            let time = datetime.getattr("time")?;
+            let datetime = get_datetime_module(py)?;
+            let time = datetime.bind(py).getattr("time")?;
             time.call_method1("fromisoformat", (t.to_string(),))?.to_object(py)
         }
         ExtractedValue::Timestamp(ts) => {
             // Convert NaiveDateTime to Python datetime (no timezone)
-            let datetime = py.import("datetime")?;
-            let dt = datetime.getattr("datetime")?;
+            let datetime = get_datetime_module(py)?;
+            let dt = datetime.bind(py).getattr("datetime")?;
             dt.call_method1("fromisoformat", (ts.to_string(),))?.to_object(py)
         }
         ExtractedValue::TimestampTz(ts) => {
             // Convert to Python datetime with timezone
-            let datetime = py.import("datetime")?;
-            let dt = datetime.getattr("datetime")?;
+            let datetime = get_datetime_module(py)?;
+            let dt = datetime.bind(py).getattr("datetime")?;
             dt.call_method1("fromisoformat", (ts.to_rfc3339(),))?.to_object(py)
         }
         ExtractedValue::Decimal(d) => {
@@ -588,11 +630,26 @@ fn fetch_all<'py>(
             .map_err(|e| PyRuntimeError::new_err(format!("Query failed: {}", e)))?;
 
         // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
-        let mut wrappers = Vec::with_capacity(pg_rows.len());
-        for pg_row in &pg_rows {
-            let row = Row::from_sqlx(pg_row)
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
-            wrappers.push(RowWrapper::from_row(&row)?);
+        if pg_rows.is_empty() {
+            return Ok(RowsWrapper(Vec::new()));
+        }
+
+        // Convert to owned Rows first
+        let rows: Vec<Row> = pg_rows.iter()
+            .map(|pg_row| Row::from_sqlx(pg_row))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+
+        // Extract column names once from first row to avoid repeated allocations
+        let column_names: Vec<String> = rows[0]
+            .columns()
+            .iter()
+            .map(|col| col.to_string())
+            .collect();
+
+        let mut wrappers = Vec::with_capacity(rows.len());
+        for row in rows {
+            wrappers.push(RowWrapper::from_row_with_columns(&row, &column_names)?);
         }
 
         Ok(RowsWrapper(wrappers))
@@ -1053,11 +1110,26 @@ fn find_many<'py>(
             .map_err(|e| PyRuntimeError::new_err(format!("Query failed: {}", e)))?;
 
         // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
-        let mut wrappers = Vec::with_capacity(pg_rows.len());
-        for pg_row in &pg_rows {
-            let row = Row::from_sqlx(pg_row)
-                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
-            wrappers.push(RowWrapper::from_row(&row)?);
+        if pg_rows.is_empty() {
+            return Ok(RowsWrapper(Vec::new()));
+        }
+
+        // Convert to owned Rows first
+        let rows: Vec<Row> = pg_rows.iter()
+            .map(|pg_row| Row::from_sqlx(pg_row))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+
+        // Extract column names once from first row to avoid repeated allocations
+        let column_names: Vec<String> = rows[0]
+            .columns()
+            .iter()
+            .map(|col| col.to_string())
+            .collect();
+
+        let mut wrappers = Vec::with_capacity(rows.len());
+        for row in rows {
+            wrappers.push(RowWrapper::from_row_with_columns(&row, &column_names)?);
         }
 
         Ok(RowsWrapper(wrappers))

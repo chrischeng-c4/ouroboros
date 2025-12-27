@@ -6,7 +6,3 @@ too-many-arguments-threshold = 10
 
 # Maximum cognitive complexity (default is 25)
 cognitive-complexity-threshold = 30
-
-# Allow unused variables in unimplemented functions
-# TODO: Remove once all features are implemented
-allow-unused-unsafe = false

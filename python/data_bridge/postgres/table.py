@@ -199,6 +199,7 @@ class Table(metaclass=TableMeta):
     # Instance attributes
     id: Optional[int] = None  # Primary key
     _data: Dict[str, Any]
+    _initial_data: Dict[str, Any]  # For change tracking
 
     def __init__(self, **kwargs: Any) -> None:
         """
@@ -232,6 +233,9 @@ class Table(metaclass=TableMeta):
                     else:
                         # It's a plain default value (like age: int = 0)
                         self._data[column_name] = default
+
+        # Track initial state for change detection
+        self._initial_data = self._data.copy()
 
     def __getattr__(self, name: str) -> Any:
         """Get attribute from _data if not in __dict__."""
@@ -276,7 +280,7 @@ class Table(metaclass=TableMeta):
         """
         Save the row to PostgreSQL.
 
-        If the row has an id, updates the existing row.
+        If the row has an id, updates the existing row (only changed fields).
         Otherwise, inserts a new row.
 
         Returns:
@@ -293,25 +297,43 @@ class Table(metaclass=TableMeta):
             )
 
         table_name = self.__table_name__()
-        is_insert = self.id is None
-
-        data = self.to_dict()
 
         if self.id:
-            # Update existing
-            pk_value = data.pop("id")
+            # Update existing - only send changed fields
+            pk_value = self.id
+            changes = {}
+            for key, value in self._data.items():
+                if key == self._primary_key:
+                    continue
+                # Only include if changed from initial state
+                if key not in self._initial_data or self._initial_data[key] != value:
+                    changes[key] = value
+
+            if not changes:
+                # No changes, skip UPDATE
+                return self.id
+
             result_id = await _engine.update_one(
                 table_name,
                 self._primary_key,
                 pk_value,
-                data,
+                changes,
             )
+
+            # Update initial_data to reflect saved state
+            self._initial_data = self._data.copy()
+
+            return result_id
         else:
-            # Insert new
+            # Insert new - use all data
+            data = self.to_dict()
             result_id = await _engine.insert_one(table_name, data)
             self.id = result_id
 
-        return result_id
+            # Track initial state after insert
+            self._initial_data = self._data.copy()
+
+            return result_id
 
     async def delete(self) -> bool:
         """
@@ -371,6 +393,9 @@ class Table(metaclass=TableMeta):
         # Update instance data
         self.id = data.pop("id", self.id)
         self._data = data
+
+        # Reset initial_data to match refreshed state
+        self._initial_data = data.copy()
 
     @classmethod
     def find(cls: Type[T], *filters: SqlExpr | dict) -> QueryBuilder[T]:

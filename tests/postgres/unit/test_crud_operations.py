@@ -57,14 +57,18 @@ class TestSaveOperation:
     async def test_save_update_existing(self, User):
         """Test save() performs update for existing records."""
         with patch('data_bridge.postgres.table._engine') as mock_engine:
-            mock_engine.update_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=5)
 
+            # Create user as if loaded from DB
             user = User(id=5, name="Alice", email="alice@example.com")
+
+            # Modify a field to trigger update
+            user.name = "Alice Updated"
             result_id = await user.save()
 
             # Should call update_one
             mock_engine.update_one.assert_called_once()
-            assert result_id == 1
+            assert result_id == 5
 
     @pytest.mark.asyncio
     async def test_save_insert_includes_data(self, User):
@@ -87,9 +91,11 @@ class TestSaveOperation:
     async def test_save_update_excludes_id_from_data(self, User):
         """Test save() doesn't include id in update data."""
         with patch('data_bridge.postgres.table._engine') as mock_engine:
-            mock_engine.update_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=5)
 
             user = User(id=5, name="Alice", email="alice@example.com")
+            # Modify a field to trigger update
+            user.name = "Alice Updated"
             await user.save()
 
             # Check what data was passed
@@ -473,3 +479,155 @@ class TestCount:
             count = await User.count()
 
             assert count == 100
+
+
+class TestChangeTracking:
+    """Test change tracking functionality for optimized updates."""
+
+    @pytest.mark.asyncio
+    async def test_update_only_changed_fields(self, User):
+        """Verify that save() only updates changed fields."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.insert_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=1)
+
+            # Create user
+            user = User(name="Alice", email="alice@test.com", age=25)
+            await user.save()
+
+            # Modify only age
+            user.age = 30
+
+            # Save again
+            await user.save()
+
+            # Verify only age was sent
+            call_args = mock_engine.update_one.call_args[0]
+            updates_dict = call_args[3]
+            assert updates_dict == {"age": 30}
+            assert "name" not in updates_dict
+            assert "email" not in updates_dict
+
+    @pytest.mark.asyncio
+    async def test_update_multiple_changed_fields(self, User):
+        """Verify that save() sends all changed fields."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.insert_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=1)
+
+            # Create user
+            user = User(name="Alice", email="alice@test.com", age=25)
+            await user.save()
+
+            # Modify multiple fields
+            user.age = 30
+            user.name = "Alice Updated"
+
+            # Save again
+            await user.save()
+
+            # Verify both fields were sent
+            call_args = mock_engine.update_one.call_args[0]
+            updates_dict = call_args[3]
+            assert updates_dict == {"age": 30, "name": "Alice Updated"}
+            assert "email" not in updates_dict
+
+    @pytest.mark.asyncio
+    async def test_save_without_changes_skips_update(self, User):
+        """Verify that save() without changes skips UPDATE."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.insert_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=1)
+
+            # Create user
+            user = User(name="Alice", email="alice@test.com", age=25)
+            await user.save()
+
+            # Save again without changes
+            result = await user.save()
+
+            # update_one should not be called
+            mock_engine.update_one.assert_not_called()
+            assert result == 1
+
+    @pytest.mark.asyncio
+    async def test_initial_data_tracks_after_insert(self, User):
+        """Verify that _initial_data is set after insert."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.insert_one = AsyncMock(return_value=1)
+
+            # Create and save user
+            user = User(name="Alice", email="alice@test.com", age=25)
+            await user.save()
+
+            # _initial_data should match _data (both contain the same fields)
+            # Note: id is added to _data via ColumnProxy.__set__ when user.id = result_id
+            assert user._initial_data == user._data
+            assert user.id == 1
+            assert user._data["id"] == 1
+
+    @pytest.mark.asyncio
+    async def test_initial_data_updates_after_save(self, User):
+        """Verify that _initial_data is updated after successful update."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.insert_one = AsyncMock(return_value=1)
+            mock_engine.update_one = AsyncMock(return_value=1)
+
+            # Create user
+            user = User(name="Alice", email="alice@test.com", age=25)
+            await user.save()
+
+            # Modify and save
+            user.age = 30
+            await user.save()
+
+            # _initial_data should reflect the new saved state
+            assert user._initial_data == user._data
+            assert user._initial_data["age"] == 30
+
+    @pytest.mark.asyncio
+    async def test_refresh_resets_initial_data(self, User):
+        """Verify that refresh() resets _initial_data."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.find_one = AsyncMock(return_value={
+                "id": 1,
+                "name": "Alice Updated",
+                "email": "alice.new@test.com",
+                "age": 31,
+            })
+
+            user = User(id=1, name="Alice", email="alice@test.com", age=25)
+            user.age = 30  # Make a change
+
+            # Refresh from DB
+            await user.refresh()
+
+            # _initial_data should match refreshed state
+            assert user._initial_data == user._data
+            assert user._initial_data == {
+                "name": "Alice Updated",
+                "email": "alice.new@test.com",
+                "age": 31,
+            }
+
+    @pytest.mark.asyncio
+    async def test_existing_row_with_id_tracks_changes(self, User):
+        """Verify that rows loaded with id track changes correctly."""
+        with patch('data_bridge.postgres.table._engine') as mock_engine:
+            mock_engine.update_one = AsyncMock(return_value=1)
+
+            # Create user as if loaded from DB
+            user = User(id=1, name="Alice", email="alice@test.com", age=25)
+
+            # Modify field
+            user.age = 30
+
+            # Save
+            await user.save()
+
+            # Verify only age was sent
+            call_args = mock_engine.update_one.call_args[0]
+            updates_dict = call_args[3]
+            assert updates_dict == {"age": 30}
+            assert "name" not in updates_dict
+            assert "email" not in updates_dict
