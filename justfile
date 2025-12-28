@@ -75,6 +75,14 @@ test-postgres:
     POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
     uv run pytest tests/postgres/integration/ -v -m integration
 
+# Run PostgreSQL migration example
+test-postgres-migrations:
+    #!/usr/bin/env bash
+    echo "Running PostgreSQL migration example..."
+    just test-postgres-setup
+    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+    uv run python examples/postgres_migrations_example.py
+
 # Run with verbose output
 test-verbose:
     uv run dbtest --verbose

@@ -35,7 +35,7 @@ pub use query::{QueryBuilder, Operator, OrderDirection};
 pub use row::Row;
 pub use transaction::Transaction;
 pub use types::{ExtractedValue, row_to_extracted};
-pub use migration::{Migration, MigrationRunner};
+pub use migration::{Migration, MigrationRunner, MigrationStatus};
 pub use schema::SchemaInspector;
 
 pub use data_bridge_common::{DataBridgeError, Result};

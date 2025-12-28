@@ -1463,6 +1463,199 @@ fn find_many<'py>(
 }
 
 // ============================================================================
+// Migration Support
+// ============================================================================
+
+/// Initialize migration system (create _migrations table)
+///
+/// Returns:
+///     Awaitable that resolves when migration table is created
+///
+/// Example:
+///     await migration_init()
+#[pyfunction]
+fn migration_init<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let runner = data_bridge_postgres::MigrationRunner::new((*conn).clone(), None);
+        runner.init()
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to initialize migrations: {}", e)))?;
+
+        Python::with_gil(|py| Ok(py.None()))
+    })
+}
+
+/// Get migration status (applied and pending migrations)
+///
+/// Args:
+///     migrations_dir: Directory containing migration files
+///
+/// Returns:
+///     Dictionary with 'applied' and 'pending' lists
+///
+/// Example:
+///     status = await migration_status("migrations")
+#[pyfunction]
+#[pyo3(signature = (migrations_dir))]
+fn migration_status<'py>(
+    py: Python<'py>,
+    migrations_dir: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let runner = data_bridge_postgres::MigrationRunner::new((*conn).clone(), None);
+
+        let migrations = data_bridge_postgres::MigrationRunner::load_from_directory(std::path::Path::new(&migrations_dir))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load migrations: {}", e)))?;
+
+        let status = runner.status(&migrations)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get migration status: {}", e)))?;
+
+        Python::with_gil(|py| {
+            let dict = PyDict::new(py);
+            dict.set_item("applied", status.applied)?;
+            dict.set_item("pending", status.pending)?;
+            Ok(dict.to_object(py))
+        })
+    })
+}
+
+/// Apply all pending migrations from a directory
+///
+/// Args:
+///     migrations_dir: Directory containing migration files
+///
+/// Returns:
+///     List of applied migration versions
+///
+/// Example:
+///     applied = await migration_apply("migrations")
+#[pyfunction]
+#[pyo3(signature = (migrations_dir))]
+fn migration_apply<'py>(
+    py: Python<'py>,
+    migrations_dir: String,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let runner = data_bridge_postgres::MigrationRunner::new((*conn).clone(), None);
+
+        let migrations = data_bridge_postgres::MigrationRunner::load_from_directory(std::path::Path::new(&migrations_dir))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load migrations: {}", e)))?;
+
+        let applied = runner.migrate(&migrations)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to apply migrations: {}", e)))?;
+
+        Python::with_gil(|py| Ok(applied.to_object(py)))
+    })
+}
+
+/// Rollback last N migrations
+///
+/// Args:
+///     migrations_dir: Directory containing migration files
+///     steps: Number of migrations to rollback (default: 1)
+///
+/// Returns:
+///     List of reverted migration versions
+///
+/// Example:
+///     reverted = await migration_rollback("migrations", steps=2)
+#[pyfunction]
+#[pyo3(signature = (migrations_dir, steps=1))]
+fn migration_rollback<'py>(
+    py: Python<'py>,
+    migrations_dir: String,
+    steps: usize,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let runner = data_bridge_postgres::MigrationRunner::new((*conn).clone(), None);
+
+        let migrations = data_bridge_postgres::MigrationRunner::load_from_directory(std::path::Path::new(&migrations_dir))
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to load migrations: {}", e)))?;
+
+        let reverted = runner.rollback(&migrations, steps)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to rollback migrations: {}", e)))?;
+
+        Python::with_gil(|py| Ok(reverted.to_object(py)))
+    })
+}
+
+/// Create a new migration file
+///
+/// Args:
+///     description: Migration description (e.g., "create_users_table")
+///     migrations_dir: Directory to create migration file in (default: "migrations")
+///
+/// Returns:
+///     Path to created migration file
+///
+/// Example:
+///     filename = migration_create("create_users_table", "migrations")
+#[pyfunction]
+#[pyo3(signature = (description, migrations_dir="migrations"))]
+fn migration_create(
+    _py: Python<'_>,
+    description: String,
+    migrations_dir: &str,
+) -> PyResult<String> {
+    use chrono::Utc;
+    use std::fs;
+    use std::path::Path;
+
+    // Create migrations directory if it doesn't exist
+    let dir_path = Path::new(migrations_dir);
+    if !dir_path.exists() {
+        fs::create_dir_all(dir_path)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to create migrations directory: {}", e)))?;
+    }
+
+    // Generate timestamp-based version
+    let now = Utc::now();
+    let version = now.format("%Y%m%d_%H%M%S").to_string();
+
+    // Clean description (replace spaces with underscores, lowercase)
+    let clean_desc = description
+        .replace(' ', "_")
+        .to_lowercase();
+
+    // Create filename
+    let filename = format!("{}_{}.sql", version, clean_desc);
+    let file_path = dir_path.join(&filename);
+
+    // Create migration file template
+    let template = format!(
+        r#"-- Migration: {}_{}
+-- Description: {}
+
+-- UP
+CREATE TABLE example (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- DOWN
+DROP TABLE IF EXISTS example CASCADE;
+"#,
+        version, clean_desc, description
+    );
+
+    fs::write(&file_path, template)
+        .map_err(|e| PyRuntimeError::new_err(format!("Failed to create migration file: {}", e)))?;
+
+    Ok(file_path.display().to_string())
+}
+
+// ============================================================================
 // Module Registration
 // ============================================================================
 
@@ -1494,6 +1687,13 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_columns, m)?)?;
     m.add_function(wrap_pyfunction!(get_indexes, m)?)?;
     m.add_function(wrap_pyfunction!(inspect_table, m)?)?;
+
+    // Migration functions
+    m.add_function(wrap_pyfunction!(migration_init, m)?)?;
+    m.add_function(wrap_pyfunction!(migration_status, m)?)?;
+    m.add_function(wrap_pyfunction!(migration_apply, m)?)?;
+    m.add_function(wrap_pyfunction!(migration_rollback, m)?)?;
+    m.add_function(wrap_pyfunction!(migration_create, m)?)?;
 
     // Add module docstring
     m.add("__doc__", "PostgreSQL ORM module with async support")?;

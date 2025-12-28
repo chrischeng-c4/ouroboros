@@ -427,3 +427,41 @@ async def inspect_table(table: str, schema: str = "public") -> Dict[str, Any]:
         )
 
     return await _engine.inspect_table(table, schema)
+
+# ============================================================================
+# MIGRATION FUNCTIONS
+# ============================================================================
+
+async def migration_init() -> None:
+    """Initialize the migration system (create _migrations table)."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    await _engine.migration_init()
+
+
+async def migration_status(migrations_dir: str = "migrations") -> Dict[str, List[str]]:
+    """Get migration status (applied and pending)."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.migration_status(migrations_dir)
+
+
+async def migration_apply(migrations_dir: str = "migrations") -> List[str]:
+    """Apply all pending migrations."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.migration_apply(migrations_dir)
+
+
+async def migration_rollback(migrations_dir: str = "migrations", steps: int = 1) -> List[str]:
+    """Rollback last N migrations."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.migration_rollback(migrations_dir, steps)
+
+
+def migration_create(description: str, migrations_dir: str = "migrations") -> str:
+    """Create new migration file."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return _engine.migration_create(description, migrations_dir)
