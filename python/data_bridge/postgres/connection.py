@@ -1,6 +1,6 @@
 """PostgreSQL connection management."""
 
-from typing import Optional, Literal
+from typing import Optional, Literal, List, Dict, Any
 from contextlib import asynccontextmanager
 
 # Import from Rust engine when available
@@ -266,3 +266,164 @@ async def begin_transaction(isolation_level: Optional[IsolationLevel] = None):
         # Auto-commit if not explicitly committed or rolled back
         if not committed:
             await tx.commit()
+
+
+# ============================================================================
+# Schema Introspection
+# ============================================================================
+
+
+async def list_tables(schema: str = "public") -> List[str]:
+    """
+    List all tables in a schema.
+
+    Args:
+        schema: Schema name (default: "public")
+
+    Returns:
+        List of table names
+
+    Example:
+        >>> tables = await list_tables("public")
+        >>> print(tables)
+        ['users', 'posts', 'comments']
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.list_tables(schema)
+
+
+async def table_exists(table: str, schema: str = "public") -> bool:
+    """
+    Check if a table exists in the database.
+
+    Args:
+        table: Table name
+        schema: Schema name (default: "public")
+
+    Returns:
+        True if table exists, False otherwise
+
+    Example:
+        >>> exists = await table_exists("users", "public")
+        >>> if exists:
+        ...     print("Table exists")
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.table_exists(table, schema)
+
+
+async def get_columns(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    """
+    Get column information for a table.
+
+    Args:
+        table: Table name
+        schema: Schema name (default: "public")
+
+    Returns:
+        List of dictionaries with column information. Each dict contains:
+        - name: Column name
+        - data_type: PostgreSQL data type
+        - nullable: Whether column allows NULL values
+        - default: Default value expression (or None)
+        - is_primary_key: Whether column is part of primary key
+        - is_unique: Whether column has unique constraint
+
+    Example:
+        >>> columns = await get_columns("users", "public")
+        >>> for col in columns:
+        ...     print(f"{col['name']}: {col['data_type']}")
+        id: Integer
+        name: Varchar(255)
+        email: Varchar(255)
+        age: Integer
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.get_columns(table, schema)
+
+
+async def get_indexes(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    """
+    Get index information for a table.
+
+    Args:
+        table: Table name
+        schema: Schema name (default: "public")
+
+    Returns:
+        List of dictionaries with index information. Each dict contains:
+        - name: Index name
+        - columns: List of column names in the index
+        - is_unique: Whether index enforces uniqueness
+        - index_type: Index type (btree, hash, gin, gist, etc.)
+
+    Example:
+        >>> indexes = await get_indexes("users", "public")
+        >>> for idx in indexes:
+        ...     print(f"{idx['name']}: {idx['columns']}")
+        users_pkey: ['id']
+        idx_users_email: ['email']
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.get_indexes(table, schema)
+
+
+async def inspect_table(table: str, schema: str = "public") -> Dict[str, Any]:
+    """
+    Get complete information about a table including columns and indexes.
+
+    Args:
+        table: Table name
+        schema: Schema name (default: "public")
+
+    Returns:
+        Dictionary with table information:
+        - name: Table name
+        - schema: Schema name
+        - columns: List of column information (see get_columns)
+        - indexes: List of index information (see get_indexes)
+        - foreign_keys: List of foreign keys (currently empty - future work)
+
+    Example:
+        >>> info = await inspect_table("users", "public")
+        >>> print(f"Table: {info['name']}")
+        >>> print(f"Columns: {len(info['columns'])}")
+        >>> print(f"Indexes: {len(info['indexes'])}")
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or table not found
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.inspect_table(table, schema)

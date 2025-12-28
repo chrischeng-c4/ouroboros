@@ -65,7 +65,27 @@ Python API Layer (document.py, fields.py, query.py)
 
 ## Status
 
-**PLANNED** - All modules contain TODO placeholders for future implementation.
+**IN PROGRESS** - Core CRUD operations and schema introspection implemented.
+
+### Implemented
+- Connection pooling and management ✅
+- Type mapping between Python and PostgreSQL ✅
+- Basic CRUD operations (insert, fetch, update, delete) ✅
+- Query builder with WHERE, ORDER BY, LIMIT, OFFSET ✅
+- Transaction support with isolation levels ✅
+- Raw SQL execution ✅
+- **Schema introspection** ✅
+  - `list_tables()` - List all tables in a schema
+  - `table_exists()` - Check if a table exists
+  - `get_columns()` - Get column information (types, constraints, defaults)
+  - `get_indexes()` - Get index information
+  - `inspect_table()` - Get complete table information
+
+### TODO
+- Migration management (up/down migrations)
+- Foreign key introspection
+- Advanced query features (JOINs, subqueries)
+- Bulk operations optimization
 
 ## Dependencies
 

@@ -36,6 +36,7 @@ impl Default for PoolConfig {
 }
 
 /// PostgreSQL connection wrapper with connection pooling.
+#[derive(Clone)]
 pub struct Connection {
     pool: PgPool,
 }

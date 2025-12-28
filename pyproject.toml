@@ -66,6 +66,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "benchmark: performance benchmark tests (deselect with '-m \"not benchmark\"')",
+    "integration: integration tests requiring external services (database, etc.)",
 ]
 
 [dependency-groups]

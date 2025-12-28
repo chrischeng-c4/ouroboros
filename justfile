@@ -59,6 +59,22 @@ bench-postgres:
     POSTGRES_URI="${POSTGRES_URI:-postgresql://rstn:rstn@localhost:5432/data_bridge_benchmark}" \
     uv run python benchmarks/bench_postgres_comparison.py
 
+# Set up PostgreSQL test database
+test-postgres-setup:
+    #!/usr/bin/env bash
+    echo "Setting up PostgreSQL test database..."
+    docker exec rstn-postgres psql -U rstn -c "DROP DATABASE IF EXISTS data_bridge_test;" || true
+    docker exec rstn-postgres psql -U rstn -c "CREATE DATABASE data_bridge_test;"
+    echo "✓ Test database ready: postgresql://rstn:rstn@localhost:5432/data_bridge_test"
+
+# Run PostgreSQL integration tests
+test-postgres:
+    #!/usr/bin/env bash
+    echo "Running PostgreSQL integration tests..."
+    just test-postgres-setup
+    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+    uv run pytest tests/postgres/integration/ -v -m integration
+
 # Run with verbose output
 test-verbose:
     uv run dbtest --verbose

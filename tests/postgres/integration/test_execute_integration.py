@@ -4,32 +4,25 @@ Integration tests for raw SQL execution.
 These tests require a running PostgreSQL instance.
 
 Set POSTGRES_URI environment variable to override default:
-    export POSTGRES_URI="postgresql://user:pass@localhost:5432/test_db"
+    export POSTGRES_URI="postgresql://user:pass@localhost:5432/data_bridge_test"
 
 Run with:
-    pytest tests/postgres/integration/test_execute_integration.py -v
+    bash scripts/run_integration_tests.sh
+    # or
+    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+        pytest tests/postgres/integration/test_execute_integration.py -v -m integration
 """
 
-import os
 import pytest
-from data_bridge.postgres import init, close, execute
+from data_bridge.postgres import execute
 
 
-# Get PostgreSQL URI from environment or use default
-POSTGRES_URI = os.getenv("POSTGRES_URI", "postgresql://localhost:5432/test_db")
-
-
-@pytest.fixture(scope="module")
-async def postgres_connection():
-    """Initialize PostgreSQL connection for integration tests."""
-    await init(POSTGRES_URI)
-    yield
-    await close()
+# Note: Connection setup is handled by conftest.py fixtures
 
 
 @pytest.fixture
-async def test_table(postgres_connection):
-    """Create a test table for integration tests."""
+async def test_table():
+    """Create a test table for execute integration tests."""
     # Create test table
     await execute("""
         CREATE TABLE IF NOT EXISTS test_execute_users (
@@ -46,8 +39,7 @@ async def test_table(postgres_connection):
 
     yield
 
-    # Cleanup after tests
-    await execute("DROP TABLE IF EXISTS test_execute_users")
+    # Table will be cleaned up by cleanup_tables fixture from conftest.py
 
 
 @pytest.mark.asyncio
