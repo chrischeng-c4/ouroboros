@@ -3,6 +3,7 @@
 //! This module provides transaction support with ACID guarantees.
 
 use crate::{Connection, Result};
+use sqlx::Postgres;
 
 /// Transaction isolation levels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,8 +38,7 @@ impl IsolationLevel {
 /// - Isolation: Concurrent transactions don't interfere
 /// - Durability: Committed changes persist
 pub struct Transaction {
-    // TODO: Add SQLx transaction handle
-    // tx: sqlx::Transaction<'_, sqlx::Postgres>,
+    tx: sqlx::Transaction<'static, Postgres>,
 }
 
 impl Transaction {
@@ -53,11 +53,14 @@ impl Transaction {
     ///
     /// Returns error if transaction cannot be started.
     pub async fn begin(conn: &Connection, isolation_level: IsolationLevel) -> Result<Self> {
-        // TODO: Implement transaction begin
-        // - Get connection from pool
-        // - Execute BEGIN with isolation level
-        // - Return Transaction wrapper
-        todo!("Implement Transaction::begin")
+        // Begin transaction from pool
+        let mut tx = conn.pool().begin().await?;
+
+        // Set isolation level
+        let sql = format!("SET TRANSACTION ISOLATION LEVEL {}", isolation_level.to_sql());
+        sqlx::query(&sql).execute(&mut *tx).await?;
+
+        Ok(Self { tx })
     }
 
     /// Commits the transaction.
@@ -66,10 +69,8 @@ impl Transaction {
     ///
     /// Returns error if commit fails.
     pub async fn commit(self) -> Result<()> {
-        // TODO: Implement transaction commit
-        // - Execute COMMIT
-        // - Release transaction handle
-        todo!("Implement Transaction::commit")
+        self.tx.commit().await?;
+        Ok(())
     }
 
     /// Rolls back the transaction.
@@ -78,10 +79,8 @@ impl Transaction {
     ///
     /// Returns error if rollback fails.
     pub async fn rollback(self) -> Result<()> {
-        // TODO: Implement transaction rollback
-        // - Execute ROLLBACK
-        // - Release transaction handle
-        todo!("Implement Transaction::rollback")
+        self.tx.rollback().await?;
+        Ok(())
     }
 
     /// Creates a savepoint within the transaction.
@@ -89,11 +88,12 @@ impl Transaction {
     /// # Arguments
     ///
     /// * `name` - Savepoint name
-    pub async fn savepoint(&mut self, name: &str) -> Result<()> {
-        // TODO: Implement savepoint creation
-        // - Validate savepoint name
-        // - Execute SAVEPOINT name
-        todo!("Implement Transaction::savepoint")
+    ///
+    /// # Future Work
+    ///
+    /// This method is not yet implemented. Savepoints will be added in a future release.
+    pub async fn savepoint(&mut self, _name: &str) -> Result<()> {
+        todo!("Savepoint support will be added in a future release")
     }
 
     /// Rolls back to a savepoint.
@@ -101,10 +101,12 @@ impl Transaction {
     /// # Arguments
     ///
     /// * `name` - Savepoint name
-    pub async fn rollback_to(&mut self, name: &str) -> Result<()> {
-        // TODO: Implement savepoint rollback
-        // - Execute ROLLBACK TO SAVEPOINT name
-        todo!("Implement Transaction::rollback_to")
+    ///
+    /// # Future Work
+    ///
+    /// This method is not yet implemented. Savepoints will be added in a future release.
+    pub async fn rollback_to(&mut self, _name: &str) -> Result<()> {
+        todo!("Savepoint support will be added in a future release")
     }
 
     /// Releases a savepoint.
@@ -112,19 +114,50 @@ impl Transaction {
     /// # Arguments
     ///
     /// * `name` - Savepoint name
-    pub async fn release_savepoint(&mut self, name: &str) -> Result<()> {
-        // TODO: Implement savepoint release
-        // - Execute RELEASE SAVEPOINT name
-        todo!("Implement Transaction::release_savepoint")
+    ///
+    /// # Future Work
+    ///
+    /// This method is not yet implemented. Savepoints will be added in a future release.
+    pub async fn release_savepoint(&mut self, _name: &str) -> Result<()> {
+        todo!("Savepoint support will be added in a future release")
     }
 }
 
 // Auto-rollback on drop if not committed
-impl Drop for Transaction {
-    fn drop(&mut self) {
-        // TODO: Implement auto-rollback on drop
-        // - Check if transaction is still active
-        // - If yes, rollback automatically
-        // - Log warning about uncommitted transaction
+// Note: SQLx Transaction already implements Drop with auto-rollback.
+// We don't need to manually implement rollback here as SQLx handles it.
+// The inner tx will be dropped when this struct is dropped, triggering SQLx's Drop impl.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_isolation_level_to_sql() {
+        assert_eq!(IsolationLevel::ReadUncommitted.to_sql(), "READ UNCOMMITTED");
+        assert_eq!(IsolationLevel::ReadCommitted.to_sql(), "READ COMMITTED");
+        assert_eq!(IsolationLevel::RepeatableRead.to_sql(), "REPEATABLE READ");
+        assert_eq!(IsolationLevel::Serializable.to_sql(), "SERIALIZABLE");
     }
+
+    #[test]
+    fn test_isolation_level_equality() {
+        assert_eq!(IsolationLevel::ReadCommitted, IsolationLevel::ReadCommitted);
+        assert_ne!(IsolationLevel::ReadCommitted, IsolationLevel::Serializable);
+    }
+
+    #[test]
+    fn test_isolation_level_clone() {
+        let level = IsolationLevel::Serializable;
+        let cloned = level;
+        assert_eq!(level, cloned);
+    }
+
+    // Integration tests require a live PostgreSQL database
+    // Run these with: cargo test --package data-bridge-postgres --features test-postgres
+    // TODO: Add integration tests for:
+    // - test_transaction_commit()
+    // - test_transaction_rollback()
+    // - test_transaction_auto_rollback_on_drop()
+    // - test_transaction_isolation_levels()
 }

@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row};
+use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel};
 use sqlx::Row as SqlxRow;
 
 // For base64 encoding of binary data
@@ -203,15 +203,31 @@ fn extracted_to_json(value: &data_bridge_postgres::ExtractedValue) -> serde_json
 }
 
 
+/// Static regex for adjusting placeholders (compiled once)
+static PLACEHOLDER_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+    regex::Regex::new(r"\$(\d+)").expect("placeholder regex is valid")
+});
+
 /// Adjusts parameter placeholders in SQL to account for offset
 /// Example: "age > $1 AND status = $2" with offset 3 becomes "age > $4 AND status = $5"
-fn adjust_placeholders(sql: &str, offset: usize) -> String {
-    use regex::Regex;
-    let re = Regex::new(r"\$(\d+)").unwrap();
-    re.replace_all(sql, |caps: &regex::Captures| {
-        let num: usize = caps[1].parse().unwrap();
-        format!("${}", num + offset)
-    }).to_string()
+/// Returns error if the SQL contains malformed placeholders
+fn adjust_placeholders(sql: &str, offset: usize) -> Result<String, String> {
+    let mut last_error = None;
+    let result = PLACEHOLDER_RE.replace_all(sql, |caps: &regex::Captures| {
+        match caps[1].parse::<usize>() {
+            Ok(num) => format!("${}", num + offset),
+            Err(e) => {
+                last_error = Some(format!("Invalid placeholder number '{}': {}", &caps[1], e));
+                caps[0].to_string() // Return original on error
+            }
+        }
+    }).to_string();
+
+    if let Some(err) = last_error {
+        Err(err)
+    } else {
+        Ok(result)
+    }
 }
 
 /// Converts ExtractedValue back to Python object
@@ -762,7 +778,8 @@ fn update_many<'py>(
         if !where_clause.is_empty() {
             // Adjust parameter placeholders in WHERE clause
             let placeholder_offset = update_values.len();
-            let adjusted_where = adjust_placeholders(&where_clause, placeholder_offset);
+            let adjusted_where = adjust_placeholders(&where_clause, placeholder_offset)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid WHERE clause placeholders: {}", e)))?;
             sql.push_str(&format!(" WHERE {}", adjusted_where));
         }
 
@@ -907,33 +924,173 @@ fn count<'py>(
 /// Execute raw SQL query
 ///
 /// Args:
-///     sql: SQL query string
-///     params: Optional dictionary of named parameters
+///     sql: SQL query string with $1, $2, etc. placeholders
+///     params: Optional list of parameters to bind
 ///
 /// Returns:
-///     List of dictionaries with row data
+///     - List[Dict] for SELECT queries
+///     - int (rows affected) for INSERT/UPDATE/DELETE
+///     - None for DDL commands (CREATE, ALTER, DROP)
 ///
 /// Example:
-///     results = await execute("SELECT * FROM users WHERE age > :age", {"age": 25})
+///     # SELECT query
+///     results = await execute("SELECT * FROM users WHERE age > $1", [25])
+///
+///     # INSERT query
+///     count = await execute("INSERT INTO users (name, age) VALUES ($1, $2)", ["Alice", 30])
+///
+///     # DDL command
+///     await execute("CREATE INDEX idx_users_age ON users(age)")
 #[pyfunction]
-#[pyo3(signature = (_sql, _params=None))]
+#[pyo3(signature = (sql, params=None))]
 fn execute<'py>(
     py: Python<'py>,
-    _sql: String,
-    _params: Option<&Bound<'_, PyDict>>,
+    sql: String,
+    params: Option<Vec<Bound<'py, PyAny>>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let _conn = get_connection()?;
+    let conn = get_connection()?;
+
+    // Extract parameters from Python to Rust (while holding GIL)
+    let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = if let Some(param_list) = params {
+        param_list
+            .iter()
+            .map(|p| py_value_to_extracted(py, p))
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
 
     future_into_py(py, async move {
-        // TODO: Implement raw SQL execution
-        // This requires extending the QueryBuilder or Connection to support raw SQL
-        Python::with_gil(|_py| {
-            Err::<PyObject, PyErr>(PyRuntimeError::new_err("Raw SQL execution not yet implemented"))
-        })
+        use sqlx::postgres::PgArguments;
+        use sqlx::Row as SqlxRow;
+
+        let pool = conn.pool();
+
+        // Determine query type by examining the SQL (case-insensitive)
+        let sql_upper = sql.trim().to_uppercase();
+        let is_select = sql_upper.starts_with("SELECT") || sql_upper.starts_with("WITH");
+        let is_dml = sql_upper.starts_with("INSERT")
+            || sql_upper.starts_with("UPDATE")
+            || sql_upper.starts_with("DELETE");
+
+        // Bind parameters to query
+        let mut args = PgArguments::default();
+        for param in &extracted_params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        if is_select {
+            // Execute SELECT query and return rows
+            let rows = sqlx::query_with(&sql, args)
+                .fetch_all(pool)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+
+            // Convert rows to Python dicts
+            let result = Python::with_gil(|py| -> PyResult<PyObject> {
+                let py_list = PyList::empty(py);
+
+                for row in rows {
+                    // Convert row to ExtractedValue map
+                    let columns = data_bridge_postgres::row_to_extracted(&row)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to extract row: {}", e)))?;
+
+                    // Create Python dict
+                    let py_dict = PyDict::new(py);
+                    for (column_name, value) in columns {
+                        let py_value = extracted_to_py_value(py, &value)?;
+                        py_dict.set_item(column_name, py_value)?;
+                    }
+
+                    py_list.append(py_dict)?;
+                }
+
+                Ok(py_list.to_object(py))
+            })?;
+
+            Ok(result)
+        } else if is_dml {
+            // Execute DML query and return affected row count
+            let result = sqlx::query_with(&sql, args)
+                .execute(pool)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+
+            Python::with_gil(|py| {
+                Ok(result.rows_affected().to_object(py))
+            })
+        } else {
+            // Execute DDL or other commands (no return value)
+            sqlx::query_with(&sql, args)
+                .execute(pool)
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
+
+            Python::with_gil(|py| {
+                Ok(py.None())
+            })
+        }
     })
 }
 
+// ============================================================================
+// Transaction Support
+// ============================================================================
+
+/// Python wrapper for PostgreSQL transaction
+#[pyclass]
+struct PyTransaction {
+    tx: Option<Transaction>,
+}
+
+#[pymethods]
+impl PyTransaction {
+    /// Commit the transaction
+    ///
+    /// Returns:
+    ///     None
+    ///
+    /// Example:
+    ///     await tx.commit()
+    fn commit<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let tx = self.tx.take()
+            .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
+
+        future_into_py(py, async move {
+            tx.commit().await
+                .map_err(|e| PyRuntimeError::new_err(format!("Commit failed: {}", e)))?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+
+    /// Rollback the transaction
+    ///
+    /// Returns:
+    ///     None
+    ///
+    /// Example:
+    ///     await tx.rollback()
+    fn rollback<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let tx = self.tx.take()
+            .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
+
+        future_into_py(py, async move {
+            tx.rollback().await
+                .map_err(|e| PyRuntimeError::new_err(format!("Rollback failed: {}", e)))?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+}
+
 /// Begin a transaction
+///
+/// Args:
+///     isolation_level: Transaction isolation level (optional)
+///         - "read_uncommitted"
+///         - "read_committed" (default)
+///         - "repeatable_read"
+///         - "serializable"
 ///
 /// Returns:
 ///     Transaction handle
@@ -945,15 +1102,35 @@ fn execute<'py>(
 ///         await tx.commit()
 ///     except:
 ///         await tx.rollback()
+///
+///     # With isolation level
+///     tx = await begin_transaction("serializable")
 #[pyfunction]
-fn begin_transaction<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    let _conn = get_connection()?;
+#[pyo3(signature = (isolation_level=None))]
+fn begin_transaction<'py>(
+    py: Python<'py>,
+    isolation_level: Option<&str>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Convert isolation level to enum before moving into async block
+    let level = match isolation_level {
+        Some("read_uncommitted") => IsolationLevel::ReadUncommitted,
+        Some("read_committed") => IsolationLevel::ReadCommitted,
+        Some("repeatable_read") => IsolationLevel::RepeatableRead,
+        Some("serializable") => IsolationLevel::Serializable,
+        None => IsolationLevel::ReadCommitted, // PostgreSQL default
+        Some(other) => {
+            return Err(PyValueError::new_err(format!("Invalid isolation level: {}", other)));
+        }
+    };
 
     future_into_py(py, async move {
-        // TODO: Implement transaction support
-        // This requires wrapping the Transaction type from data-bridge-postgres
-        Python::with_gil(|_py| {
-            Err::<PyObject, PyErr>(PyRuntimeError::new_err("Transactions not yet implemented"))
+        let tx = Transaction::begin(&conn, level).await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to begin transaction: {}", e)))?;
+
+        Python::with_gil(|py| {
+            Ok(PyTransaction { tx: Some(tx) }.into_py(py))
         })
     })
 }
@@ -1070,6 +1247,10 @@ fn find_many<'py>(
 
 /// Register PostgreSQL module functions with Python
 pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Register classes
+    m.add_class::<PyTransaction>()?;
+
+    // Register functions
     m.add_function(wrap_pyfunction!(init, m)?)?;
     m.add_function(wrap_pyfunction!(close, m)?)?;
     m.add_function(wrap_pyfunction!(is_connected, m)?)?;
@@ -1090,4 +1271,55 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__doc__", "PostgreSQL ORM module with async support")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_adjust_placeholders_valid() {
+        // Test basic placeholder adjustment
+        let sql = "age > $1 AND status = $2";
+        let result = adjust_placeholders(sql, 3);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "age > $4 AND status = $5");
+    }
+
+    #[test]
+    fn test_adjust_placeholders_no_placeholders() {
+        // Test SQL with no placeholders
+        let sql = "SELECT * FROM users";
+        let result = adjust_placeholders(sql, 5);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "SELECT * FROM users");
+    }
+
+    #[test]
+    fn test_adjust_placeholders_zero_offset() {
+        // Test with zero offset (no adjustment)
+        let sql = "price < $1";
+        let result = adjust_placeholders(sql, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "price < $1");
+    }
+
+    #[test]
+    fn test_adjust_placeholders_multiple_digits() {
+        // Test with multi-digit placeholder numbers
+        let sql = "col1 = $10 AND col2 = $15";
+        let result = adjust_placeholders(sql, 5);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "col1 = $15 AND col2 = $20");
+    }
+
+    #[test]
+    fn test_adjust_placeholders_invalid_number() {
+        // Test with invalid placeholder number (too large for usize on some systems)
+        // This is theoretical but good to test error handling
+        let sql = "value = $99999999999999999999999999999";
+        let result = adjust_placeholders(sql, 1);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid placeholder number"));
+    }
 }
