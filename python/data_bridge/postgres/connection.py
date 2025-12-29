@@ -1,6 +1,6 @@
 """PostgreSQL connection management."""
 
-from typing import Optional, Literal, List, Dict, Any
+from typing import Optional, Literal, List, Dict, Any, Union
 from contextlib import asynccontextmanager
 
 # Import from Rust engine when available
@@ -186,6 +186,108 @@ async def execute(
         )
 
     return await _engine.execute(sql, params)
+
+
+async def upsert_one(
+    table: str,
+    document: Dict[str, Any],
+    conflict_target: Union[str, List[str]],
+    update_columns: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Insert or update a document using ON CONFLICT.
+
+    This performs an "upsert" operation: if the document conflicts with an existing row
+    (based on the conflict_target unique constraint), it will update; otherwise it inserts.
+
+    Args:
+        table: Table name
+        document: Document data (column -> value mapping)
+        conflict_target: Column(s) for ON CONFLICT clause (string or list of strings)
+        update_columns: Optional columns to update on conflict (None = all except conflict_target)
+
+    Returns:
+        Inserted or updated document with all columns
+
+    Example:
+        >>> # Upsert by email (unique constraint)
+        >>> result = await upsert_one("users",
+        ...     {"email": "alice@example.com", "name": "Alice Updated", "age": 31},
+        ...     conflict_target="email"
+        ... )
+        >>>
+        >>> # Upsert with selective update (only update name and age, not email)
+        >>> result = await upsert_one("users",
+        ...     {"email": "bob@example.com", "name": "Bob", "age": 25, "status": "active"},
+        ...     conflict_target=["email"],
+        ...     update_columns=["name", "age"]
+        ... )
+        >>>
+        >>> # Composite unique constraint
+        >>> result = await upsert_one("user_roles",
+        ...     {"user_id": 1, "role": "admin", "granted_at": "2024-01-01"},
+        ...     conflict_target=["user_id", "role"]
+        ... )
+
+    Raises:
+        RuntimeError: If PostgreSQL engine not available or upsert fails
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    # Normalize conflict_target to list
+    if isinstance(conflict_target, str):
+        conflict_target = [conflict_target]
+
+    return await _engine.upsert_one(table, document, conflict_target, update_columns)
+
+
+async def upsert_many(
+    table: str,
+    documents: List[Dict[str, Any]],
+    conflict_target: Union[str, List[str]],
+    update_columns: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """Batch insert or update documents using ON CONFLICT.
+
+    This generates a multi-row INSERT with ON CONFLICT for efficient batch upserts.
+    All documents must have the same columns.
+
+    Args:
+        table: Table name
+        documents: List of documents (each is a dict of column -> value)
+        conflict_target: Column(s) for ON CONFLICT clause (string or list of strings)
+        update_columns: Optional columns to update on conflict (None = all except conflict_target)
+
+    Returns:
+        List of inserted/updated documents with all columns
+
+    Example:
+        >>> # Batch upsert by email
+        >>> results = await upsert_many("users", [
+        ...     {"email": "alice@example.com", "name": "Alice", "age": 30},
+        ...     {"email": "bob@example.com", "name": "Bob", "age": 25},
+        ...     {"email": "charlie@example.com", "name": "Charlie", "age": 35}
+        ... ], conflict_target="email")
+        >>>
+        >>> # Selective update (preserve existing 'created_at' column)
+        >>> results = await upsert_many("users",
+        ...     documents,
+        ...     conflict_target=["email"],
+        ...     update_columns=["name", "age"]  # Don't update 'created_at'
+        ... )
+
+    Raises:
+        RuntimeError: If PostgreSQL engine not available or batch upsert fails
+        ValueError: If documents have different columns
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    # Normalize conflict_target to list
+    if isinstance(conflict_target, str):
+        conflict_target = [conflict_target]
+
+    return await _engine.upsert_many(table, documents, conflict_target, update_columns)
 
 
 @asynccontextmanager
@@ -394,6 +496,71 @@ async def get_indexes(table: str, schema: str = "public") -> List[Dict[str, Any]
         )
 
     return await _engine.get_indexes(table, schema)
+
+
+async def get_foreign_keys(table: str, schema: str = "public") -> List[Dict[str, Any]]:
+    """
+    Get foreign key information for a table.
+
+    Args:
+        table: Table name
+        schema: Schema name (default: "public")
+
+    Returns:
+        List of dictionaries with foreign key information. Each dict contains:
+        - name: Foreign key constraint name
+        - columns: List of column names in this table
+        - referenced_table: Name of the referenced table
+        - referenced_columns: List of referenced column names
+        - on_delete: ON DELETE action (CASCADE, SET NULL, RESTRICT, NO ACTION)
+        - on_update: ON UPDATE action (CASCADE, RESTRICT, NO ACTION)
+
+    Example:
+        >>> foreign_keys = await get_foreign_keys("posts", "public")
+        >>> for fk in foreign_keys:
+        ...     print(f"{fk['columns']} -> {fk['referenced_table']}.{fk['referenced_columns']}")
+        ['author_id'] -> users.['id']
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.get_foreign_keys(table, schema)
+
+
+async def find_by_foreign_key(table: str, foreign_key_column: str, foreign_key_value: Any) -> Optional[Dict[str, Any]]:
+    """
+    Find a single row by foreign key value.
+
+    This is a convenience function for querying related objects via foreign keys.
+
+    Args:
+        table: Table name to query
+        foreign_key_column: Column name to query by (usually "id")
+        foreign_key_value: Value to match
+
+    Returns:
+        Dictionary with row data, or None if not found
+
+    Example:
+        >>> # Find user by ID
+        >>> user = await find_by_foreign_key("users", "id", 123)
+        >>> if user:
+        ...     print(user["name"])
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.find_by_foreign_key(table, foreign_key_column, foreign_key_value)
 
 
 async def inspect_table(table: str, schema: str = "public") -> Dict[str, Any]:

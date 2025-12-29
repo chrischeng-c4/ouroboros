@@ -29,6 +29,7 @@ pub mod transaction;
 pub mod types;
 pub mod migration;
 pub mod schema;
+pub mod validation;
 
 pub use connection::{Connection, PoolConfig};
 pub use query::{QueryBuilder, Operator, OrderDirection};
@@ -37,5 +38,6 @@ pub use transaction::Transaction;
 pub use types::{ExtractedValue, row_to_extracted};
 pub use migration::{Migration, MigrationRunner, MigrationStatus};
 pub use schema::SchemaInspector;
+pub use validation::validate_foreign_key_reference;
 
 pub use data_bridge_common::{DataBridgeError, Result};

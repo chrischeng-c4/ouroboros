@@ -339,6 +339,260 @@ impl Row {
             .collect()
     }
 
+    /// Upsert a single row (INSERT ON CONFLICT UPDATE).
+    ///
+    /// This performs an "upsert" operation: if the row conflicts with an existing row
+    /// (based on the conflict_target constraint), it will update; otherwise it inserts.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Table name
+    /// * `values` - Column values to insert/update
+    /// * `conflict_target` - Columns for ON CONFLICT clause (must match unique constraint)
+    /// * `update_columns` - Optional columns to update on conflict (None = all except conflict_target)
+    ///
+    /// # Returns
+    ///
+    /// Returns the inserted or updated row with all columns (including generated values).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use data_bridge_postgres::{Connection, ExtractedValue, PoolConfig, Row};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let conn = Connection::new("postgresql://localhost/mydb", PoolConfig::default()).await?;
+    /// let pool = conn.pool();
+    ///
+    /// let values = vec![
+    ///     ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+    ///     ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+    ///     ("age".to_string(), ExtractedValue::Int(30)),
+    /// ];
+    /// let conflict_target = vec!["email".to_string()];
+    ///
+    /// // If email exists: UPDATE name and age
+    /// // If email new: INSERT all values
+    /// let row = Row::upsert(pool, "users", &values, &conflict_target, None).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn upsert(
+        pool: &PgPool,
+        table: &str,
+        values: &[(String, ExtractedValue)],
+        conflict_target: &[String],
+        update_columns: Option<&[String]>,
+    ) -> Result<Self> {
+        if values.is_empty() {
+            return Err(DataBridgeError::Query("Cannot upsert with no values".to_string()));
+        }
+
+        // Build UPSERT query with RETURNING *
+        let query_builder = QueryBuilder::new(table)?;
+        let (sql, params) = query_builder.build_upsert(values, conflict_target, update_columns)?;
+
+        // Bind parameters
+        let mut args = PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)?;
+        }
+
+        // Execute query with bound arguments
+        let row = sqlx::query_with(&sql, args)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| DataBridgeError::Query(format!("Upsert failed: {}", e)))?;
+
+        // Convert PgRow to Row
+        Self::from_sqlx(&row)
+    }
+
+    /// Upsert multiple rows with a single batch statement.
+    ///
+    /// This generates a multi-row INSERT with ON CONFLICT for efficient batch upserts:
+    /// `INSERT INTO table (cols) VALUES ($1,$2),($3,$4),... ON CONFLICT (...) DO UPDATE ... RETURNING *`
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Table name
+    /// * `rows` - Vector of rows (HashMaps of column -> value)
+    /// * `conflict_target` - Columns for ON CONFLICT clause
+    /// * `update_columns` - Optional columns to update on conflict (None = all except conflict_target)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Any row is empty
+    /// - Rows have different columns
+    /// - Conflict target is empty
+    /// - Upsert fails
+    /// - Table is invalid
+    ///
+    /// # Returns
+    ///
+    /// Returns vector of inserted/updated rows with all columns.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use std::collections::HashMap;
+    /// use data_bridge_postgres::{Connection, ExtractedValue, PoolConfig, Row};
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let conn = Connection::new("postgresql://localhost/mydb", PoolConfig::default()).await?;
+    /// let pool = conn.pool();
+    ///
+    /// let mut row1 = HashMap::new();
+    /// row1.insert("email".to_string(), ExtractedValue::String("alice@example.com".to_string()));
+    /// row1.insert("name".to_string(), ExtractedValue::String("Alice".to_string()));
+    ///
+    /// let mut row2 = HashMap::new();
+    /// row2.insert("email".to_string(), ExtractedValue::String("bob@example.com".to_string()));
+    /// row2.insert("name".to_string(), ExtractedValue::String("Bob".to_string()));
+    ///
+    /// let conflict_target = vec!["email".to_string()];
+    /// let rows = Row::upsert_many(pool, "users", &[row1, row2], &conflict_target, None).await?;
+    /// assert_eq!(rows.len(), 2);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn upsert_many(
+        pool: &PgPool,
+        table: &str,
+        rows: &[HashMap<String, ExtractedValue>],
+        conflict_target: &[String],
+        update_columns: Option<&[String]>,
+    ) -> Result<Vec<Self>> {
+        if rows.is_empty() {
+            return Ok(vec![]);
+        }
+
+        if conflict_target.is_empty() {
+            return Err(DataBridgeError::Query("Conflict target cannot be empty".to_string()));
+        }
+
+        // Get column names from first row and validate
+        let first_row = &rows[0];
+        if first_row.is_empty() {
+            return Err(DataBridgeError::Query("Cannot upsert with no columns".to_string()));
+        }
+
+        // Collect and sort column names for consistent ordering
+        let mut column_names: Vec<&String> = first_row.keys().collect();
+        column_names.sort();
+
+        // Validate all rows have the same columns
+        for (idx, row) in rows.iter().enumerate().skip(1) {
+            if row.len() != first_row.len() {
+                return Err(DataBridgeError::Query(format!(
+                    "Row {} has {} columns, expected {} columns",
+                    idx,
+                    row.len(),
+                    first_row.len()
+                )));
+            }
+
+            for col in column_names.iter() {
+                if !row.contains_key(*col) {
+                    return Err(DataBridgeError::Query(format!(
+                        "Row {} is missing column: {}",
+                        idx, col
+                    )));
+                }
+            }
+        }
+
+        // Validate table name and column names
+        QueryBuilder::validate_identifier(table)?;
+        for col in &column_names {
+            QueryBuilder::validate_identifier(col)?;
+        }
+        for col in conflict_target {
+            QueryBuilder::validate_identifier(col)?;
+        }
+        if let Some(cols) = update_columns {
+            for col in cols {
+                QueryBuilder::validate_identifier(col)?;
+            }
+        }
+
+        // Build SQL with multiple VALUES clauses
+        let mut sql = format!("INSERT INTO {} (", table);
+        sql.push_str(&column_names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+        sql.push_str(") VALUES ");
+
+        // Build VALUES placeholders for all rows
+        let num_cols = column_names.len();
+        let value_clauses: Vec<String> = (0..rows.len())
+            .map(|row_idx| {
+                let start = row_idx * num_cols + 1;
+                let placeholders: Vec<String> = (start..start + num_cols)
+                    .map(|i| format!("${}", i))
+                    .collect();
+                format!("({})", placeholders.join(", "))
+            })
+            .collect();
+        sql.push_str(&value_clauses.join(", "));
+
+        // Add ON CONFLICT clause
+        sql.push_str(" ON CONFLICT (");
+        sql.push_str(&conflict_target.join(", "));
+        sql.push_str(") DO UPDATE SET ");
+
+        // Determine which columns to update
+        let columns_to_update: Vec<&&String> = if let Some(update_cols) = update_columns {
+            column_names.iter()
+                .filter(|col| update_cols.contains(&col.to_string()))
+                .collect()
+        } else {
+            // Update all columns except conflict target
+            column_names.iter()
+                .filter(|col| !conflict_target.contains(&col.to_string()))
+                .collect()
+        };
+
+        if columns_to_update.is_empty() {
+            return Err(DataBridgeError::Query(
+                "No columns to update after excluding conflict target".to_string()
+            ));
+        }
+
+        // Build SET clause using EXCLUDED
+        let set_parts: Vec<String> = columns_to_update
+            .iter()
+            .map(|col| format!("{} = EXCLUDED.{}", col, col))
+            .collect();
+        sql.push_str(&set_parts.join(", "));
+
+        // Add RETURNING *
+        sql.push_str(" RETURNING *");
+
+        // Bind all values in row-major order
+        let mut args = PgArguments::default();
+        for row in rows {
+            for col_name in &column_names {
+                let value = row.get(*col_name).ok_or_else(|| {
+                    DataBridgeError::Query(format!("Missing column: {}", col_name))
+                })?;
+                value.bind_to_arguments(&mut args)?;
+            }
+        }
+
+        // Execute query and fetch all returned rows
+        let pg_rows = sqlx::query_with(&sql, args)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| DataBridgeError::Query(format!("Batch upsert failed: {}", e)))?;
+
+        // Convert all PgRows to Rows
+        pg_rows.iter()
+            .map(Self::from_sqlx)
+            .collect()
+    }
+
     /// Find single row by primary key.
     ///
     /// # Arguments

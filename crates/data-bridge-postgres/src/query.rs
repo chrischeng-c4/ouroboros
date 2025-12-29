@@ -391,6 +391,105 @@ impl QueryBuilder {
         Ok((sql, params))
     }
 
+    /// Builds an UPSERT SQL query (INSERT ON CONFLICT UPDATE).
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - Column values to insert
+    /// * `conflict_target` - Columns for ON CONFLICT clause (unique constraint)
+    /// * `update_columns` - Optional columns to update on conflict (None = all except conflict_target)
+    ///
+    /// # Returns
+    ///
+    /// Returns the SQL string with $1, $2, etc. placeholders and the parameter values.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let qb = QueryBuilder::new("users")?;
+    /// let values = vec![
+    ///     ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+    ///     ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+    /// ];
+    /// let conflict_target = vec!["email".to_string()];
+    /// let (sql, params) = qb.build_upsert(&values, &conflict_target, None)?;
+    /// // Result: "INSERT INTO users (email, name) VALUES ($1, $2)
+    /// //          ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name RETURNING *"
+    /// ```
+    pub fn build_upsert(
+        &self,
+        values: &[(String, ExtractedValue)],
+        conflict_target: &[String],
+        update_columns: Option<&[String]>,
+    ) -> Result<(String, Vec<ExtractedValue>)> {
+        // Validation
+        if values.is_empty() {
+            return Err(DataBridgeError::Query("Cannot upsert with no values".to_string()));
+        }
+        if conflict_target.is_empty() {
+            return Err(DataBridgeError::Query("Conflict target cannot be empty".to_string()));
+        }
+
+        // Validate column names
+        for (col, _) in values {
+            Self::validate_identifier(col)?;
+        }
+        for col in conflict_target {
+            Self::validate_identifier(col)?;
+        }
+        if let Some(cols) = update_columns {
+            for col in cols {
+                Self::validate_identifier(col)?;
+            }
+        }
+
+        // Build INSERT clause
+        let mut sql = format!("INSERT INTO {} (", self.table);
+        let columns: Vec<&str> = values.iter().map(|(col, _)| col.as_str()).collect();
+        sql.push_str(&columns.join(", "));
+        sql.push_str(") VALUES (");
+
+        let placeholders: Vec<String> = (1..=values.len()).map(|i| format!("${}", i)).collect();
+        sql.push_str(&placeholders.join(", "));
+        sql.push_str(")");
+
+        // Build ON CONFLICT clause
+        sql.push_str(" ON CONFLICT (");
+        sql.push_str(&conflict_target.join(", "));
+        sql.push_str(") DO UPDATE SET ");
+
+        // Determine which columns to update
+        let columns_to_update: Vec<&str> = if let Some(update_cols) = update_columns {
+            update_cols.iter().map(|s| s.as_str()).collect()
+        } else {
+            // Update all columns except conflict target
+            columns.iter()
+                .filter(|col| !conflict_target.contains(&col.to_string()))
+                .copied()
+                .collect()
+        };
+
+        if columns_to_update.is_empty() {
+            return Err(DataBridgeError::Query(
+                "No columns to update after excluding conflict target".to_string()
+            ));
+        }
+
+        // Build SET clause using EXCLUDED
+        let set_parts: Vec<String> = columns_to_update
+            .iter()
+            .map(|col| format!("{} = EXCLUDED.{}", col, col))
+            .collect();
+        sql.push_str(&set_parts.join(", "));
+
+        // Add RETURNING *
+        sql.push_str(" RETURNING *");
+
+        let params: Vec<ExtractedValue> = values.iter().map(|(_, val)| val.clone()).collect();
+
+        Ok((sql, params))
+    }
+
     /// Builds a DELETE SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders and the parameter values.
@@ -1305,5 +1404,80 @@ mod tests {
             "SELECT event_type, user_id, timestamp FROM public.analytics_events WHERE event_type LIKE $1 AND timestamp >= $2 ORDER BY timestamp DESC LIMIT $3"
         );
         assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_single_conflict() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+            ("age".to_string(), ExtractedValue::Int(30)),
+        ];
+        let conflict_target = vec!["email".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
+
+        assert!(sql.contains("INSERT INTO users"));
+        assert!(sql.contains("ON CONFLICT (email)"));
+        assert!(sql.contains("DO UPDATE SET"));
+        assert!(sql.contains("name = EXCLUDED.name"));
+        assert!(sql.contains("age = EXCLUDED.age"));
+        assert!(sql.contains("RETURNING *"));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_selective_update() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+            ("age".to_string(), ExtractedValue::Int(30)),
+        ];
+        let conflict_target = vec!["email".to_string()];
+        let update_cols = vec!["name".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, Some(&update_cols)).unwrap();
+
+        assert!(sql.contains("DO UPDATE SET name = EXCLUDED.name"));
+        assert!(!sql.contains("age = EXCLUDED.age"));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_composite_key() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("department".to_string(), ExtractedValue::String("Engineering".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+        ];
+        let conflict_target = vec!["email".to_string(), "department".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
+
+        assert!(sql.contains("ON CONFLICT (email, department)"));
+        assert!(sql.contains("DO UPDATE SET name = EXCLUDED.name"));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_empty_conflict_target() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+        ];
+        let conflict_target: Vec<String> = vec![];
+        let result = qb.build_upsert(&values, &conflict_target, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_upsert_invalid_column_name() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("drop".to_string(), ExtractedValue::String("value".to_string())),
+        ];
+        let conflict_target = vec!["drop".to_string()];
+        let result = qb.build_upsert(&values, &conflict_target, None);
+        assert!(result.is_err());
     }
 }

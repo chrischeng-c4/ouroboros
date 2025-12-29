@@ -459,6 +459,113 @@ fn insert_many<'py>(
     })
 }
 
+/// Upsert a single row (INSERT ON CONFLICT UPDATE)
+///
+/// Args:
+///     table: Table name
+///     data: Dictionary of column values
+///     conflict_target: List of column(s) for ON CONFLICT
+///     update_columns: Optional list of columns to update (None = all except conflict_target)
+///
+/// Returns:
+///     Dictionary with upserted row data
+///
+/// Example:
+///     result = await upsert_one("users",
+///         {"email": "alice@example.com", "name": "Alice", "age": 30},
+///         ["email"],
+///         update_columns=["name", "age"]
+///     )
+#[pyfunction]
+#[pyo3(signature = (table, data, conflict_target, update_columns=None))]
+fn upsert_one<'py>(
+    py: Python<'py>,
+    table: String,
+    data: &Bound<'_, PyDict>,
+    conflict_target: Vec<String>,
+    update_columns: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    // Phase 1: Extract Python values (GIL held)
+    let values = py_dict_to_extracted_values(py, data)?;
+
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
+        let row = Row::upsert(
+            conn.pool(),
+            &table,
+            &values,
+            &conflict_target,
+            update_columns.as_deref()
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(format!("Upsert failed: {}", e)))?;
+
+        // Phase 3: Convert result to Python (GIL acquired inside future_into_py)
+        RowWrapper::from_row(&row)
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))
+    })
+}
+
+/// Upsert multiple rows with a single batch statement
+///
+/// Args:
+///     table: Table name
+///     rows: List of dictionaries with column values
+///     conflict_target: List of column(s) for ON CONFLICT
+///     update_columns: Optional list of columns to update (None = all except conflict_target)
+///
+/// Returns:
+///     List of dictionaries with upserted row data
+///
+/// Example:
+///     results = await upsert_many("users", [
+///         {"email": "alice@example.com", "name": "Alice"},
+///         {"email": "bob@example.com", "name": "Bob"}
+///     ], ["email"])
+#[pyfunction]
+#[pyo3(signature = (table, rows, conflict_target, update_columns=None))]
+fn upsert_many<'py>(
+    py: Python<'py>,
+    table: String,
+    rows: Vec<Bound<'py, PyDict>>,
+    conflict_target: Vec<String>,
+    update_columns: Option<Vec<String>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Extract all rows (GIL held)
+    let mut extracted_rows: Vec<HashMap<String, data_bridge_postgres::ExtractedValue>> = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let values = py_dict_to_extracted_values(py, row)?;
+        // Convert Vec<(String, ExtractedValue)> to HashMap
+        let map: HashMap<String, data_bridge_postgres::ExtractedValue> = values.into_iter().collect();
+        extracted_rows.push(map);
+    }
+
+    // Phase 2: Execute batch UPSERT (GIL released via future_into_py)
+    future_into_py(py, async move {
+        // Use Row::upsert_many() batch method for better performance
+        let batch_results = Row::upsert_many(
+            conn.pool(),
+            &table,
+            &extracted_rows,
+            &conflict_target,
+            update_columns.as_deref()
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(format!("Batch upsert failed: {}", e)))?;
+
+        // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
+        let result_rows: Vec<RowWrapper> = batch_results
+            .iter()
+            .map(RowWrapper::from_row)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(RowsWrapper(result_rows))
+    })
+}
+
 /// Fetch a single row from a table
 ///
 /// Args:
@@ -962,7 +1069,6 @@ fn execute<'py>(
 
     future_into_py(py, async move {
         use sqlx::postgres::PgArguments;
-        use sqlx::Row as SqlxRow;
 
         let pool = conn.pool();
 
@@ -1287,6 +1393,50 @@ fn get_indexes<'py>(
     })
 }
 
+/// Get foreign key information for a table
+///
+/// Args:
+///     table: Table name
+///     schema: Schema name (default: "public")
+///
+/// Returns:
+///     List of dictionaries with foreign key information
+///
+/// Example:
+///     foreign_keys = await get_foreign_keys("posts", "public")
+#[pyfunction]
+#[pyo3(signature = (table, schema=None))]
+fn get_foreign_keys<'py>(
+    py: Python<'py>,
+    table: String,
+    schema: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let inspector = data_bridge_postgres::SchemaInspector::new((*conn).clone());
+        let foreign_keys = inspector.get_foreign_keys(&table, schema.as_deref())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to get foreign keys: {}", e)))?;
+
+        Python::with_gil(|py| {
+            // Convert foreign keys to Python list of dicts
+            let py_list = PyList::empty(py);
+            for fk in foreign_keys {
+                let py_dict = PyDict::new(py);
+                py_dict.set_item("name", fk.name)?;
+                py_dict.set_item("columns", fk.columns)?;
+                py_dict.set_item("referenced_table", fk.referenced_table)?;
+                py_dict.set_item("referenced_columns", fk.referenced_columns)?;
+                py_dict.set_item("on_delete", fk.on_delete)?;
+                py_dict.set_item("on_update", fk.on_update)?;
+                py_list.append(py_dict)?;
+            }
+            Ok(py_list.to_object(py))
+        })
+    })
+}
+
 /// Get complete table information
 ///
 /// Args:
@@ -1344,8 +1494,19 @@ fn inspect_table<'py>(
             }
             py_dict.set_item("indexes", indexes_list)?;
 
-            // Foreign keys (empty for now)
-            py_dict.set_item("foreign_keys", PyList::empty(py))?;
+            // Convert foreign keys
+            let foreign_keys_list = PyList::empty(py);
+            for fk in table_info.foreign_keys {
+                let fk_dict = PyDict::new(py);
+                fk_dict.set_item("name", fk.name)?;
+                fk_dict.set_item("columns", fk.columns)?;
+                fk_dict.set_item("referenced_table", fk.referenced_table)?;
+                fk_dict.set_item("referenced_columns", fk.referenced_columns)?;
+                fk_dict.set_item("on_delete", fk.on_delete)?;
+                fk_dict.set_item("on_update", fk.on_update)?;
+                foreign_keys_list.append(fk_dict)?;
+            }
+            py_dict.set_item("foreign_keys", foreign_keys_list)?;
 
             Ok(py_dict.to_object(py))
         })
@@ -1355,6 +1516,69 @@ fn inspect_table<'py>(
 // ============================================================================
 // Query Builder
 // ============================================================================
+
+/// Find a single row by foreign key value
+///
+/// Args:
+///     table: Table name
+///     foreign_key_column: Column name to query
+///     foreign_key_value: Value to match
+///
+/// Returns:
+///     Dictionary with row data or None if not found
+///
+/// Example:
+///     user = await find_by_foreign_key("users", "id", 123)
+#[pyfunction]
+fn find_by_foreign_key<'py>(
+    py: Python<'py>,
+    table: String,
+    foreign_key_column: String,
+    foreign_key_value: &Bound<'_, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    // Phase 1: Extract Python value (GIL held)
+    let fk_val = py_value_to_extracted(py, foreign_key_value)?;
+
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
+        let mut query = QueryBuilder::new(&table)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
+
+        // Add WHERE condition for foreign key
+        query = query.where_clause(&foreign_key_column, Operator::Eq, fk_val)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid foreign key: {}", e)))?;
+
+        query = query.limit(1);
+
+        // Build SQL and parameters
+        let (sql, params) = query.build_select();
+
+        // Bind parameters
+        let mut args = sqlx::postgres::PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let result = sqlx::query_with(&sql, args)
+            .fetch_optional(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Query failed: {}", e)))?;
+
+        // Phase 3: Convert result to Python (GIL acquired inside future_into_py)
+        let wrapper = if let Some(pg_row) = result {
+            let row = Row::from_sqlx(&pg_row)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+            OptionalRowWrapper(Some(RowWrapper::from_row(&row)?))
+        } else {
+            OptionalRowWrapper(None)
+        };
+
+        Ok(wrapper)
+    })
+}
 
 /// Find multiple rows with advanced query options (alias for fetch_all with WHERE clause support)
 ///
@@ -1670,6 +1894,8 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_connected, m)?)?;
     m.add_function(wrap_pyfunction!(insert_one, m)?)?;
     m.add_function(wrap_pyfunction!(insert_many, m)?)?;
+    m.add_function(wrap_pyfunction!(upsert_one, m)?)?;
+    m.add_function(wrap_pyfunction!(upsert_many, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_one, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_all, m)?)?;
     m.add_function(wrap_pyfunction!(find_many, m)?)?;
@@ -1686,7 +1912,9 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(table_exists, m)?)?;
     m.add_function(wrap_pyfunction!(get_columns, m)?)?;
     m.add_function(wrap_pyfunction!(get_indexes, m)?)?;
+    m.add_function(wrap_pyfunction!(get_foreign_keys, m)?)?;
     m.add_function(wrap_pyfunction!(inspect_table, m)?)?;
+    m.add_function(wrap_pyfunction!(find_by_foreign_key, m)?)?;
 
     // Migration functions
     m.add_function(wrap_pyfunction!(migration_init, m)?)?;

@@ -156,12 +156,10 @@ impl SchemaInspector {
             )));
         }
 
-        // Get columns and indexes in parallel would be nice, but for simplicity do sequential
+        // Get columns, indexes, and foreign keys
         let columns = self.get_columns(table, Some(schema_name)).await?;
         let indexes = self.get_indexes(table, Some(schema_name)).await?;
-
-        // Note: get_foreign_keys() is not yet implemented, so we use empty vec
-        let foreign_keys = Vec::new();
+        let foreign_keys = self.get_foreign_keys(table, Some(schema_name)).await?;
 
         Ok(TableInfo {
             name: table.to_string(),
@@ -350,18 +348,59 @@ impl SchemaInspector {
 
     /// Gets foreign key information for a table.
     ///
-    /// # TODO (Future Work)
-    ///
-    /// This method is not yet implemented. Implementation requires:
-    /// - Query information_schema.table_constraints
-    /// - Query information_schema.key_column_usage
-    /// - Query information_schema.referential_constraints
-    /// - Build ForeignKeyInfo list with ON DELETE/UPDATE actions
-    pub async fn get_foreign_keys(&self, _table: &str, _schema: Option<&str>) -> Result<Vec<ForeignKeyInfo>> {
-        // Mark unused parameters
-        let _ = (_table, _schema);
+    /// Queries PostgreSQL's information_schema to retrieve foreign key constraints
+    /// and their associated metadata.
+    pub async fn get_foreign_keys(&self, table: &str, schema: Option<&str>) -> Result<Vec<ForeignKeyInfo>> {
+        let schema_name = schema.unwrap_or("public");
 
-        // Return empty vector for now - future implementation will populate this
-        Ok(Vec::new())
+        let rows = sqlx::query(
+            "SELECT
+                tc.constraint_name,
+                ARRAY_AGG(DISTINCT kcu.column_name::TEXT ORDER BY kcu.column_name::TEXT)::TEXT[] as columns,
+                ccu.table_name AS referenced_table,
+                ARRAY_AGG(DISTINCT ccu.column_name::TEXT ORDER BY ccu.column_name::TEXT)::TEXT[] as referenced_columns,
+                rc.update_rule,
+                rc.delete_rule
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            JOIN information_schema.referential_constraints AS rc
+                ON rc.constraint_name = tc.constraint_name
+                AND rc.constraint_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_name = $1
+                AND tc.table_schema = $2
+            GROUP BY tc.constraint_name, ccu.table_name, rc.update_rule, rc.delete_rule
+            ORDER BY tc.constraint_name"
+        )
+        .bind(table)
+        .bind(schema_name)
+        .fetch_all(self.conn.pool())
+        .await?;
+
+        let mut foreign_keys = Vec::new();
+        for row in rows {
+            let name: String = row.try_get("constraint_name")?;
+            let columns: Vec<String> = row.try_get("columns")?;
+            let referenced_table: String = row.try_get("referenced_table")?;
+            let referenced_columns: Vec<String> = row.try_get("referenced_columns")?;
+            let update_rule: String = row.try_get("update_rule")?;
+            let delete_rule: String = row.try_get("delete_rule")?;
+
+            foreign_keys.push(ForeignKeyInfo {
+                name,
+                columns,
+                referenced_table,
+                referenced_columns,
+                on_delete: delete_rule,
+                on_update: update_rule,
+            });
+        }
+
+        Ok(foreign_keys)
     }
 }
