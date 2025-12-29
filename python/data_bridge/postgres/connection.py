@@ -117,7 +117,7 @@ async def execute(
     This function provides direct SQL execution for power users who need
     to bypass the ORM. It supports:
     - SELECT queries (returns list of dicts)
-    - INSERT/UPDATE/DELETE (returns row count)
+    - INSERT/UPDATE/DELETE (returns row count or list of dicts if RETURNING)
     - DDL commands like CREATE, ALTER, DROP (returns None)
 
     WARNING: This bypasses ORM safety features. Use with caution.
@@ -128,57 +128,9 @@ async def execute(
         params: Optional list of parameters to bind to placeholders
 
     Returns:
-        - List[Dict[str, Any]] for SELECT queries (rows as dicts)
-        - int for INSERT/UPDATE/DELETE (number of affected rows)
+        - List[Dict[str, Any]] for SELECT queries or DML with RETURNING
+        - int for INSERT/UPDATE/DELETE without RETURNING (number of affected rows)
         - None for DDL commands (CREATE, ALTER, DROP, etc.)
-
-    Examples:
-        >>> # SELECT query
-        >>> users = await execute("SELECT * FROM users WHERE age > $1", [25])
-        >>> print(users)  # [{"id": 1, "name": "Alice", "age": 30}, ...]
-        >>>
-        >>> # INSERT query
-        >>> count = await execute(
-        ...     "INSERT INTO users (name, age) VALUES ($1, $2)",
-        ...     ["Bob", 28]
-        ... )
-        >>> print(count)  # 1
-        >>>
-        >>> # UPDATE query
-        >>> count = await execute(
-        ...     "UPDATE users SET age = $1 WHERE name = $2",
-        ...     [29, "Bob"]
-        ... )
-        >>> print(count)  # 1
-        >>>
-        >>> # DELETE query
-        >>> count = await execute("DELETE FROM users WHERE age < $1", [18])
-        >>> print(count)  # Number of deleted rows
-        >>>
-        >>> # DDL command
-        >>> await execute("CREATE INDEX idx_users_age ON users(age)")
-        >>> # Returns None
-        >>>
-        >>> # Complex query with multiple parameters
-        >>> results = await execute(
-        ...     "SELECT * FROM users WHERE age BETWEEN $1 AND $2 ORDER BY name LIMIT $3",
-        ...     [25, 35, 10]
-        ... )
-
-    Security Notes:
-        - ALWAYS use parameterized queries ($1, $2, etc.)
-        - NEVER concatenate user input into SQL strings
-        - Parameters are automatically escaped by the database driver
-
-        Bad (SQL injection risk):
-            await execute(f"SELECT * FROM users WHERE name = '{user_input}'")
-
-        Good (safe):
-            await execute("SELECT * FROM users WHERE name = $1", [user_input])
-
-    Raises:
-        RuntimeError: If PostgreSQL engine is not available or query execution fails
-        ValueError: If parameter binding fails
     """
     if _engine is None:
         raise RuntimeError(
@@ -342,84 +294,115 @@ async def upsert_many(
     return await _engine.upsert_many(table, documents, conflict_target, update_columns)
 
 
+import contextvars;
+
+# Context variable to track the active transaction
+_active_transaction = contextvars.ContextVar("_active_transaction", default=None)
+
+
+class TransactionWrapper:
+    """Wrapper for PyTransaction to provide cleaner Python API."""
+    def __init__(self, tx):
+        self._tx = tx
+        self._committed = False
+        self._rolled_back = False
+
+    async def commit(self):
+        """Commit the transaction."""
+        if not self._committed and not self._rolled_back:
+            await self._tx.commit()
+            self._committed = True
+
+    async def rollback(self):
+        """Rollback the transaction."""
+        if not self._committed and not self._rolled_back:
+            await self._tx.rollback()
+            self._rolled_back = True
+
+    @property
+    def is_completed(self):
+        """Check if transaction is committed or rolled back."""
+        return self._committed or self._rolled_back
+
+    # Delegate CRUD operations to the Rust transaction object
+    async def insert_one(self, table: str, document: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._tx.insert_one(table, document)
+
+    async def fetch_one(self, table: str, filter: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return await self._tx.fetch_one(table, filter)
+
+    async def update_one(self, table: str, pk_column: str, pk_value: Any, update: Dict[str, Any]) -> Any:
+        return await self._tx.update_one(table, pk_column, pk_value, update)
+
+    async def delete_one(self, table: str, pk_column: str, pk_value: Any) -> int:
+        return await self._tx.delete_one(table, pk_column, pk_value)
+
+    async def execute(self, sql: str, params: Optional[list] = None):
+        return await self._tx.execute(sql, params)
+
+
 @asynccontextmanager
 async def begin_transaction(isolation_level: Optional[IsolationLevel] = None):
     """
     Begin a transaction with automatic rollback on error.
-
-    Transactions ensure ACID properties:
-    - Atomicity: All operations succeed or fail together
-    - Consistency: Database remains in a valid state
-    - Isolation: Concurrent transactions don't interfere
-    - Durability: Committed changes persist
-
-    Args:
-        isolation_level: Transaction isolation level (default: "read_committed")
-            - "read_uncommitted": Lowest isolation, allows dirty reads
-            - "read_committed": PostgreSQL default, prevents dirty reads
-            - "repeatable_read": Prevents non-repeatable reads
-            - "serializable": Highest isolation, prevents phantom reads
-
-    Yields:
-        Transaction object with commit() and rollback() methods
-
-    Example:
-        >>> # Basic transaction with auto-commit
-        >>> async with begin_transaction() as tx:
-        ...     # Perform database operations
-        ...     await insert_one("users", {"name": "Alice"})
-        ...     # Transaction auto-commits on successful exit
-        >>>
-        >>> # Explicit commit
-        >>> async with begin_transaction() as tx:
-        ...     await insert_one("users", {"name": "Bob"})
-        ...     await tx.commit()  # Explicit commit
-        >>>
-        >>> # Transaction with specific isolation level
-        >>> async with begin_transaction("serializable") as tx:
-        ...     # Operations in serializable isolation
-        ...     await update_one("accounts", {"id": 1}, {"balance": 1000})
-        >>>
-        >>> # Auto-rollback on exception
-        >>> try:
-        ...     async with begin_transaction() as tx:
-        ...         await insert_one("users", {"name": "Charlie"})
-        ...         raise ValueError("Something went wrong")
-        ...         # Transaction auto-rolls back on exception
-        ... except ValueError:
-        ...     pass
-
-    Raises:
-        RuntimeError: If PostgreSQL engine is not available or connection fails
     """
     if _engine is None:
         raise RuntimeError(
-            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+            "PostgreSQL engine not available."
         )
 
-    tx = await _engine.begin_transaction(isolation_level)
-    committed = False
+    raw_tx = await _engine.begin_transaction(isolation_level)
+    tx = TransactionWrapper(raw_tx)
+
+    # Set as active transaction for this context
+    token = _active_transaction.set(tx)
 
     try:
-        # Wrap commit to track state
-        original_commit = tx.commit
-
-        async def tracked_commit():
-            nonlocal committed
-            await original_commit()
-            committed = True
-
-        tx.commit = tracked_commit
         yield tx
     except Exception:
-        # Rollback on exception
-        if not committed:
+        # Rollback on exception if not already committed/rolled back
+        if not tx.is_completed:
             await tx.rollback()
         raise
     else:
         # Auto-commit if not explicitly committed or rolled back
-        if not committed:
+        if not tx.is_completed:
             await tx.commit()
+    finally:
+        # Clear active transaction
+        _active_transaction.reset(token)
+
+
+async def execute(
+    sql: str,
+    params: Optional[list] = None
+):
+    """
+    Execute raw SQL query. Uses active transaction if available.
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    tx = _active_transaction.get()
+    if tx:
+        return await tx.execute(sql, params)
+
+    return await _engine.execute(sql, params)
+
+
+async def insert_one(
+    table: str,
+    document: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Insert a single document. Uses active transaction if available."""
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    tx = _active_transaction.get()
+    if tx:
+        return await tx.insert_one(table, document)
+
+    return await _engine.insert_one(table, document)
 
 
 # ============================================================================

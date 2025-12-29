@@ -5,6 +5,7 @@
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use serde_json::Value as JsonValue;
+use rust_decimal::Decimal;
 use sqlx::postgres::{PgArguments, PgRow};
 use sqlx::{Arguments, Column, Row as SqlxRow, Type, TypeInfo, Postgres};
 use std::collections::HashMap;
@@ -388,14 +389,28 @@ pub fn row_to_extracted(row: &PgRow) -> Result<HashMap<String, ExtractedValue>> 
                 }
             }
             "NUMERIC" | "DECIMAL" => {
-                // Extract as string for now
-                // TODO: Enable rust_decimal feature in sqlx for native decimal support
-                match row.try_get::<Option<String>, _>(idx) {
-                    Ok(Some(v)) => ExtractedValue::Decimal(v),
-                    Ok(None) => ExtractedValue::Null,
-                    Err(e) => return Err(DataBridgeError::Query(
-                        format!("Failed to extract DECIMAL from column '{}': {}", column_name, e)
-                    )),
+                // Try extracting as rust_decimal::Decimal first (native NUMERIC support)
+                if let Ok(v) = row.try_get::<Option<Decimal>, _>(idx) {
+                    match v {
+                        Some(val) => ExtractedValue::Decimal(val.to_string()),
+                        None => ExtractedValue::Null,
+                    }
+                } else if let Ok(v) = row.try_get::<Option<f64>, _>(idx) {
+                    // Fallback to f64 for aggregate results if Decimal fails
+                    match v {
+                        Some(val) => ExtractedValue::Double(val),
+                        None => ExtractedValue::Null,
+                    }
+                } else if let Ok(v) = row.try_get::<Option<String>, _>(idx) {
+                    // Fallback to String
+                    match v {
+                        Some(val) => ExtractedValue::Decimal(val),
+                        None => ExtractedValue::Null,
+                    }
+                } else {
+                    return Err(DataBridgeError::Query(
+                        format!("Failed to extract DECIMAL from column '{}': incompatible type", column_name)
+                    ));
                 }
             }
             // Array types - handle common array types

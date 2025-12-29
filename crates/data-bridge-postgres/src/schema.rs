@@ -1702,4 +1702,38 @@ mod tests {
         assert!(sql.contains("CREATE TABLE \"posts\""));
         assert!(sql.contains("ALTER TABLE \"posts\" ADD CONSTRAINT \"fk_author\" FOREIGN KEY (\"author_id\") REFERENCES \"users\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE;"));
     }
+
+    #[test]
+    fn test_cascade_rule_conversions() {
+        // Test from_sql
+        assert_eq!(CascadeRule::from_sql("CASCADE"), CascadeRule::Cascade);
+        assert_eq!(CascadeRule::from_sql("RESTRICT"), CascadeRule::Restrict);
+        assert_eq!(CascadeRule::from_sql("SET NULL"), CascadeRule::SetNull);
+        assert_eq!(CascadeRule::from_sql("SET DEFAULT"), CascadeRule::SetDefault);
+        assert_eq!(CascadeRule::from_sql("NO ACTION"), CascadeRule::NoAction);
+        assert_eq!(CascadeRule::from_sql("unknown"), CascadeRule::NoAction);
+
+        // Test to_sql
+        assert_eq!(CascadeRule::Cascade.to_sql(), "CASCADE");
+        assert_eq!(CascadeRule::Restrict.to_sql(), "RESTRICT");
+        assert_eq!(CascadeRule::SetNull.to_sql(), "SET NULL");
+        assert_eq!(CascadeRule::SetDefault.to_sql(), "SET DEFAULT");
+        assert_eq!(CascadeRule::NoAction.to_sql(), "NO ACTION");
+    }
+
+    #[test]
+    fn test_backref_struct() {
+        let backref = BackRef {
+            source_table: "posts".to_string(),
+            source_column: "author_id".to_string(),
+            target_table: "users".to_string(),
+            target_column: "id".to_string(),
+            constraint_name: "fk_author".to_string(),
+            on_delete: CascadeRule::Cascade,
+            on_update: CascadeRule::NoAction,
+        };
+
+        assert_eq!(backref.source_table, "posts");
+        assert_eq!(backref.on_delete, CascadeRule::Cascade);
+    }
 }

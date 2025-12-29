@@ -36,7 +36,7 @@ async def setup_cascade_tables():
         CREATE TABLE IF NOT EXISTS cascade_comments (
             id SERIAL PRIMARY KEY,
             post_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
+            user_id INTEGER,
             text TEXT NOT NULL,
             FOREIGN KEY (post_id) REFERENCES cascade_posts(id) ON DELETE RESTRICT,
             FOREIGN KEY (user_id) REFERENCES cascade_users(id) ON DELETE SET NULL

@@ -42,6 +42,11 @@ pub struct Transaction {
 }
 
 impl Transaction {
+    /// Returns a mutable reference to the underlying sqlx transaction.
+    pub fn as_mut(&mut self) -> &mut sqlx::Transaction<'static, Postgres> {
+        &mut self.tx
+    }
+
     /// Begins a new transaction.
     ///
     /// # Arguments

@@ -369,17 +369,20 @@ impl QueryBuilder {
         if self.select_columns.is_empty() {
             sql.push('*');
         } else {
-            sql.push_str(&self.select_columns.join(", "));
+            let quoted_cols: Vec<String> = self.select_columns.iter()
+                .map(|c| Self::quote_identifier(c))
+                .collect();
+            sql.push_str(&quoted_cols.join(", "));
         }
 
         sql.push_str(" FROM ");
-        sql.push_str(&self.table);
+        sql.push_str(&Self::quote_identifier(&self.table));
 
         // JOIN clauses
         for join in &self.joins {
             let table_ref = match &join.alias {
-                Some(alias) => format!("\"{}\" AS \"{}\"", join.table, alias),
-                None => format!("\"{}\"", join.table),
+                Some(alias) => format!("{} AS \"{}\"", Self::quote_identifier(&join.table), alias),
+                None => Self::quote_identifier(&join.table),
             };
             sql.push_str(&format!(" {} {} ON {}", join.join_type.to_sql(), table_ref, join.on_condition));
         }
@@ -389,24 +392,25 @@ impl QueryBuilder {
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     Operator::In | Operator::NotIn => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} (${})", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} (${})", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} (NULL)", cond.field, cond.operator.to_sql())
+                            format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
                         }
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -418,7 +422,7 @@ impl QueryBuilder {
         if !self.order_by_clauses.is_empty() {
             sql.push_str(" ORDER BY ");
             let order_parts: Vec<String> = self.order_by_clauses.iter()
-                .map(|(field, dir)| format!("{} {}", field, dir.to_sql()))
+                .map(|(field, dir)| format!("{} {}", Self::quote_identifier(field), dir.to_sql()))
                 .collect();
             sql.push_str(&order_parts.join(", "));
         }
@@ -451,8 +455,8 @@ impl QueryBuilder {
             Self::validate_identifier(col)?;
         }
 
-        let mut sql = format!("INSERT INTO {} (", self.table);
-        let columns: Vec<&str> = values.iter().map(|(col, _)| col.as_str()).collect();
+        let mut sql = format!("INSERT INTO {} (", Self::quote_identifier(&self.table));
+        let columns: Vec<String> = values.iter().map(|(col, _)| Self::quote_identifier(col)).collect();
         sql.push_str(&columns.join(", "));
         sql.push_str(") VALUES (");
 
@@ -478,13 +482,13 @@ impl QueryBuilder {
             Self::validate_identifier(col)?;
         }
 
-        let mut sql = format!("UPDATE {} SET ", self.table);
+        let mut sql = format!("UPDATE {} SET ", Self::quote_identifier(&self.table));
         let mut params: Vec<ExtractedValue> = Vec::new();
 
         // SET clause
         let set_parts: Vec<String> = values.iter().map(|(col, val)| {
             params.push(val.clone());
-            format!("{} = ${}", col, params.len())
+            format!("{} = ${}", Self::quote_identifier(col), params.len())
         }).collect();
         sql.push_str(&set_parts.join(", "));
 
@@ -492,16 +496,17 @@ impl QueryBuilder {
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -565,8 +570,8 @@ impl QueryBuilder {
         }
 
         // Build INSERT clause
-        let mut sql = format!("INSERT INTO {} (", self.table);
-        let columns: Vec<&str> = values.iter().map(|(col, _)| col.as_str()).collect();
+        let mut sql = format!("INSERT INTO {} (", Self::quote_identifier(&self.table));
+        let columns: Vec<String> = values.iter().map(|(col, _)| Self::quote_identifier(col)).collect();
         sql.push_str(&columns.join(", "));
         sql.push_str(") VALUES (");
 
@@ -576,17 +581,18 @@ impl QueryBuilder {
 
         // Build ON CONFLICT clause
         sql.push_str(" ON CONFLICT (");
-        sql.push_str(&conflict_target.join(", "));
+        let quoted_targets: Vec<String> = conflict_target.iter().map(|c| Self::quote_identifier(c)).collect();
+        sql.push_str(&quoted_targets.join(", "));
         sql.push_str(") DO UPDATE SET ");
 
         // Determine which columns to update
-        let columns_to_update: Vec<&str> = if let Some(update_cols) = update_columns {
-            update_cols.iter().map(|s| s.as_str()).collect()
+        let columns_to_update: Vec<String> = if let Some(update_cols) = update_columns {
+            update_cols.iter().map(|s| s.clone()).collect()
         } else {
             // Update all columns except conflict target
-            columns.iter()
-                .filter(|col| !conflict_target.contains(&col.to_string()))
-                .copied()
+            values.iter()
+                .map(|(col, _)| col.clone())
+                .filter(|col| !conflict_target.contains(col))
                 .collect()
         };
 
@@ -599,7 +605,7 @@ impl QueryBuilder {
         // Build SET clause using EXCLUDED
         let set_parts: Vec<String> = columns_to_update
             .iter()
-            .map(|col| format!("{} = EXCLUDED.{}", col, col))
+            .map(|col| format!("{} = EXCLUDED.{}", Self::quote_identifier(col), Self::quote_identifier(col)))
             .collect();
         sql.push_str(&set_parts.join(", "));
 
@@ -615,23 +621,24 @@ impl QueryBuilder {
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders and the parameter values.
     pub fn build_delete(&self) -> (String, Vec<ExtractedValue>) {
-        let mut sql = format!("DELETE FROM {}", self.table);
+        let mut sql = format!("DELETE FROM {}", Self::quote_identifier(&self.table));
         let mut params: Vec<ExtractedValue> = Vec::new();
 
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -665,6 +672,20 @@ impl QueryBuilder {
     pub async fn execute_delete(&self, _conn: &Connection) -> Result<u64> {
         // TODO: Implement DELETE query execution with SQLx
         todo!("Implement QueryBuilder::execute_delete - requires SQLx integration")
+    }
+
+    /// Quotes a SQL identifier.
+    ///
+    /// Handles schema-qualified names by quoting each part separately.
+    pub fn quote_identifier(name: &str) -> String {
+        if name.contains('.') {
+            name.split('.')
+                .map(|part| format!("\"{}\"", part))
+                .collect::<Vec<_>>()
+                .join(".")
+        } else {
+            format!("\"{}\"", name)
+        }
     }
 
     /// Validates a SQL identifier (table/column name).
@@ -779,7 +800,7 @@ mod tests {
     fn test_simple_select() {
         let qb = QueryBuilder::new("users").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users");
+        assert_eq!(sql, "SELECT * FROM \"users\"");
         assert_eq!(params.len(), 0);
     }
 
@@ -788,7 +809,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .select(vec!["id".to_string(), "name".to_string()]).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT id, name FROM users");
+        assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\"");
         assert_eq!(params.len(), 0);
     }
 
@@ -797,7 +818,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE id = $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -807,7 +828,7 @@ mod tests {
             .where_clause("age", Operator::Gt, ExtractedValue::Int(18)).unwrap()
             .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE age > $1 AND status = $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"age\" > $1 AND \"status\" = $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -816,7 +837,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .order_by("created_at", OrderDirection::Desc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC");
         assert_eq!(params.len(), 0);
     }
 
@@ -826,7 +847,7 @@ mod tests {
             .limit(10)
             .offset(20);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -842,7 +863,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT id, name, email FROM users WHERE age >= $1 AND active = $2 ORDER BY name ASC LIMIT $3 OFFSET $4"
+            "SELECT \"id\", \"name\", \"email\" FROM \"users\" WHERE \"age\" >= $1 AND \"active\" = $2 ORDER BY \"name\" ASC LIMIT $3 OFFSET $4"
         );
         assert_eq!(params.len(), 4);
     }
@@ -855,7 +876,7 @@ mod tests {
             ("age".to_string(), ExtractedValue::Int(30)),
         ];
         let (sql, params) = qb.build_insert(&values).unwrap();
-        assert_eq!(sql, "INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *");
+        assert_eq!(sql, "INSERT INTO \"users\" (\"name\", \"age\") VALUES ($1, $2) RETURNING *");
         assert_eq!(params.len(), 2);
     }
 
@@ -868,7 +889,7 @@ mod tests {
             ("age".to_string(), ExtractedValue::Int(35)),
         ];
         let (sql, params) = qb.build_update(&values).unwrap();
-        assert_eq!(sql, "UPDATE users SET name = $1, age = $2 WHERE id = $3");
+        assert_eq!(sql, "UPDATE \"users\" SET \"name\" = $1, \"age\" = $2 WHERE \"id\" = $3");
         assert_eq!(params.len(), 3);
     }
 
@@ -877,7 +898,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
         let (sql, params) = qb.build_delete();
-        assert_eq!(sql, "DELETE FROM users WHERE id = $1");
+        assert_eq!(sql, "DELETE FROM \"users\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -886,7 +907,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_null("email").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE email IS NULL");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" IS NULL");
         assert_eq!(params.len(), 0);
     }
 
@@ -895,7 +916,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_not_null("email").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE email IS NOT NULL");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" IS NOT NULL");
         assert_eq!(params.len(), 0);
     }
 
@@ -984,14 +1005,14 @@ mod tests {
         // Test that queries work with schema-qualified names
         let qb = QueryBuilder::new("public.users").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM public.users");
+        assert_eq!(sql, "SELECT * FROM \"public\".\"users\"");
         assert_eq!(params.len(), 0);
 
         // Test with WHERE clause
         let qb = QueryBuilder::new("public.bench_insert_one_db").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM public.bench_insert_one_db WHERE id = $1");
+        assert_eq!(sql, "SELECT * FROM \"public\".\"bench_insert_one_db\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -1022,7 +1043,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("name", Operator::Like, ExtractedValue::String("%John%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE name LIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" LIKE $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -1036,7 +1057,7 @@ mod tests {
                 ])
             ).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
         assert_eq!(params.len(), 1);
     }
 
@@ -1078,7 +1099,7 @@ mod tests {
             .order_by("created_at", OrderDirection::Desc).unwrap()
             .order_by("name", OrderDirection::Asc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC, name ASC");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC, \"name\" ASC");
         assert_eq!(params.len(), 0);
     }
 
@@ -1092,7 +1113,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT * FROM users WHERE age >= $1 AND status = $2 AND score < $3 AND verified = $4"
+            "SELECT * FROM \"users\" WHERE \"age\" >= $1 AND \"status\" = $2 AND \"score\" < $3 AND \"verified\" = $4"
         );
         assert_eq!(params.len(), 4);
 
@@ -1122,7 +1143,7 @@ mod tests {
             .select(vec!["id".to_string(), "name".to_string()]).unwrap()
             .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT id, name FROM public.users WHERE active = $1");
+        assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"public\".\"users\" WHERE \"active\" = $1");
         assert_eq!(params.len(), 1);
 
         // Test INSERT with schema-qualified table
@@ -1132,7 +1153,7 @@ mod tests {
             ("price".to_string(), ExtractedValue::Int(999)),
         ];
         let (sql, params) = qb.build_insert(&values).unwrap();
-        assert_eq!(sql, "INSERT INTO myschema.products (name, price) VALUES ($1, $2) RETURNING *");
+        assert_eq!(sql, "INSERT INTO \"myschema\".\"products\" (\"name\", \"price\") VALUES ($1, $2) RETURNING *");
         assert_eq!(params.len(), 2);
 
         // Test UPDATE with schema-qualified table
@@ -1142,14 +1163,14 @@ mod tests {
             ("processed".to_string(), ExtractedValue::Bool(true)),
         ];
         let (sql, params) = qb.build_update(&values).unwrap();
-        assert_eq!(sql, "UPDATE analytics.events SET processed = $1 WHERE id = $2");
+        assert_eq!(sql, "UPDATE \"analytics\".\"events\" SET \"processed\" = $1 WHERE \"id\" = $2");
         assert_eq!(params.len(), 2);
 
         // Test DELETE with schema-qualified table
         let qb = QueryBuilder::new("logs.audit_log").unwrap()
             .where_clause("created_at", Operator::Lt, ExtractedValue::String("2020-01-01".to_string())).unwrap();
         let (sql, params) = qb.build_delete();
-        assert_eq!(sql, "DELETE FROM logs.audit_log WHERE created_at < $1");
+        assert_eq!(sql, "DELETE FROM \"logs\".\"audit_log\" WHERE \"created_at\" < $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -1159,7 +1180,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .limit(i64::MAX);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::BigInt(val) if *val == i64::MAX => {},
@@ -1170,7 +1191,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .limit(1_000_000_000);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::BigInt(1_000_000_000) => {},
@@ -1184,7 +1205,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .limit(0);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::BigInt(0) => {},
@@ -1196,7 +1217,7 @@ mod tests {
             .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
             .limit(0);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE active = $1 LIMIT $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1 LIMIT $2");
         assert_eq!(params.len(), 2);
 
         // Test LIMIT 0 with ORDER BY
@@ -1204,7 +1225,7 @@ mod tests {
             .order_by("created_at", OrderDirection::Desc).unwrap()
             .limit(0);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC LIMIT $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC LIMIT $1");
         assert_eq!(params.len(), 1);
 
         // Test LIMIT 0 with OFFSET
@@ -1212,7 +1233,7 @@ mod tests {
             .limit(0)
             .offset(10);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
         assert_eq!(params.len(), 2);
         match &params[0] {
             ExtractedValue::BigInt(0) => {},
@@ -1231,7 +1252,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .offset(-10);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users OFFSET $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" OFFSET $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::BigInt(-10) => {},
@@ -1243,7 +1264,7 @@ mod tests {
             .limit(20)
             .offset(-5);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -1253,7 +1274,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .select(vec![]).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users");
+        assert_eq!(sql, "SELECT * FROM \"users\"");
         assert_eq!(params.len(), 0);
 
         // Empty select with WHERE clause
@@ -1261,7 +1282,7 @@ mod tests {
             .select(vec![]).unwrap()
             .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE active = $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -1271,7 +1292,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("status", Operator::In, ExtractedValue::Array(vec![])).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
         assert_eq!(params.len(), 1);
 
         // Verify the parameter is an empty array
@@ -1284,7 +1305,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("user_role", Operator::NotIn, ExtractedValue::Array(vec![])).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE user_role NOT IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"user_role\" NOT IN ($1)");
         assert_eq!(params.len(), 1);
     }
 
@@ -1298,7 +1319,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("id", Operator::In, ExtractedValue::Array(values.clone())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE id IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"id\" IN ($1)");
         assert_eq!(params.len(), 1);
 
         // Verify the parameter contains 150 values
@@ -1315,7 +1336,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("status", Operator::In, ExtractedValue::Array(string_values)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
         assert_eq!(params.len(), 1);
 
         match &params[0] {
@@ -1330,7 +1351,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("name", Operator::Like, ExtractedValue::String("%John%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE name LIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" LIKE $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::String(s) if s == "%John%" => {},
@@ -1341,7 +1362,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("email", Operator::Like, ExtractedValue::String("user_@%.com".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE email LIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" LIKE $1");
         match &params[0] {
             ExtractedValue::String(s) if s == "user_@%.com" => {},
             _ => panic!("Expected String(user_@%.com)"),
@@ -1351,7 +1372,7 @@ mod tests {
         let qb = QueryBuilder::new("products").unwrap()
             .where_clause("description", Operator::ILike, ExtractedValue::String("%widget%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM products WHERE description ILIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"products\" WHERE \"description\" ILIKE $1");
         match &params[0] {
             ExtractedValue::String(s) if s == "%widget%" => {},
             _ => panic!("Expected String(%widget%)"),
@@ -1362,7 +1383,7 @@ mod tests {
             .where_clause("first_name", Operator::Like, ExtractedValue::String("J%".to_string())).unwrap()
             .where_clause("last_name", Operator::Like, ExtractedValue::String("%son".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE first_name LIKE $1 AND last_name LIKE $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"first_name\" LIKE $1 AND \"last_name\" LIKE $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -1372,7 +1393,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("name", Operator::ILike, ExtractedValue::String("%john%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE name ILIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" ILIKE $1");
         assert_eq!(params.len(), 1);
         match &params[0] {
             ExtractedValue::String(s) if s == "%john%" => {},
@@ -1383,7 +1404,7 @@ mod tests {
         let qb = QueryBuilder::new("products").unwrap()
             .where_clause("name", Operator::ILike, ExtractedValue::String("%WiDgEt%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM products WHERE name ILIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"products\" WHERE \"name\" ILIKE $1");
         match &params[0] {
             ExtractedValue::String(s) if s == "%WiDgEt%" => {},
             _ => panic!("Expected String(%WiDgEt%)"),
@@ -1393,7 +1414,7 @@ mod tests {
         let qb = QueryBuilder::new("emails").unwrap()
             .where_clause("address", Operator::ILike, ExtractedValue::String("USER_@example.com".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM emails WHERE address ILIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"emails\" WHERE \"address\" ILIKE $1");
         match &params[0] {
             ExtractedValue::String(s) if s == "USER_@example.com" => {},
             _ => panic!("Expected String(USER_@example.com)"),
@@ -1408,7 +1429,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT * FROM articles WHERE title ILIKE $1 AND published = $2 ORDER BY created_at DESC LIMIT $3"
+            "SELECT * FROM \"articles\" WHERE \"title\" ILIKE $1 AND \"published\" = $2 ORDER BY \"created_at\" DESC LIMIT $3"
         );
         assert_eq!(params.len(), 3);
 
@@ -1417,7 +1438,7 @@ mod tests {
             .where_clause("first_name", Operator::ILike, ExtractedValue::String("j%".to_string())).unwrap()
             .where_clause("last_name", Operator::ILike, ExtractedValue::String("%SON".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE first_name ILIKE $1 AND last_name ILIKE $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"first_name\" ILIKE $1 AND \"last_name\" ILIKE $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -1429,7 +1450,7 @@ mod tests {
             .order_by("salary", OrderDirection::Desc).unwrap()
             .order_by("name", OrderDirection::Asc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY department ASC, salary DESC, name ASC");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"department\" ASC, \"salary\" DESC, \"name\" ASC");
         assert_eq!(params.len(), 0);
 
         // Test with 5 columns
@@ -1442,7 +1463,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT * FROM products ORDER BY category ASC, subcategory ASC, price DESC, rating DESC, name ASC"
+            "SELECT * FROM \"products\" ORDER BY \"category\" ASC, \"subcategory\" ASC, \"price\" DESC, \"rating\" DESC, \"name\" ASC"
         );
         assert_eq!(params.len(), 0);
 
@@ -1452,7 +1473,7 @@ mod tests {
             .order_by("created_at", OrderDirection::Desc).unwrap()
             .order_by("id", OrderDirection::Asc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE active = $1 ORDER BY created_at DESC, id ASC");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1 ORDER BY \"created_at\" DESC, \"id\" ASC");
         assert_eq!(params.len(), 1);
     }
 
@@ -1485,7 +1506,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT id, customer_id, total, status, created_at FROM orders WHERE status IN ($1) AND total >= $2 AND customer_id != $3 AND payment_method IS NOT NULL ORDER BY created_at DESC, total DESC, id ASC LIMIT $4 OFFSET $5"
+            "SELECT \"id\", \"customer_id\", \"total\", \"status\", \"created_at\" FROM \"orders\" WHERE \"status\" IN ($1) AND \"total\" >= $2 AND \"customer_id\" != $3 AND \"payment_method\" IS NOT NULL ORDER BY \"created_at\" DESC, \"total\" DESC, \"id\" ASC LIMIT $4 OFFSET $5"
         );
         assert_eq!(params.len(), 5);
 
@@ -1522,7 +1543,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT event_type, user_id, timestamp FROM public.analytics_events WHERE event_type LIKE $1 AND timestamp >= $2 ORDER BY timestamp DESC LIMIT $3"
+            "SELECT \"event_type\", \"user_id\", \"timestamp\" FROM \"public\".\"analytics_events\" WHERE \"event_type\" LIKE $1 AND \"timestamp\" >= $2 ORDER BY \"timestamp\" DESC LIMIT $3"
         );
         assert_eq!(params.len(), 3);
     }
@@ -1538,11 +1559,11 @@ mod tests {
         let conflict_target = vec!["email".to_string()];
         let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
 
-        assert!(sql.contains("INSERT INTO users"));
-        assert!(sql.contains("ON CONFLICT (email)"));
+        assert!(sql.contains("INSERT INTO \"users\""));
+        assert!(sql.contains("ON CONFLICT (\"email\")"));
         assert!(sql.contains("DO UPDATE SET"));
-        assert!(sql.contains("name = EXCLUDED.name"));
-        assert!(sql.contains("age = EXCLUDED.age"));
+        assert!(sql.contains("\"name\" = EXCLUDED.\"name\""));
+        assert!(sql.contains("\"age\" = EXCLUDED.\"age\""));
         assert!(sql.contains("RETURNING *"));
         assert_eq!(params.len(), 3);
     }
@@ -1559,8 +1580,8 @@ mod tests {
         let update_cols = vec!["name".to_string()];
         let (sql, params) = qb.build_upsert(&values, &conflict_target, Some(&update_cols)).unwrap();
 
-        assert!(sql.contains("DO UPDATE SET name = EXCLUDED.name"));
-        assert!(!sql.contains("age = EXCLUDED.age"));
+        assert!(sql.contains("DO UPDATE SET \"name\" = EXCLUDED.\"name\""));
+        assert!(!sql.contains("\"age\" = EXCLUDED.\"age\""));
         assert_eq!(params.len(), 3);
     }
 
@@ -1575,8 +1596,8 @@ mod tests {
         let conflict_target = vec!["email".to_string(), "department".to_string()];
         let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
 
-        assert!(sql.contains("ON CONFLICT (email, department)"));
-        assert!(sql.contains("DO UPDATE SET name = EXCLUDED.name"));
+        assert!(sql.contains("ON CONFLICT (\"email\", \"department\")"));
+        assert!(sql.contains("DO UPDATE SET \"name\" = EXCLUDED.\"name\""));
         assert_eq!(params.len(), 3);
     }
 
@@ -1610,7 +1631,7 @@ mod tests {
 
         let (sql, _) = qb.build_select();
         assert!(sql.contains("INNER JOIN \"users\" ON posts.author_id = users.id"));
-        assert_eq!(sql, "SELECT posts.id, posts.title, users.name FROM posts INNER JOIN \"users\" ON posts.author_id = users.id");
+        assert_eq!(sql, "SELECT \"posts\".\"id\", \"posts\".\"title\", \"users\".\"name\" FROM \"posts\" INNER JOIN \"users\" ON posts.author_id = users.id");
     }
 
     #[test]
@@ -1621,7 +1642,7 @@ mod tests {
 
         let (sql, _) = qb.build_select();
         assert!(sql.contains("LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id"));
-        assert_eq!(sql, "SELECT p.id, u.name FROM posts LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id");
+        assert_eq!(sql, "SELECT \"p\".\"id\", \"u\".\"name\" FROM \"posts\" LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id");
     }
 
     #[test]
@@ -1633,7 +1654,7 @@ mod tests {
         let (sql, _) = qb.build_select();
         assert!(sql.contains("INNER JOIN"));
         assert!(sql.contains("LEFT JOIN"));
-        assert_eq!(sql, "SELECT * FROM posts INNER JOIN \"users\" AS \"u\" ON posts.author_id = u.id LEFT JOIN \"categories\" AS \"c\" ON posts.category_id = c.id");
+        assert_eq!(sql, "SELECT * FROM \"posts\" INNER JOIN \"users\" AS \"u\" ON posts.author_id = u.id LEFT JOIN \"categories\" AS \"c\" ON posts.category_id = c.id");
     }
 
     #[test]
@@ -1665,7 +1686,7 @@ mod tests {
 
         let (sql, params) = qb.build_select();
         assert!(sql.contains("INNER JOIN"));
-        assert!(sql.contains("WHERE posts.published = $1"));
+        assert!(sql.contains("WHERE \"posts\".\"published\" = $1"));
         assert_eq!(params.len(), 1);
     }
 
@@ -1679,7 +1700,7 @@ mod tests {
 
         let (sql, params) = qb.build_select();
         assert!(sql.contains("INNER JOIN"));
-        assert!(sql.contains("ORDER BY posts.created_at DESC"));
+        assert!(sql.contains("ORDER BY \"posts\".\"created_at\" DESC"));
         assert!(sql.contains("LIMIT $1"));
         assert_eq!(params.len(), 1);
     }
@@ -1705,7 +1726,7 @@ mod tests {
             .inner_join("public.users", Some("u"), "p.author_id = u.id").unwrap();
 
         let (sql, _) = qb.build_select();
-        assert!(sql.contains("FROM public.posts"));
-        assert!(sql.contains("INNER JOIN \"public.users\" AS \"u\""));
+        assert!(sql.contains("FROM \"public\".\"posts\""));
+        assert!(sql.contains("INNER JOIN \"public\".\"users\" AS \"u\""));
     }
 }

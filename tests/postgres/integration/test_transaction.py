@@ -34,49 +34,51 @@ async def test_transaction_isolation_levels():
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_transaction_commit(postgres_connection):
+async def test_transaction_commit(test_table):
     """Test transaction commit with live database."""
-    # This test requires a live PostgreSQL connection
-    # It should be marked as integration and skipped if DB is not available
-
     async with connection.begin_transaction() as tx:
         # Insert test data
-        await connection._engine.insert_one(
-            "test_table",
-            {"name": "test_commit", "value": 123}
+        await connection.insert_one(
+            test_table,
+            {"name": "test_commit", "email": "commit@test.com", "age": 20}
         )
         # Explicit commit
         await tx.commit()
 
-    # Verify data persisted (requires query functionality)
+    # Verify data persisted
+    result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_commit"])
+    assert len(result) == 1
+    assert result[0]["name"] == "test_commit"
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_transaction_rollback(postgres_connection):
+async def test_transaction_rollback(test_table):
     """Test transaction rollback with live database."""
     async with connection.begin_transaction() as tx:
         # Insert test data
-        await connection._engine.insert_one(
-            "test_table",
-            {"name": "test_rollback", "value": 456}
+        await connection.insert_one(
+            test_table,
+            {"name": "test_rollback", "email": "rollback@test.com", "age": 20}
         )
         # Explicit rollback
         await tx.rollback()
 
     # Verify data NOT persisted
+    result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_rollback"])
+    assert len(result) == 0
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_transaction_auto_rollback_on_exception(postgres_connection):
+async def test_transaction_auto_rollback_on_exception(test_table):
     """Test automatic rollback on exception."""
     try:
         async with connection.begin_transaction() as tx:
             # Insert test data
-            await connection._engine.insert_one(
-                "test_table",
-                {"name": "test_exception", "value": 789}
+            await connection.insert_one(
+                test_table,
+                {"name": "test_exception", "email": "exception@test.com", "age": 20}
             )
             # Raise exception to trigger rollback
             raise ValueError("Simulated error")
@@ -84,18 +86,22 @@ async def test_transaction_auto_rollback_on_exception(postgres_connection):
         pass
 
     # Verify data NOT persisted due to auto-rollback
+    result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_exception"])
+    assert len(result) == 0
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_transaction_isolation_level_serializable(postgres_connection):
+async def test_transaction_isolation_level_serializable(test_table):
     """Test transaction with serializable isolation level."""
     async with connection.begin_transaction("serializable") as tx:
         # Perform operations in serializable isolation
-        await connection._engine.insert_one(
-            "test_table",
-            {"name": "test_serializable", "value": 999}
+        await connection.insert_one(
+            test_table,
+            {"name": "test_serializable", "email": "serial@test.com", "age": 20}
         )
         await tx.commit()
 
     # Verify data persisted
+    result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_serializable"])
+    assert len(result) == 1
