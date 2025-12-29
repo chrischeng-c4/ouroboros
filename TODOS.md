@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-12-29
+**Last Updated**: 2025-12-30
 **Branch**: `feature/postgres-improve`
 
 ---
@@ -38,20 +38,17 @@ Atomic, testable tasks organized by priority and component.
 
 #### Rust Backend
 
-- [ ] P3-CASCADE-01: Add `BackRef` struct (source_table, source_column, target_table)
-  - Test: Struct compiles
-- [ ] P3-CASCADE-02: Add `CascadeRule` enum (Cascade, Restrict, SetNull, NoAction)
-  - Test: Enum compiles
-- [ ] P3-CASCADE-03: Implement `get_backreferences()` - find reverse FK relations
-  - Test: Returns accurate BackRef list for table
-- [ ] P3-CASCADE-04: Implement cascade delete in `Row::delete()`
-  - Test: Deleting parent deletes children when CASCADE
-- [ ] P3-CASCADE-05: Implement cascade restrict in `Row::delete()`
-  - Test: Delete blocked when children exist and RESTRICT
-- [ ] P3-CASCADE-06: Implement cascade set null in `Row::delete()`
-  - Test: Children FK set to NULL when SET NULL
-- [ ] P3-CASCADE-07: Add unit tests for cascade operations (10+ tests)
-  - Test: `cargo test cascade` passes
+- [x] P3-CASCADE-01: Add `BackRef` struct (source_table, source_column, target_table)
+- [x] P3-CASCADE-02: Add `CascadeRule` enum (Cascade, Restrict, SetNull, NoAction)
+- [x] P3-CASCADE-03: Implement `get_backreferences()` - find reverse FK relations
+- [x] P3-CASCADE-04: Implement cascade delete in `Row::delete()`
+  - Result: `Row::delete_with_cascade()` implemented in row.rs (lines 735-872)
+- [x] P3-CASCADE-05: Implement cascade restrict in `Row::delete()`
+  - Result: `Row::delete_checked()` implemented with RESTRICT constraint checking
+- [x] P3-CASCADE-06: Implement cascade set null in `Row::delete()`
+  - Result: SET NULL and SET DEFAULT handled inside `delete_with_cascade()`
+- [x] P3-CASCADE-07: Add unit tests for cascade operations (10+ tests)
+  - Result: Unit tests for CascadeRule and BackRef added to `schema.rs`
 
 #### Python API
 
@@ -64,16 +61,19 @@ Atomic, testable tasks organized by priority and component.
 
 #### Integration Tests
 
-- [ ] P3-CASCADE-11: Test ON DELETE CASCADE
-  - Test: Delete user → posts deleted
-- [ ] P3-CASCADE-12: Test ON DELETE RESTRICT
-  - Test: Delete user with posts → error raised
-- [ ] P3-CASCADE-13: Test ON DELETE SET NULL
-  - Test: Delete user → posts.author_id = NULL
+- [x] P3-CASCADE-11: Test ON DELETE CASCADE
+  - Result: `test_delete_with_cascade_basic` - Delete parent cascades to children
+- [x] P3-CASCADE-12: Test ON DELETE RESTRICT
+  - Result: `test_delete_with_cascade_restrict_violation` - Blocks deletion with children
+- [x] P3-CASCADE-13: Test ON DELETE SET NULL
+  - Result: `test_delete_with_cascade_set_null` - Sets child FK to NULL
 - [ ] P3-CASCADE-14: Test BackReference query
   - Test: `user.posts.fetch()` returns user's posts
-- [ ] P3-CASCADE-15: Test nested cascade (user → posts → comments)
-  - Test: Delete user cascades through all levels
+  - Note: Requires BackReference[T] descriptor (P3-CASCADE-08)
+- [x] P3-CASCADE-15: Test nested cascade (user → posts → comments)
+  - Result: `test_delete_with_cascade_multiple_children` - Cascades through multiple levels
+
+**Integration Test Coverage**: 9 tests in `tests/postgres/integration/test_cascade_delete.py`
 
 ---
 
@@ -111,7 +111,7 @@ Atomic, testable tasks organized by priority and component.
 - [ ] P4-M2M-07: Support explicit join table with extra columns
 - [ ] P4-M2M-08: Add integration tests (10+ tests)
 
-### P4-QUERY: Advanced Query Features
+### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
 - [ ] P4-QUERY-01: Implement subqueries (WHERE id IN (SELECT ...))
 - [ ] P4-QUERY-02: Implement COUNT/SUM/AVG/MIN/MAX aggregations
@@ -122,7 +122,8 @@ Atomic, testable tasks organized by priority and component.
 - [ ] P4-QUERY-07: Implement UNION/INTERSECT/EXCEPT
 - [ ] P4-QUERY-08: Implement DISTINCT ON
 - [ ] P4-QUERY-09: Implement JSONB operators
-- [ ] P4-QUERY-10: Add integration tests (25+ tests)
+- [ ] P4-QUERY-10: Support RETURNING clause in Updates/Deletes
+- [ ] P4-QUERY-11: Add integration tests (25+ tests)
 
 ### P4-HTTP: HTTP Client Optimization
 
@@ -131,12 +132,32 @@ Atomic, testable tasks organized by priority and component.
 - [ ] P4-HTTP-03: Add zero-copy bytes support
 - [ ] P4-HTTP-04: Benchmark vs httpx (target 1.3x faster)
 
-### P4-SECURITY: Security Hardening
+### P4-SECURITY: Security Hardening (Audit Readiness)
 
-- [ ] P4-SECURITY-01: Add TLS/SSL configuration option
-- [ ] P4-SECURITY-02: Add connection string validation
-- [ ] P4-SECURITY-03: Add credential rotation support
-- [ ] P4-SECURITY-04: Security audit before v1.0.0
+**Goal**: Prepare for professional security audit (Pen-testing/Code Review)
+
+- [~] P4-SECURITY-01: Dynamic SQL Protection
+  - [x] Implement strict Identifier Whitelisting/Quoting for all dynamic names
+    - Result: `validate_identifier()` in query.rs with 67+ SQL keyword blocklist
+    - Result: System catalog protection (pg_*, information_schema blocked)
+    - Result: 30+ unit tests for SQL identifier security
+  - [ ] Audit all `format!` usages in SQL generation
+- [ ] P4-SECURITY-02: DoS Prevention
+  Implement `statement_timeout` configuration
+  Implement Server-side Cursors (Streaming results) to prevent OOM on large result sets
+  Verify Connection Pool resilience against exhaustion
+- [ ] P4-SECURITY-03: Transport Security
+  Add explicit SSL/TLS configuration (`sslmode=require/verify-full`)
+  Verify certificate validation logic
+- [ ] P4-SECURITY-04: FFI Boundary Safety
+  Audit all Rust panic points (unwrap/expect)
+  Ensure all panics are caught and converted to Python Exceptions
+- [ ] P4-SECURITY-05: Sensitive Data Handling
+  Implement log redaction for sensitive query parameters
+  Review error messages for information leakage
+- [ ] P4-SECURITY-06: Supply Chain Security
+  Run `cargo audit` and fix vulnerabilities
+  Pin dependency versions
 
 ---
 
@@ -358,6 +379,29 @@ Atomic, testable tasks organized by priority and component.
   - Result: 3-level nesting works
 - [x] P3-EAGER-18: Benchmark: eager vs lazy for 100 rows (2025-12-29)
   - Result: Eager loading ≥10x faster
+
+### [x] P3-CASCADE: Cascade Delete Operations (2025-12-30)
+
+**Result**: Implemented cascade delete with BackRef and CascadeRule support
+
+**Features**:
+- CascadeRule enum (Cascade, Restrict, SetNull, SetDefault, NoAction)
+- BackRef struct for reverse foreign key relationships
+- delete_with_cascade() - handles all cascade rules
+- delete_checked() - checks RESTRICT constraints only
+- get_backreferences() - introspects reverse FK relations
+- 9 integration tests passing
+
+**Files Modified**:
+- `crates/data-bridge-postgres/src/schema.rs` - CascadeRule, BackRef structs
+- `crates/data-bridge-postgres/src/row.rs` - delete_with_cascade, delete_checked
+- `crates/data-bridge/src/postgres.rs` - PyO3 bindings
+- `python/data_bridge/postgres/connection.py` - Python wrappers
+- `tests/postgres/integration/test_cascade_delete.py` - 9 tests
+
+**Remaining Tasks** (moved to Python API section):
+- BackReference[T] descriptor class
+- on_delete/on_update parameters for Column()
 
 ---
 
