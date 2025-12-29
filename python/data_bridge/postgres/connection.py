@@ -188,6 +188,58 @@ async def execute(
     return await _engine.execute(sql, params)
 
 
+async def insert_one(
+    table: str,
+    document: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Insert a single document into a table.
+
+    Args:
+        table: Table name
+        document: Document data (column -> value mapping)
+
+    Returns:
+        Inserted document with all columns (including generated id)
+
+    Example:
+        >>> result = await insert_one("users", {"name": "Alice", "age": 30})
+        >>> print(result["id"])  # Auto-generated ID
+
+    Raises:
+        RuntimeError: If PostgreSQL engine not available or insert fails
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.insert_one(table, document)
+
+
+async def insert_many(
+    table: str,
+    documents: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Insert multiple documents into a table.
+
+    Args:
+        table: Table name
+        documents: List of documents to insert
+
+    Returns:
+        List of inserted documents with all columns
+
+    Example:
+        >>> results = await insert_many("users", [
+        ...     {"name": "Alice", "age": 30},
+        ...     {"name": "Bob", "age": 25}
+        ... ])
+
+    Raises:
+        RuntimeError: If PostgreSQL engine not available or insert fails
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.insert_many(table, documents)
+
+
 async def upsert_one(
     table: str,
     document: Dict[str, Any],

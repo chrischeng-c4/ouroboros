@@ -3,9 +3,9 @@
 //! This module provides Python bindings for PostgreSQL operations using PyO3.
 //! All SQL serialization/deserialization happens in Rust for maximum performance.
 
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -126,48 +126,115 @@ fn py_dict_to_extracted_values(
 }
 
 /// Converts Python value to ExtractedValue
+///
+/// Optimized to check Python type name first, avoiding sequential type extractions.
+/// This reduces overhead by jumping directly to the correct type extraction.
 fn py_value_to_extracted(
     py: Python<'_>,
     value: &Bound<'_, PyAny>,
 ) -> PyResult<data_bridge_postgres::ExtractedValue> {
     use data_bridge_postgres::ExtractedValue;
 
+    // Fast path: check None first (very common)
     if value.is_none() {
-        Ok(ExtractedValue::Null)
-    } else if let Ok(b) = value.extract::<bool>() {
-        Ok(ExtractedValue::Bool(b))
-    } else if let Ok(i) = value.extract::<i64>() {
-        Ok(ExtractedValue::BigInt(i))
-    } else if let Ok(i) = value.extract::<i32>() {
-        Ok(ExtractedValue::Int(i))
-    } else if let Ok(i) = value.extract::<i16>() {
-        Ok(ExtractedValue::SmallInt(i))
-    } else if let Ok(f) = value.extract::<f64>() {
-        Ok(ExtractedValue::Double(f))
-    } else if let Ok(f) = value.extract::<f32>() {
-        Ok(ExtractedValue::Float(f))
-    } else if let Ok(s) = value.extract::<String>() {
-        Ok(ExtractedValue::String(s))
-    } else if let Ok(bytes) = value.extract::<Vec<u8>>() {
-        Ok(ExtractedValue::Bytes(bytes))
-    } else if let Ok(list) = value.downcast::<PyList>() {
-        let mut vec = Vec::new();
-        for item in list.iter() {
-            vec.push(py_value_to_extracted(py, &item)?);
+        return Ok(ExtractedValue::Null);
+    }
+
+    // Get Python type name once - much faster than multiple failed extractions
+    let type_name = value.get_type().name()?;
+
+    match type_name.to_cow()?.as_ref() {
+        // Most common types first
+        "int" => {
+            // Try i64 first (most common), then i32, then i16
+            if let Ok(i) = value.extract::<i64>() {
+                Ok(ExtractedValue::BigInt(i))
+            } else if let Ok(i) = value.extract::<i32>() {
+                Ok(ExtractedValue::Int(i))
+            } else if let Ok(i) = value.extract::<i16>() {
+                Ok(ExtractedValue::SmallInt(i))
+            } else {
+                Err(PyTypeError::new_err("Integer out of range"))
+            }
         }
-        Ok(ExtractedValue::Array(vec))
-    } else if let Ok(dict) = value.downcast::<PyDict>() {
-        let values = py_dict_to_extracted_values(py, dict)?;
-        Ok(ExtractedValue::Json(serde_json::json!(
-            values.into_iter()
-                .map(|(k, v)| (k, extracted_to_json(&v)))
-                .collect::<serde_json::Map<String, serde_json::Value>>()
-        )))
-    } else {
-        Err(PyValueError::new_err(format!(
-            "Unsupported Python type for PostgreSQL: {}",
-            value.get_type().name()?
-        )))
+        "str" => {
+            let s = value.extract::<String>()?;
+            Ok(ExtractedValue::String(s))
+        }
+        "bool" => {
+            let b = value.extract::<bool>()?;
+            Ok(ExtractedValue::Bool(b))
+        }
+        "float" => {
+            // Try f64 first (more common), then f32
+            if let Ok(f) = value.extract::<f64>() {
+                Ok(ExtractedValue::Double(f))
+            } else {
+                let f = value.extract::<f32>()?;
+                Ok(ExtractedValue::Float(f))
+            }
+        }
+        "bytes" | "bytearray" => {
+            let bytes = value.extract::<Vec<u8>>()?;
+            Ok(ExtractedValue::Bytes(bytes))
+        }
+        "list" | "tuple" => {
+            // Handle both lists and tuples by converting to list
+            let list = if let Ok(l) = value.downcast::<PyList>() {
+                l.clone()
+            } else if let Ok(t) = value.downcast::<PyTuple>() {
+                t.to_list()
+            } else {
+                return Err(PyTypeError::new_err("Expected list or tuple"));
+            };
+
+            let mut vec = Vec::with_capacity(list.len());
+            for item in list.iter() {
+                vec.push(py_value_to_extracted(py, &item)?);
+            }
+            Ok(ExtractedValue::Array(vec))
+        }
+        "dict" => {
+            let dict = value.downcast::<PyDict>()?;
+            let values = py_dict_to_extracted_values(py, dict)?;
+            Ok(ExtractedValue::Json(serde_json::json!(
+                values.into_iter()
+                    .map(|(k, v)| (k, extracted_to_json(&v)))
+                    .collect::<serde_json::Map<String, serde_json::Value>>()
+            )))
+        }
+        "NoneType" => Ok(ExtractedValue::Null),
+        "datetime" => {
+            // Handle datetime by converting to string representation
+            let s = value.str()?.to_string();
+            Ok(ExtractedValue::String(s))
+        }
+        "date" => {
+            let s = value.str()?.to_string();
+            Ok(ExtractedValue::String(s))
+        }
+        "UUID" | "uuid" => {
+            let s = value.str()?.to_string();
+            Ok(ExtractedValue::String(s))
+        }
+        "Decimal" => {
+            let s = value.str()?.to_string();
+            Ok(ExtractedValue::String(s))
+        }
+        _ => {
+            // Fallback: try common extractions for custom types
+            if let Ok(s) = value.extract::<String>() {
+                Ok(ExtractedValue::String(s))
+            } else if let Ok(i) = value.extract::<i64>() {
+                Ok(ExtractedValue::BigInt(i))
+            } else if let Ok(f) = value.extract::<f64>() {
+                Ok(ExtractedValue::Double(f))
+            } else {
+                // Last resort: convert to string representation
+                let s = value.str()?.to_string();
+                Ok(ExtractedValue::String(s))
+            }
+        }
     }
 }
 

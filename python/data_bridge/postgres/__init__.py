@@ -5,6 +5,7 @@ from .columns import Column, ColumnProxy, ForeignKeyProxy
 from .query import QueryBuilder
 from .connection import (
     init, close, is_connected, execute,
+    insert_one, insert_many,
     upsert_one, upsert_many,
     list_tables, table_exists, get_columns, get_indexes, get_foreign_keys, inspect_table,
     find_by_foreign_key,
@@ -29,6 +30,8 @@ __all__ = [
     "is_connected",
     "execute",
     # CRUD Operations
+    "insert_one",
+    "insert_many",
     "upsert_one",
     "upsert_many",
     # Schema Introspection
