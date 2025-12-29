@@ -13,7 +13,7 @@ from .connection import (
     migration_rollback, migration_create
 )
 from .transactions import pg_transaction, Transaction
-from .migrations import Migration, run_migrations, get_migration_status
+from .migrations import Migration, run_migrations, get_migration_status, autogenerate_migration
 
 __all__ = [
     # Base class
@@ -56,4 +56,5 @@ __all__ = [
     "Migration",
     "run_migrations",
     "get_migration_status",
+    "autogenerate_migration",
 ]

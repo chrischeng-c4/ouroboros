@@ -451,7 +451,7 @@ impl QueryBuilder {
 
         let placeholders: Vec<String> = (1..=values.len()).map(|i| format!("${}", i)).collect();
         sql.push_str(&placeholders.join(", "));
-        sql.push_str(")");
+        sql.push(')');
 
         // Build ON CONFLICT clause
         sql.push_str(" ON CONFLICT (");

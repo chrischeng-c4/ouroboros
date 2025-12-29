@@ -416,9 +416,73 @@ async def get_migration_status(
     return status
 
 
+def autogenerate_migration(
+    current_tables: List[Dict[str, Any]],
+    desired_tables: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Auto-generate migration SQL from schema diff.
+
+    Compares current database schema with desired schema and generates
+    UP and DOWN SQL statements to migrate between them.
+
+    Args:
+        current_tables: List of current table dictionaries (from introspection)
+        desired_tables: List of desired table dictionaries (from Table classes)
+
+    Returns:
+        Dictionary with:
+        - 'up': SQL for forward migration
+        - 'down': SQL for rollback migration
+        - 'has_changes': Boolean indicating if there are changes
+
+    Example:
+        >>> # Get current schema from introspection
+        >>> current = await inspect_table("users")
+        >>>
+        >>> # Define desired schema
+        >>> desired = [{
+        ...     "name": "users",
+        ...     "schema": "public",
+        ...     "columns": [
+        ...         {
+        ...             "name": "id",
+        ...             "data_type": "SERIAL",
+        ...             "nullable": False,
+        ...             "default": None,
+        ...             "is_primary_key": True,
+        ...             "is_unique": False,
+        ...         },
+        ...         {
+        ...             "name": "email",
+        ...             "data_type": "VARCHAR",
+        ...             "nullable": False,
+        ...             "default": None,
+        ...             "is_primary_key": False,
+        ...             "is_unique": True,
+        ...         }
+        ...     ],
+        ...     "indexes": [],
+        ...     "foreign_keys": [],
+        ... }]
+        >>>
+        >>> # Generate migration
+        >>> migration = autogenerate_migration([current], desired)
+        >>> if migration['has_changes']:
+        ...     print(migration['up'])
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return _engine.autogenerate_migration(current_tables, desired_tables)
+
+
 __all__ = [
     "Migration",
     "MigrationHistory",
     "run_migrations",
     "get_migration_status",
+    "autogenerate_migration",
 ]

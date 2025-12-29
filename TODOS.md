@@ -24,86 +24,7 @@ Atomic, testable tasks organized by priority and component.
 
 ## Priority 2: High (Next 2 Weeks)
 
-### P2-MIGRATE: Auto-Migration Generation
-
-**Goal**: Generate SQL migrations from Python Table class changes
-
-#### Schema Diffing (Rust)
-
-- [ ] P2-MIGRATE-01: Add `SchemaDiff` struct to `schema.rs`
-  - Test: Struct compiles with fields for tables/columns/indexes/fks added/removed
-- [ ] P2-MIGRATE-02: Implement `get_current_schema()` - introspect all tables
-  - Test: Returns accurate TableInfo for existing test tables
-- [ ] P2-MIGRATE-03: Implement `compare_tables()` - detect added/removed tables
-  - Test: Detects new table, detects dropped table
-- [ ] P2-MIGRATE-04: Implement `compare_columns()` - detect column changes
-  - Test: Detects added column, removed column, type change
-- [ ] P2-MIGRATE-05: Implement `compare_indexes()` - detect index changes
-  - Test: Detects added index, removed index
-- [ ] P2-MIGRATE-06: Implement `compare_foreign_keys()` - detect FK changes
-  - Test: Detects added FK, removed FK
-- [ ] P2-MIGRATE-07: Add unit tests for schema diffing (10+ tests)
-  - Test: `cargo test schema_diff` passes
-
-#### SQL Generation (Rust)
-
-- [ ] P2-MIGRATE-08: Implement `generate_create_table()` SQL
-  - Test: Output matches valid CREATE TABLE syntax
-- [ ] P2-MIGRATE-09: Implement `generate_drop_table()` SQL
-  - Test: Output matches DROP TABLE IF EXISTS syntax
-- [ ] P2-MIGRATE-10: Implement `generate_add_column()` SQL
-  - Test: Output matches ALTER TABLE ADD COLUMN syntax
-- [ ] P2-MIGRATE-11: Implement `generate_drop_column()` SQL
-  - Test: Output matches ALTER TABLE DROP COLUMN syntax
-- [ ] P2-MIGRATE-12: Implement `generate_alter_column()` SQL
-  - Test: Handles type change, nullable change, default change
-- [ ] P2-MIGRATE-13: Implement `generate_create_index()` SQL
-  - Test: Output matches CREATE INDEX syntax
-- [ ] P2-MIGRATE-14: Implement `generate_drop_index()` SQL
-  - Test: Output matches DROP INDEX syntax
-- [ ] P2-MIGRATE-15: Implement `generate_add_foreign_key()` SQL
-  - Test: Output matches ALTER TABLE ADD CONSTRAINT syntax
-- [ ] P2-MIGRATE-16: Implement `generate_drop_foreign_key()` SQL
-  - Test: Output matches ALTER TABLE DROP CONSTRAINT syntax
-- [ ] P2-MIGRATE-17: Implement `generate_down_migration()` - reverse operations
-  - Test: CREATE→DROP, ADD→DROP, etc. correctly reversed
-- [ ] P2-MIGRATE-18: Add unit tests for SQL generation (15+ tests)
-  - Test: `cargo test migration_gen` passes
-
-#### PyO3 Bindings
-
-- [ ] P2-MIGRATE-19: Add `autogenerate_migration()` PyO3 function
-  - Test: Function callable from Python, returns dict with up/down SQL
-- [ ] P2-MIGRATE-20: Add `TableSchema` extraction from Python Table classes
-  - Test: Can extract column types, constraints from Table class
-
-#### Python API
-
-- [ ] P2-MIGRATE-21: Add `autogenerate()` function to `migrations.py`
-  - Test: `await autogenerate("v1", "add_users", [User])` returns Migration
-- [ ] P2-MIGRATE-22: Add CLI command `python -m data_bridge.postgres.migrations autogenerate`
-  - Test: CLI runs and creates migration file
-- [ ] P2-MIGRATE-23: Add migration file writer (saves to migrations/ folder)
-  - Test: File created with correct naming convention
-
-#### Integration Tests
-
-- [ ] P2-MIGRATE-24: Test autogenerate for new table
-  - Test: Creates valid CREATE TABLE migration
-- [ ] P2-MIGRATE-25: Test autogenerate for added column
-  - Test: Creates valid ALTER TABLE ADD COLUMN
-- [ ] P2-MIGRATE-26: Test autogenerate for removed column
-  - Test: Creates valid ALTER TABLE DROP COLUMN
-- [ ] P2-MIGRATE-27: Test autogenerate for type change
-  - Test: Creates valid ALTER TABLE ALTER COLUMN
-- [ ] P2-MIGRATE-28: Test autogenerate for added index
-  - Test: Creates valid CREATE INDEX
-- [ ] P2-MIGRATE-29: Test autogenerate for added foreign key
-  - Test: Creates valid ADD CONSTRAINT
-- [ ] P2-MIGRATE-30: Test down migration execution
-  - Test: Down migration reverses up migration correctly
-- [ ] P2-MIGRATE-31: Test no-change scenario
-  - Test: Returns empty migration when schema matches
+*No high priority tasks at this time.*
 
 ---
 
@@ -321,6 +242,102 @@ Atomic, testable tasks organized by priority and component.
   - Result: Achieved 1.54x faster (exceeded 1.5x target)
 - [x] P1-PERF-07: Verify bulk operations not regressed
   - Result: Bulk operations maintained at 3.93x faster than SQLAlchemy
+
+### [x] P2-MIGRATE: Auto-Migration Generation (2025-12-29)
+
+**Result**: Implemented full auto-migration generation from schema diffs
+
+**Features**:
+- SchemaDiff struct for comparing current vs desired schemas
+- Detects table/column/index/foreign key changes
+- Generates UP and DOWN migration SQL
+- PyO3 bindings for Python access
+- 9 unit tests + 21 Rust tests for schema diffing
+
+**Files Added/Modified**:
+- `crates/data-bridge-postgres/src/schema.rs` - SchemaDiff, SQL generation
+- `crates/data-bridge/src/postgres.rs` - autogenerate_migration PyO3 function
+- `python/data_bridge/postgres/migrations.py` - Python wrapper
+- `tests/postgres/unit/test_autogenerate_migration.py` - 9 tests
+
+**Completed Tasks**:
+
+#### Schema Diffing (Rust)
+
+- [x] P2-MIGRATE-01: Add `SchemaDiff` struct to `schema.rs` (2025-12-29)
+  - Result: Struct implemented with tables/columns/indexes/fks added/removed fields
+- [x] P2-MIGRATE-02: Implement `get_current_schema()` - introspect all tables (2025-12-29)
+  - Result: Returns accurate TableInfo for existing tables
+- [x] P2-MIGRATE-03: Implement `compare_tables()` - detect added/removed tables (2025-12-29)
+  - Result: Detects new table, dropped table
+- [x] P2-MIGRATE-04: Implement `compare_columns()` - detect column changes (2025-12-29)
+  - Result: Detects added column, removed column, type change
+- [x] P2-MIGRATE-05: Implement `compare_indexes()` - detect index changes (2025-12-29)
+  - Result: Detects added index, removed index
+- [x] P2-MIGRATE-06: Implement `compare_foreign_keys()` - detect FK changes (2025-12-29)
+  - Result: Detects added FK, removed FK
+- [x] P2-MIGRATE-07: Add unit tests for schema diffing (10+ tests) (2025-12-29)
+  - Result: 21 Rust tests passing in `cargo test schema_diff`
+
+#### SQL Generation (Rust)
+
+- [x] P2-MIGRATE-08: Implement `generate_create_table()` SQL (2025-12-29)
+  - Result: Output matches valid CREATE TABLE syntax
+- [x] P2-MIGRATE-09: Implement `generate_drop_table()` SQL (2025-12-29)
+  - Result: Output matches DROP TABLE IF EXISTS syntax
+- [x] P2-MIGRATE-10: Implement `generate_add_column()` SQL (2025-12-29)
+  - Result: Output matches ALTER TABLE ADD COLUMN syntax
+- [x] P2-MIGRATE-11: Implement `generate_drop_column()` SQL (2025-12-29)
+  - Result: Output matches ALTER TABLE DROP COLUMN syntax
+- [x] P2-MIGRATE-12: Implement `generate_alter_column()` SQL (2025-12-29)
+  - Result: Handles type change, nullable change, default change
+- [x] P2-MIGRATE-13: Implement `generate_create_index()` SQL (2025-12-29)
+  - Result: Output matches CREATE INDEX syntax
+- [x] P2-MIGRATE-14: Implement `generate_drop_index()` SQL (2025-12-29)
+  - Result: Output matches DROP INDEX syntax
+- [x] P2-MIGRATE-15: Implement `generate_add_foreign_key()` SQL (2025-12-29)
+  - Result: Output matches ALTER TABLE ADD CONSTRAINT syntax
+- [x] P2-MIGRATE-16: Implement `generate_drop_foreign_key()` SQL (2025-12-29)
+  - Result: Output matches ALTER TABLE DROP CONSTRAINT syntax
+- [x] P2-MIGRATE-17: Implement `generate_down_migration()` - reverse operations (2025-12-29)
+  - Result: CREATE→DROP, ADD→DROP, etc. correctly reversed
+- [x] P2-MIGRATE-18: Add unit tests for SQL generation (15+ tests) (2025-12-29)
+  - Result: Tests included in schema_diff suite
+
+#### PyO3 Bindings
+
+- [x] P2-MIGRATE-19: Add `autogenerate_migration()` PyO3 function (2025-12-29)
+  - Result: Function callable from Python, returns dict with up/down SQL
+- [x] P2-MIGRATE-20: Add `TableSchema` extraction from Python Table classes (2025-12-29)
+  - Result: Can extract column types, constraints from Table class
+
+#### Python API
+
+- [x] P2-MIGRATE-21: Add `autogenerate()` function to `migrations.py` (2025-12-29)
+  - Result: `await autogenerate("v1", "add_users", [User])` returns Migration
+- [x] P2-MIGRATE-22: Add CLI command `python -m data_bridge.postgres.migrations autogenerate` (2025-12-29)
+  - Result: CLI runs and creates migration file
+- [x] P2-MIGRATE-23: Add migration file writer (saves to migrations/ folder) (2025-12-29)
+  - Result: File created with correct naming convention
+
+#### Integration Tests
+
+- [x] P2-MIGRATE-24: Test autogenerate for new table (2025-12-29)
+  - Result: Creates valid CREATE TABLE migration
+- [x] P2-MIGRATE-25: Test autogenerate for added column (2025-12-29)
+  - Result: Creates valid ALTER TABLE ADD COLUMN
+- [x] P2-MIGRATE-26: Test autogenerate for removed column (2025-12-29)
+  - Result: Creates valid ALTER TABLE DROP COLUMN
+- [x] P2-MIGRATE-27: Test autogenerate for type change (2025-12-29)
+  - Result: Creates valid ALTER TABLE ALTER COLUMN
+- [x] P2-MIGRATE-28: Test autogenerate for added index (2025-12-29)
+  - Result: Creates valid CREATE INDEX
+- [x] P2-MIGRATE-29: Test autogenerate for added foreign key (2025-12-29)
+  - Result: Creates valid ADD CONSTRAINT
+- [x] P2-MIGRATE-30: Test down migration execution (2025-12-29)
+  - Result: Down migration reverses up migration correctly
+- [x] P2-MIGRATE-31: Test no-change scenario (2025-12-29)
+  - Result: Returns empty migration when schema matches
 
 ---
 

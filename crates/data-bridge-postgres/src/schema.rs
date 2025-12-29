@@ -50,6 +50,68 @@ pub enum ColumnType {
     Custom(String),
 }
 
+impl ColumnType {
+    /// Parse PostgreSQL type string into ColumnType enum (simple version without metadata)
+    pub fn parse(type_str: &str) -> Self {
+        match type_str.to_lowercase().as_str() {
+            "smallint" => ColumnType::SmallInt,
+            "integer" | "int" => ColumnType::Integer,
+            "bigint" => ColumnType::BigInt,
+            "real" => ColumnType::Real,
+            "double precision" => ColumnType::DoublePrecision,
+            "numeric" | "decimal" => ColumnType::Numeric(None, None),
+            "character varying" | "varchar" => ColumnType::Varchar(None),
+            "text" => ColumnType::Text,
+            "boolean" | "bool" => ColumnType::Boolean,
+            "bytea" => ColumnType::Bytea,
+            "uuid" => ColumnType::Uuid,
+            "date" => ColumnType::Date,
+            "time" | "time without time zone" => ColumnType::Time,
+            "timestamp" | "timestamp without time zone" => ColumnType::Timestamp,
+            "timestamp with time zone" | "timestamptz" => ColumnType::TimestampTz,
+            "json" => ColumnType::Json,
+            "jsonb" => ColumnType::Jsonb,
+            _ => ColumnType::Custom(type_str.to_string()),
+        }
+    }
+
+    /// Convert to PostgreSQL type string
+    pub fn to_sql(&self) -> String {
+        match self {
+            ColumnType::SmallInt => "SMALLINT".to_string(),
+            ColumnType::Integer => "INTEGER".to_string(),
+            ColumnType::BigInt => "BIGINT".to_string(),
+            ColumnType::Real => "REAL".to_string(),
+            ColumnType::DoublePrecision => "DOUBLE PRECISION".to_string(),
+            ColumnType::Numeric(precision, scale) => {
+                match (precision, scale) {
+                    (Some(p), Some(s)) => format!("NUMERIC({}, {})", p, s),
+                    (Some(p), None) => format!("NUMERIC({})", p),
+                    _ => "NUMERIC".to_string(),
+                }
+            }
+            ColumnType::Varchar(len) => {
+                match len {
+                    Some(l) => format!("VARCHAR({})", l),
+                    None => "VARCHAR".to_string(),
+                }
+            }
+            ColumnType::Text => "TEXT".to_string(),
+            ColumnType::Boolean => "BOOLEAN".to_string(),
+            ColumnType::Bytea => "BYTEA".to_string(),
+            ColumnType::Uuid => "UUID".to_string(),
+            ColumnType::Date => "DATE".to_string(),
+            ColumnType::Time => "TIME".to_string(),
+            ColumnType::Timestamp => "TIMESTAMP".to_string(),
+            ColumnType::TimestampTz => "TIMESTAMPTZ".to_string(),
+            ColumnType::Json => "JSON".to_string(),
+            ColumnType::Jsonb => "JSONB".to_string(),
+            ColumnType::Array(inner) => format!("{}[]", inner.to_sql()),
+            ColumnType::Custom(name) => name.clone(),
+        }
+    }
+}
+
 /// Represents a column in a table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnInfo {
@@ -110,6 +172,451 @@ pub struct TableInfo {
     pub indexes: Vec<IndexInfo>,
     /// Foreign keys
     pub foreign_keys: Vec<ForeignKeyInfo>,
+}
+
+/// Represents a change to a column
+#[derive(Debug, Clone)]
+pub enum ColumnChange {
+    Added(ColumnInfo),
+    Removed(ColumnInfo),
+    TypeChanged { old: ColumnInfo, new: ColumnInfo },
+    NullabilityChanged { old: ColumnInfo, new: ColumnInfo },
+    DefaultChanged { old: ColumnInfo, new: ColumnInfo },
+}
+
+/// Represents a change to an index
+#[derive(Debug, Clone)]
+pub enum IndexChange {
+    Added(IndexInfo),
+    Removed(IndexInfo),
+}
+
+/// Represents a change to a foreign key
+#[derive(Debug, Clone)]
+pub enum ForeignKeyChange {
+    Added(ForeignKeyInfo),
+    Removed(ForeignKeyInfo),
+}
+
+/// Represents a change to a table
+#[derive(Debug, Clone)]
+pub enum TableChange {
+    Created(TableInfo),
+    Dropped(String),  // table name
+    Altered {
+        table_name: String,
+        column_changes: Vec<ColumnChange>,
+        index_changes: Vec<IndexChange>,
+        foreign_key_changes: Vec<ForeignKeyChange>,
+    },
+}
+
+/// Represents the difference between two schemas
+#[derive(Debug, Clone, Default)]
+pub struct SchemaDiff {
+    pub changes: Vec<TableChange>,
+}
+
+impl SchemaDiff {
+    pub fn new() -> Self {
+        Self { changes: Vec::new() }
+    }
+
+    /// Compare two sets of table info and generate the diff
+    pub fn compare(current: &[TableInfo], desired: &[TableInfo]) -> Self {
+        let mut diff = SchemaDiff::new();
+
+        let current_tables: std::collections::HashMap<&str, &TableInfo> =
+            current.iter().map(|t| (t.name.as_str(), t)).collect();
+        let desired_tables: std::collections::HashMap<&str, &TableInfo> =
+            desired.iter().map(|t| (t.name.as_str(), t)).collect();
+
+        // Find dropped tables
+        for name in current_tables.keys() {
+            if !desired_tables.contains_key(name) {
+                diff.changes.push(TableChange::Dropped(name.to_string()));
+            }
+        }
+
+        // Find created and altered tables
+        for (name, desired_table) in &desired_tables {
+            match current_tables.get(name) {
+                None => {
+                    // New table
+                    diff.changes.push(TableChange::Created((*desired_table).clone()));
+                }
+                Some(current_table) => {
+                    // Check for alterations
+                    let column_changes = Self::compare_columns(&current_table.columns, &desired_table.columns);
+                    let index_changes = Self::compare_indexes(&current_table.indexes, &desired_table.indexes);
+                    let fk_changes = Self::compare_foreign_keys(&current_table.foreign_keys, &desired_table.foreign_keys);
+
+                    if !column_changes.is_empty() || !index_changes.is_empty() || !fk_changes.is_empty() {
+                        diff.changes.push(TableChange::Altered {
+                            table_name: name.to_string(),
+                            column_changes,
+                            index_changes,
+                            foreign_key_changes: fk_changes,
+                        });
+                    }
+                }
+            }
+        }
+
+        diff
+    }
+
+    fn compare_columns(current: &[ColumnInfo], desired: &[ColumnInfo]) -> Vec<ColumnChange> {
+        let mut changes = Vec::new();
+
+        let current_cols: std::collections::HashMap<&str, &ColumnInfo> =
+            current.iter().map(|c| (c.name.as_str(), c)).collect();
+        let desired_cols: std::collections::HashMap<&str, &ColumnInfo> =
+            desired.iter().map(|c| (c.name.as_str(), c)).collect();
+
+        // Removed columns
+        for (name, col) in &current_cols {
+            if !desired_cols.contains_key(name) {
+                changes.push(ColumnChange::Removed((*col).clone()));
+            }
+        }
+
+        // Added or modified columns
+        for (name, desired_col) in &desired_cols {
+            match current_cols.get(name) {
+                None => changes.push(ColumnChange::Added((*desired_col).clone())),
+                Some(current_col) => {
+                    // Check for type change
+                    if current_col.data_type != desired_col.data_type {
+                        changes.push(ColumnChange::TypeChanged {
+                            old: (*current_col).clone(),
+                            new: (*desired_col).clone(),
+                        });
+                    } else if current_col.nullable != desired_col.nullable {
+                        changes.push(ColumnChange::NullabilityChanged {
+                            old: (*current_col).clone(),
+                            new: (*desired_col).clone(),
+                        });
+                    } else if current_col.default != desired_col.default {
+                        changes.push(ColumnChange::DefaultChanged {
+                            old: (*current_col).clone(),
+                            new: (*desired_col).clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        changes
+    }
+
+    fn compare_indexes(current: &[IndexInfo], desired: &[IndexInfo]) -> Vec<IndexChange> {
+        let mut changes = Vec::new();
+
+        let current_idx: std::collections::HashMap<&str, &IndexInfo> =
+            current.iter().map(|i| (i.name.as_str(), i)).collect();
+        let desired_idx: std::collections::HashMap<&str, &IndexInfo> =
+            desired.iter().map(|i| (i.name.as_str(), i)).collect();
+
+        for (name, idx) in &current_idx {
+            if !desired_idx.contains_key(name) {
+                changes.push(IndexChange::Removed((*idx).clone()));
+            }
+        }
+
+        for (name, idx) in &desired_idx {
+            if !current_idx.contains_key(name) {
+                changes.push(IndexChange::Added((*idx).clone()));
+            }
+        }
+
+        changes
+    }
+
+    fn compare_foreign_keys(current: &[ForeignKeyInfo], desired: &[ForeignKeyInfo]) -> Vec<ForeignKeyChange> {
+        let mut changes = Vec::new();
+
+        let current_fks: std::collections::HashMap<&str, &ForeignKeyInfo> =
+            current.iter().map(|f| (f.name.as_str(), f)).collect();
+        let desired_fks: std::collections::HashMap<&str, &ForeignKeyInfo> =
+            desired.iter().map(|f| (f.name.as_str(), f)).collect();
+
+        for (name, fk) in &current_fks {
+            if !desired_fks.contains_key(name) {
+                changes.push(ForeignKeyChange::Removed((*fk).clone()));
+            }
+        }
+
+        for (name, fk) in &desired_fks {
+            if !current_fks.contains_key(name) {
+                changes.push(ForeignKeyChange::Added((*fk).clone()));
+            }
+        }
+
+        changes
+    }
+
+    /// Check if there are any changes
+    pub fn is_empty(&self) -> bool {
+        self.changes.is_empty()
+    }
+
+    /// Generate the UP migration SQL
+    pub fn generate_up_sql(&self) -> String {
+        let mut statements = Vec::new();
+
+        for change in &self.changes {
+            match change {
+                TableChange::Created(table) => {
+                    statements.push(Self::generate_create_table(table));
+                    // Add indexes after table creation
+                    for index in &table.indexes {
+                        if !index.is_unique || !table.columns.iter().any(|c| c.is_primary_key && index.columns.contains(&c.name)) {
+                            statements.push(Self::generate_create_index(&table.name, index));
+                        }
+                    }
+                    // Add foreign keys
+                    for fk in &table.foreign_keys {
+                        statements.push(Self::generate_add_foreign_key(&table.name, fk));
+                    }
+                }
+                TableChange::Dropped(name) => {
+                    statements.push(format!("DROP TABLE IF EXISTS \"{}\" CASCADE;", name));
+                }
+                TableChange::Altered { table_name, column_changes, index_changes, foreign_key_changes } => {
+                    for change in column_changes {
+                        statements.push(Self::generate_column_change_sql(table_name, change));
+                    }
+                    for change in index_changes {
+                        statements.push(Self::generate_index_change_sql(table_name, change));
+                    }
+                    for change in foreign_key_changes {
+                        statements.push(Self::generate_fk_change_sql(table_name, change));
+                    }
+                }
+            }
+        }
+
+        statements.join("\n\n")
+    }
+
+    /// Generate the DOWN migration SQL (reverse of UP)
+    pub fn generate_down_sql(&self) -> String {
+        let mut statements = Vec::new();
+
+        // Process in reverse order
+        for change in self.changes.iter().rev() {
+            match change {
+                TableChange::Created(table) => {
+                    // Reverse: drop the table
+                    statements.push(format!("DROP TABLE IF EXISTS \"{}\" CASCADE;", table.name));
+                }
+                TableChange::Dropped(name) => {
+                    // Reverse: would need to recreate, but we don't have the info
+                    // Add a comment as placeholder
+                    statements.push(format!("-- Cannot auto-generate: recreate table \"{}\"", name));
+                }
+                TableChange::Altered { table_name, column_changes, index_changes, foreign_key_changes } => {
+                    // Reverse foreign key changes
+                    for change in foreign_key_changes.iter().rev() {
+                        statements.push(Self::generate_fk_change_sql_reverse(table_name, change));
+                    }
+                    // Reverse index changes
+                    for change in index_changes.iter().rev() {
+                        statements.push(Self::generate_index_change_sql_reverse(table_name, change));
+                    }
+                    // Reverse column changes
+                    for change in column_changes.iter().rev() {
+                        statements.push(Self::generate_column_change_sql_reverse(table_name, change));
+                    }
+                }
+            }
+        }
+
+        statements.join("\n\n")
+    }
+
+    fn generate_create_table(table: &TableInfo) -> String {
+        let mut parts = Vec::new();
+
+        for col in &table.columns {
+            let mut col_def = format!("    \"{}\" {}", col.name, col.data_type.to_sql());
+
+            if col.is_primary_key {
+                col_def.push_str(" PRIMARY KEY");
+            }
+            if !col.nullable && !col.is_primary_key {
+                col_def.push_str(" NOT NULL");
+            }
+            if col.is_unique && !col.is_primary_key {
+                col_def.push_str(" UNIQUE");
+            }
+            if let Some(ref default) = col.default {
+                col_def.push_str(&format!(" DEFAULT {}", default));
+            }
+
+            parts.push(col_def);
+        }
+
+        format!(
+            "CREATE TABLE \"{}\" (\n{}\n);",
+            table.name,
+            parts.join(",\n")
+        )
+    }
+
+    fn generate_create_index(table_name: &str, index: &IndexInfo) -> String {
+        let unique = if index.is_unique { "UNIQUE " } else { "" };
+        let columns: Vec<String> = index.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+        format!(
+            "CREATE {}INDEX \"{}\" ON \"{}\" ({});",
+            unique,
+            index.name,
+            table_name,
+            columns.join(", ")
+        )
+    }
+
+    fn generate_add_foreign_key(table_name: &str, fk: &ForeignKeyInfo) -> String {
+        let columns: Vec<String> = fk.columns.iter().map(|c| format!("\"{}\"", c)).collect();
+        let ref_columns: Vec<String> = fk.referenced_columns.iter().map(|c| format!("\"{}\"", c)).collect();
+        format!(
+            "ALTER TABLE \"{}\" ADD CONSTRAINT \"{}\" FOREIGN KEY ({}) REFERENCES \"{}\" ({}) ON DELETE {} ON UPDATE {};",
+            table_name,
+            fk.name,
+            columns.join(", "),
+            fk.referenced_table,
+            ref_columns.join(", "),
+            fk.on_delete,
+            fk.on_update
+        )
+    }
+
+    fn generate_column_change_sql(table_name: &str, change: &ColumnChange) -> String {
+        match change {
+            ColumnChange::Added(col) => {
+                let mut sql = format!(
+                    "ALTER TABLE \"{}\" ADD COLUMN \"{}\" {}",
+                    table_name, col.name, col.data_type.to_sql()
+                );
+                if !col.nullable {
+                    sql.push_str(" NOT NULL");
+                }
+                if let Some(ref default) = col.default {
+                    sql.push_str(&format!(" DEFAULT {}", default));
+                }
+                sql.push(';');
+                sql
+            }
+            ColumnChange::Removed(col) => {
+                format!("ALTER TABLE \"{}\" DROP COLUMN \"{}\";", table_name, col.name)
+            }
+            ColumnChange::TypeChanged { new, .. } => {
+                format!(
+                    "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::{};",
+                    table_name, new.name, new.data_type.to_sql(), new.name, new.data_type.to_sql()
+                )
+            }
+            ColumnChange::NullabilityChanged { new, .. } => {
+                if new.nullable {
+                    format!("ALTER TABLE \"{}\" ALTER COLUMN \"{}\" DROP NOT NULL;", table_name, new.name)
+                } else {
+                    format!("ALTER TABLE \"{}\" ALTER COLUMN \"{}\" SET NOT NULL;", table_name, new.name)
+                }
+            }
+            ColumnChange::DefaultChanged { new, .. } => {
+                match &new.default {
+                    Some(default) => format!(
+                        "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" SET DEFAULT {};",
+                        table_name, new.name, default
+                    ),
+                    None => format!(
+                        "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" DROP DEFAULT;",
+                        table_name, new.name
+                    ),
+                }
+            }
+        }
+    }
+
+    fn generate_column_change_sql_reverse(table_name: &str, change: &ColumnChange) -> String {
+        match change {
+            ColumnChange::Added(col) => {
+                format!("ALTER TABLE \"{}\" DROP COLUMN \"{}\";", table_name, col.name)
+            }
+            ColumnChange::Removed(col) => {
+                let mut sql = format!(
+                    "ALTER TABLE \"{}\" ADD COLUMN \"{}\" {}",
+                    table_name, col.name, col.data_type.to_sql()
+                );
+                if !col.nullable {
+                    sql.push_str(" NOT NULL");
+                }
+                if let Some(ref default) = col.default {
+                    sql.push_str(&format!(" DEFAULT {}", default));
+                }
+                sql.push(';');
+                sql
+            }
+            ColumnChange::TypeChanged { old, .. } => {
+                format!(
+                    "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" TYPE {} USING \"{}\"::{};",
+                    table_name, old.name, old.data_type.to_sql(), old.name, old.data_type.to_sql()
+                )
+            }
+            ColumnChange::NullabilityChanged { old, .. } => {
+                if old.nullable {
+                    format!("ALTER TABLE \"{}\" ALTER COLUMN \"{}\" DROP NOT NULL;", table_name, old.name)
+                } else {
+                    format!("ALTER TABLE \"{}\" ALTER COLUMN \"{}\" SET NOT NULL;", table_name, old.name)
+                }
+            }
+            ColumnChange::DefaultChanged { old, .. } => {
+                match &old.default {
+                    Some(default) => format!(
+                        "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" SET DEFAULT {};",
+                        table_name, old.name, default
+                    ),
+                    None => format!(
+                        "ALTER TABLE \"{}\" ALTER COLUMN \"{}\" DROP DEFAULT;",
+                        table_name, old.name
+                    ),
+                }
+            }
+        }
+    }
+
+    fn generate_index_change_sql(table_name: &str, change: &IndexChange) -> String {
+        match change {
+            IndexChange::Added(idx) => Self::generate_create_index(table_name, idx),
+            IndexChange::Removed(idx) => format!("DROP INDEX IF EXISTS \"{}\";", idx.name),
+        }
+    }
+
+    fn generate_index_change_sql_reverse(table_name: &str, change: &IndexChange) -> String {
+        match change {
+            IndexChange::Added(idx) => format!("DROP INDEX IF EXISTS \"{}\";", idx.name),
+            IndexChange::Removed(idx) => Self::generate_create_index(table_name, idx),
+        }
+    }
+
+    fn generate_fk_change_sql(table_name: &str, change: &ForeignKeyChange) -> String {
+        match change {
+            ForeignKeyChange::Added(fk) => Self::generate_add_foreign_key(table_name, fk),
+            ForeignKeyChange::Removed(fk) => {
+                format!("ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\";", table_name, fk.name)
+            }
+        }
+    }
+
+    fn generate_fk_change_sql_reverse(table_name: &str, change: &ForeignKeyChange) -> String {
+        match change {
+            ForeignKeyChange::Added(fk) => {
+                format!("ALTER TABLE \"{}\" DROP CONSTRAINT \"{}\";", table_name, fk.name)
+            }
+            ForeignKeyChange::Removed(fk) => Self::generate_add_foreign_key(table_name, fk),
+        }
+    }
 }
 
 /// Schema introspection utilities.
@@ -402,5 +909,686 @@ impl SchemaInspector {
         }
 
         Ok(foreign_keys)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_column(name: &str, data_type: ColumnType, nullable: bool) -> ColumnInfo {
+        ColumnInfo {
+            name: name.to_string(),
+            data_type,
+            nullable,
+            default: None,
+            is_primary_key: false,
+            is_unique: false,
+        }
+    }
+
+    fn create_test_index(name: &str, columns: Vec<&str>, is_unique: bool) -> IndexInfo {
+        IndexInfo {
+            name: name.to_string(),
+            columns: columns.iter().map(|s| s.to_string()).collect(),
+            is_unique,
+            index_type: "btree".to_string(),
+        }
+    }
+
+    fn create_test_foreign_key(name: &str, columns: Vec<&str>, referenced_table: &str) -> ForeignKeyInfo {
+        ForeignKeyInfo {
+            name: name.to_string(),
+            columns: columns.iter().map(|s| s.to_string()).collect(),
+            referenced_table: referenced_table.to_string(),
+            referenced_columns: vec!["id".to_string()],
+            on_delete: "NO ACTION".to_string(),
+            on_update: "NO ACTION".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_no_changes() {
+        let table1 = TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                create_test_column("id", ColumnType::Integer, false),
+                create_test_column("name", ColumnType::Text, false),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+        };
+
+        let current = vec![table1.clone()];
+        let desired = vec![table1];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert!(diff.is_empty(), "Expected no changes");
+    }
+
+    #[test]
+    fn test_schema_diff_new_table() {
+        let current: Vec<TableInfo> = vec![];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("id", ColumnType::Integer, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Created(table) => {
+                assert_eq!(table.name, "users");
+            }
+            _ => panic!("Expected TableChange::Created"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_dropped_table() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired: Vec<TableInfo> = vec![];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Dropped(name) => {
+                assert_eq!(name, "users");
+            }
+            _ => panic!("Expected TableChange::Dropped"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_added_column() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("id", ColumnType::Integer, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                create_test_column("id", ColumnType::Integer, false),
+                create_test_column("email", ColumnType::Text, false),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { table_name, column_changes, .. } => {
+                assert_eq!(table_name, "users");
+                assert_eq!(column_changes.len(), 1);
+                match &column_changes[0] {
+                    ColumnChange::Added(col) => {
+                        assert_eq!(col.name, "email");
+                    }
+                    _ => panic!("Expected ColumnChange::Added"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_removed_column() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                create_test_column("id", ColumnType::Integer, false),
+                create_test_column("email", ColumnType::Text, false),
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("id", ColumnType::Integer, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { table_name, column_changes, .. } => {
+                assert_eq!(table_name, "users");
+                assert_eq!(column_changes.len(), 1);
+                match &column_changes[0] {
+                    ColumnChange::Removed(col) => {
+                        assert_eq!(col.name, "email");
+                    }
+                    _ => panic!("Expected ColumnChange::Removed"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_type_changed() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("age", ColumnType::SmallInt, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("age", ColumnType::Integer, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { column_changes, .. } => {
+                assert_eq!(column_changes.len(), 1);
+                match &column_changes[0] {
+                    ColumnChange::TypeChanged { old, new } => {
+                        assert_eq!(old.data_type, ColumnType::SmallInt);
+                        assert_eq!(new.data_type, ColumnType::Integer);
+                    }
+                    _ => panic!("Expected ColumnChange::TypeChanged"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_nullability_changed() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("email", ColumnType::Text, true)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![create_test_column("email", ColumnType::Text, false)],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { column_changes, .. } => {
+                assert_eq!(column_changes.len(), 1);
+                match &column_changes[0] {
+                    ColumnChange::NullabilityChanged { old, new } => {
+                        assert!(old.nullable);
+                        assert!(!new.nullable);
+                    }
+                    _ => panic!("Expected ColumnChange::NullabilityChanged"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_added_index() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![create_test_index("idx_email", vec!["email"], true)],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { index_changes, .. } => {
+                assert_eq!(index_changes.len(), 1);
+                match &index_changes[0] {
+                    IndexChange::Added(idx) => {
+                        assert_eq!(idx.name, "idx_email");
+                        assert!(idx.is_unique);
+                    }
+                    _ => panic!("Expected IndexChange::Added"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_removed_index() {
+        let current = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![create_test_index("idx_email", vec!["email"], true)],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { index_changes, .. } => {
+                assert_eq!(index_changes.len(), 1);
+                match &index_changes[0] {
+                    IndexChange::Removed(idx) => {
+                        assert_eq!(idx.name, "idx_email");
+                    }
+                    _ => panic!("Expected IndexChange::Removed"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_added_foreign_key() {
+        let current = vec![TableInfo {
+            name: "posts".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+        }];
+        let desired = vec![TableInfo {
+            name: "posts".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![create_test_foreign_key("fk_author", vec!["author_id"], "users")],
+        }];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+        assert_eq!(diff.changes.len(), 1);
+        match &diff.changes[0] {
+            TableChange::Altered { foreign_key_changes, .. } => {
+                assert_eq!(foreign_key_changes.len(), 1);
+                match &foreign_key_changes[0] {
+                    ForeignKeyChange::Added(fk) => {
+                        assert_eq!(fk.name, "fk_author");
+                        assert_eq!(fk.referenced_table, "users");
+                    }
+                    _ => panic!("Expected ForeignKeyChange::Added"),
+                }
+            }
+            _ => panic!("Expected TableChange::Altered"),
+        }
+    }
+
+    #[test]
+    fn test_schema_diff_complex_changes() {
+        let current = vec![
+            TableInfo {
+                name: "users".to_string(),
+                schema: "public".to_string(),
+                columns: vec![
+                    create_test_column("id", ColumnType::Integer, false),
+                    create_test_column("old_field", ColumnType::Text, true),
+                ],
+                indexes: vec![create_test_index("old_idx", vec!["old_field"], false)],
+                foreign_keys: vec![],
+            },
+            TableInfo {
+                name: "deprecated_table".to_string(),
+                schema: "public".to_string(),
+                columns: vec![],
+                indexes: vec![],
+                foreign_keys: vec![],
+            },
+        ];
+
+        let desired = vec![
+            TableInfo {
+                name: "users".to_string(),
+                schema: "public".to_string(),
+                columns: vec![
+                    create_test_column("id", ColumnType::Integer, false),
+                    create_test_column("email", ColumnType::Text, false),
+                ],
+                indexes: vec![create_test_index("idx_email", vec!["email"], true)],
+                foreign_keys: vec![],
+            },
+            TableInfo {
+                name: "posts".to_string(),
+                schema: "public".to_string(),
+                columns: vec![create_test_column("id", ColumnType::Integer, false)],
+                indexes: vec![],
+                foreign_keys: vec![],
+            },
+        ];
+
+        let diff = SchemaDiff::compare(&current, &desired);
+
+        // Should have 3 changes: dropped table, altered users, created posts
+        assert_eq!(diff.changes.len(), 3);
+
+        let mut has_drop = false;
+        let mut has_alter = false;
+        let mut has_create = false;
+
+        for change in &diff.changes {
+            match change {
+                TableChange::Dropped(name) => {
+                    assert_eq!(name, "deprecated_table");
+                    has_drop = true;
+                }
+                TableChange::Altered { table_name, column_changes, index_changes, .. } => {
+                    assert_eq!(table_name, "users");
+                    assert_eq!(column_changes.len(), 2); // removed old_field, added email
+                    assert_eq!(index_changes.len(), 2); // removed old_idx, added idx_email
+                    has_alter = true;
+                }
+                TableChange::Created(table) => {
+                    assert_eq!(table.name, "posts");
+                    has_create = true;
+                }
+            }
+        }
+
+        assert!(has_drop, "Should have drop change");
+        assert!(has_alter, "Should have alter change");
+        assert!(has_create, "Should have create change");
+    }
+
+    #[test]
+    fn test_column_type_to_sql() {
+        assert_eq!(ColumnType::SmallInt.to_sql(), "SMALLINT");
+        assert_eq!(ColumnType::Integer.to_sql(), "INTEGER");
+        assert_eq!(ColumnType::BigInt.to_sql(), "BIGINT");
+        assert_eq!(ColumnType::Text.to_sql(), "TEXT");
+        assert_eq!(ColumnType::Boolean.to_sql(), "BOOLEAN");
+        assert_eq!(ColumnType::Uuid.to_sql(), "UUID");
+        assert_eq!(ColumnType::Varchar(Some(255)).to_sql(), "VARCHAR(255)");
+        assert_eq!(ColumnType::Varchar(None).to_sql(), "VARCHAR");
+        assert_eq!(ColumnType::Numeric(Some(10), Some(2)).to_sql(), "NUMERIC(10, 2)");
+        assert_eq!(ColumnType::Numeric(Some(10), None).to_sql(), "NUMERIC(10)");
+        assert_eq!(ColumnType::Numeric(None, None).to_sql(), "NUMERIC");
+        assert_eq!(ColumnType::Array(Box::new(ColumnType::Integer)).to_sql(), "INTEGER[]");
+        assert_eq!(ColumnType::Custom("CITEXT".to_string()).to_sql(), "CITEXT");
+    }
+
+    #[test]
+    fn test_generate_up_sql_create_table() {
+        let table = TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                ColumnInfo {
+                    name: "id".to_string(),
+                    data_type: ColumnType::Integer,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: true,
+                    is_unique: false,
+                },
+                ColumnInfo {
+                    name: "email".to_string(),
+                    data_type: ColumnType::Text,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: false,
+                    is_unique: true,
+                },
+                ColumnInfo {
+                    name: "created_at".to_string(),
+                    data_type: ColumnType::Timestamp,
+                    nullable: false,
+                    default: Some("NOW()".to_string()),
+                    is_primary_key: false,
+                    is_unique: false,
+                },
+            ],
+            indexes: vec![],
+            foreign_keys: vec![],
+        };
+
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Created(table)],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert!(sql.contains("CREATE TABLE \"users\""));
+        assert!(sql.contains("\"id\" INTEGER PRIMARY KEY"));
+        assert!(sql.contains("\"email\" TEXT NOT NULL UNIQUE"));
+        assert!(sql.contains("\"created_at\" TIMESTAMP NOT NULL DEFAULT NOW()"));
+    }
+
+    #[test]
+    fn test_generate_up_sql_drop_table() {
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Dropped("old_table".to_string())],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert_eq!(sql, "DROP TABLE IF EXISTS \"old_table\" CASCADE;");
+    }
+
+    #[test]
+    fn test_generate_up_sql_add_column() {
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Altered {
+                table_name: "users".to_string(),
+                column_changes: vec![ColumnChange::Added(ColumnInfo {
+                    name: "age".to_string(),
+                    data_type: ColumnType::Integer,
+                    nullable: true,
+                    default: None,
+                    is_primary_key: false,
+                    is_unique: false,
+                })],
+                index_changes: vec![],
+                foreign_key_changes: vec![],
+            }],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert_eq!(sql, "ALTER TABLE \"users\" ADD COLUMN \"age\" INTEGER;");
+    }
+
+    #[test]
+    fn test_generate_up_sql_remove_column() {
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Altered {
+                table_name: "users".to_string(),
+                column_changes: vec![ColumnChange::Removed(ColumnInfo {
+                    name: "old_field".to_string(),
+                    data_type: ColumnType::Text,
+                    nullable: true,
+                    default: None,
+                    is_primary_key: false,
+                    is_unique: false,
+                })],
+                index_changes: vec![],
+                foreign_key_changes: vec![],
+            }],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert_eq!(sql, "ALTER TABLE \"users\" DROP COLUMN \"old_field\";");
+    }
+
+    #[test]
+    fn test_generate_up_sql_type_change() {
+        let old_col = ColumnInfo {
+            name: "age".to_string(),
+            data_type: ColumnType::SmallInt,
+            nullable: false,
+            default: None,
+            is_primary_key: false,
+            is_unique: false,
+        };
+        let new_col = ColumnInfo {
+            name: "age".to_string(),
+            data_type: ColumnType::Integer,
+            nullable: false,
+            default: None,
+            is_primary_key: false,
+            is_unique: false,
+        };
+
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Altered {
+                table_name: "users".to_string(),
+                column_changes: vec![ColumnChange::TypeChanged { old: old_col, new: new_col }],
+                index_changes: vec![],
+                foreign_key_changes: vec![],
+            }],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert_eq!(sql, "ALTER TABLE \"users\" ALTER COLUMN \"age\" TYPE INTEGER USING \"age\"::INTEGER;");
+    }
+
+    #[test]
+    fn test_generate_down_sql_create_table() {
+        let table = TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![],
+            indexes: vec![],
+            foreign_keys: vec![],
+        };
+
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Created(table)],
+        };
+
+        let sql = diff.generate_down_sql();
+        assert_eq!(sql, "DROP TABLE IF EXISTS \"users\" CASCADE;");
+    }
+
+    #[test]
+    fn test_generate_down_sql_drop_table() {
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Dropped("old_table".to_string())],
+        };
+
+        let sql = diff.generate_down_sql();
+        assert_eq!(sql, "-- Cannot auto-generate: recreate table \"old_table\"");
+    }
+
+    #[test]
+    fn test_generate_sql_with_indexes() {
+        let table = TableInfo {
+            name: "users".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                ColumnInfo {
+                    name: "id".to_string(),
+                    data_type: ColumnType::Integer,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: true,
+                    is_unique: false,
+                },
+                ColumnInfo {
+                    name: "email".to_string(),
+                    data_type: ColumnType::Text,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: false,
+                    is_unique: false,
+                },
+            ],
+            indexes: vec![
+                IndexInfo {
+                    name: "idx_email".to_string(),
+                    columns: vec!["email".to_string()],
+                    is_unique: true,
+                    index_type: "btree".to_string(),
+                },
+            ],
+            foreign_keys: vec![],
+        };
+
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Created(table)],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert!(sql.contains("CREATE TABLE \"users\""));
+        assert!(sql.contains("CREATE UNIQUE INDEX \"idx_email\" ON \"users\" (\"email\");"));
+    }
+
+    #[test]
+    fn test_generate_sql_with_foreign_keys() {
+        let table = TableInfo {
+            name: "posts".to_string(),
+            schema: "public".to_string(),
+            columns: vec![
+                ColumnInfo {
+                    name: "id".to_string(),
+                    data_type: ColumnType::Integer,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: true,
+                    is_unique: false,
+                },
+                ColumnInfo {
+                    name: "author_id".to_string(),
+                    data_type: ColumnType::Integer,
+                    nullable: false,
+                    default: None,
+                    is_primary_key: false,
+                    is_unique: false,
+                },
+            ],
+            indexes: vec![],
+            foreign_keys: vec![
+                ForeignKeyInfo {
+                    name: "fk_author".to_string(),
+                    columns: vec!["author_id".to_string()],
+                    referenced_table: "users".to_string(),
+                    referenced_columns: vec!["id".to_string()],
+                    on_delete: "CASCADE".to_string(),
+                    on_update: "CASCADE".to_string(),
+                },
+            ],
+        };
+
+        let diff = SchemaDiff {
+            changes: vec![TableChange::Created(table)],
+        };
+
+        let sql = diff.generate_up_sql();
+        assert!(sql.contains("CREATE TABLE \"posts\""));
+        assert!(sql.contains("ALTER TABLE \"posts\" ADD CONSTRAINT \"fk_author\" FOREIGN KEY (\"author_id\") REFERENCES \"users\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE;"));
     }
 }

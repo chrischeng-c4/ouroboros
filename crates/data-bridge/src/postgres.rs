@@ -1946,6 +1946,219 @@ DROP TABLE IF EXISTS example CASCADE;
     Ok(file_path.display().to_string())
 }
 
+/// Autogenerate migration SQL from schema diff
+///
+/// Args:
+///     current_tables: List of current table dicts (from introspection)
+///     desired_tables: List of desired table dicts (from Python Table classes)
+///
+/// Returns:
+///     Dictionary with 'up', 'down', and 'has_changes' keys
+///
+/// Example:
+///     migration = autogenerate_migration(current_tables, desired_tables)
+///     if migration['has_changes']:
+///         print(migration['up'])
+#[pyfunction]
+#[pyo3(signature = (current_tables, desired_tables))]
+fn autogenerate_migration<'py>(
+    py: Python<'py>,
+    current_tables: Vec<Bound<'py, PyDict>>,
+    desired_tables: Vec<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    use data_bridge_postgres::schema::{SchemaDiff, TableInfo, ColumnInfo, ColumnType, IndexInfo, ForeignKeyInfo};
+
+    // Convert Python dicts to Rust TableInfo
+    fn dict_to_table_info(_py: Python<'_>, dict: &Bound<'_, PyDict>) -> PyResult<TableInfo> {
+        let name: String = dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name' in table"))?
+            .extract()?;
+
+        let schema: String = dict.get_item("schema")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "public".to_string());
+
+        // Parse columns
+        let columns_list = dict.get_item("columns")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'columns' in table"))?;
+        let columns_list = columns_list.downcast::<pyo3::types::PyList>()?;
+
+        let mut columns = Vec::new();
+        for col_item in columns_list.iter() {
+            let col_dict = col_item.downcast::<PyDict>()?;
+            columns.push(dict_to_column_info(col_dict)?);
+        }
+
+        // Parse indexes (optional)
+        let indexes = match dict.get_item("indexes")? {
+            Some(idx_list) => {
+                let idx_list = idx_list.downcast::<pyo3::types::PyList>()?;
+                let mut indexes = Vec::new();
+                for idx_item in idx_list.iter() {
+                    let idx_dict = idx_item.downcast::<PyDict>()?;
+                    indexes.push(dict_to_index_info(idx_dict)?);
+                }
+                indexes
+            }
+            None => Vec::new(),
+        };
+
+        // Parse foreign keys (optional)
+        let foreign_keys = match dict.get_item("foreign_keys")? {
+            Some(fk_list) => {
+                let fk_list = fk_list.downcast::<pyo3::types::PyList>()?;
+                let mut fks = Vec::new();
+                for fk_item in fk_list.iter() {
+                    let fk_dict = fk_item.downcast::<PyDict>()?;
+                    fks.push(dict_to_fk_info(fk_dict)?);
+                }
+                fks
+            }
+            None => Vec::new(),
+        };
+
+        Ok(TableInfo {
+            name,
+            schema,
+            columns,
+            indexes,
+            foreign_keys,
+        })
+    }
+
+    fn dict_to_column_info(dict: &Bound<'_, PyDict>) -> PyResult<ColumnInfo> {
+        let name: String = dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name' in column"))?
+            .extract()?;
+
+        let data_type_str: String = dict.get_item("data_type")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'data_type' in column"))?
+            .extract()?;
+
+        let data_type = ColumnType::parse(&data_type_str);
+
+        let nullable: bool = dict.get_item("nullable")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or(true);
+
+        let default: Option<String> = dict.get_item("default")?
+            .and_then(|v| if v.is_none() { None } else { Some(v) })
+            .map(|v| v.extract())
+            .transpose()?;
+
+        let is_primary_key: bool = dict.get_item("is_primary_key")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or(false);
+
+        let is_unique: bool = dict.get_item("is_unique")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or(false);
+
+        Ok(ColumnInfo {
+            name,
+            data_type,
+            nullable,
+            default,
+            is_primary_key,
+            is_unique,
+        })
+    }
+
+    fn dict_to_index_info(dict: &Bound<'_, PyDict>) -> PyResult<IndexInfo> {
+        let name: String = dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name' in index"))?
+            .extract()?;
+
+        let columns: Vec<String> = dict.get_item("columns")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'columns' in index"))?
+            .extract()?;
+
+        let is_unique: bool = dict.get_item("is_unique")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or(false);
+
+        let index_type: String = dict.get_item("index_type")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "btree".to_string());
+
+        Ok(IndexInfo {
+            name,
+            columns,
+            is_unique,
+            index_type,
+        })
+    }
+
+    fn dict_to_fk_info(dict: &Bound<'_, PyDict>) -> PyResult<ForeignKeyInfo> {
+        let name: String = dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name' in foreign_key"))?
+            .extract()?;
+
+        let columns: Vec<String> = dict.get_item("columns")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'columns' in foreign_key"))?
+            .extract()?;
+
+        let referenced_table: String = dict.get_item("referenced_table")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'referenced_table' in foreign_key"))?
+            .extract()?;
+
+        let referenced_columns: Vec<String> = dict.get_item("referenced_columns")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'referenced_columns' in foreign_key"))?
+            .extract()?;
+
+        let on_delete: String = dict.get_item("on_delete")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "NO ACTION".to_string());
+
+        let on_update: String = dict.get_item("on_update")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "NO ACTION".to_string());
+
+        Ok(ForeignKeyInfo {
+            name,
+            columns,
+            referenced_table,
+            referenced_columns,
+            on_delete,
+            on_update,
+        })
+    }
+
+    // Convert Python dicts to Rust structs
+    let mut current: Vec<TableInfo> = Vec::new();
+    for table_dict in &current_tables {
+        current.push(dict_to_table_info(py, table_dict)?);
+    }
+
+    let mut desired: Vec<TableInfo> = Vec::new();
+    for table_dict in &desired_tables {
+        desired.push(dict_to_table_info(py, table_dict)?);
+    }
+
+    // Generate diff
+    let diff = SchemaDiff::compare(&current, &desired);
+
+    // Generate SQL
+    let up_sql = diff.generate_up_sql();
+    let down_sql = diff.generate_down_sql();
+
+    // Return as Python dict
+    let result = PyDict::new(py);
+    result.set_item("up", up_sql)?;
+    result.set_item("down", down_sql)?;
+    result.set_item("has_changes", !diff.is_empty())?;
+
+    Ok(result.into())
+}
+
 // ============================================================================
 // Module Registration
 // ============================================================================
@@ -1989,6 +2202,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(migration_apply, m)?)?;
     m.add_function(wrap_pyfunction!(migration_rollback, m)?)?;
     m.add_function(wrap_pyfunction!(migration_create, m)?)?;
+    m.add_function(wrap_pyfunction!(autogenerate_migration, m)?)?;
 
     // Add module docstring
     m.add("__doc__", "PostgreSQL ORM module with async support")?;
