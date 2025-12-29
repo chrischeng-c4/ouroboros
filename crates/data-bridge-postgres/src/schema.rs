@@ -159,6 +159,64 @@ pub struct ForeignKeyInfo {
     pub on_update: String,
 }
 
+/// Cascade rule for foreign key operations
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CascadeRule {
+    /// Delete/update child rows automatically
+    Cascade,
+    /// Prevent operation if children exist
+    Restrict,
+    /// Set foreign key to NULL
+    SetNull,
+    /// Set foreign key to default value
+    SetDefault,
+    /// No action (check at end of transaction)
+    NoAction,
+}
+
+impl CascadeRule {
+    /// Parse from SQL string (e.g., "CASCADE", "RESTRICT")
+    pub fn from_sql(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "CASCADE" => Self::Cascade,
+            "RESTRICT" => Self::Restrict,
+            "SET NULL" => Self::SetNull,
+            "SET DEFAULT" => Self::SetDefault,
+            _ => Self::NoAction,
+        }
+    }
+
+    /// Convert to SQL string
+    pub fn to_sql(&self) -> &'static str {
+        match self {
+            Self::Cascade => "CASCADE",
+            Self::Restrict => "RESTRICT",
+            Self::SetNull => "SET NULL",
+            Self::SetDefault => "SET DEFAULT",
+            Self::NoAction => "NO ACTION",
+        }
+    }
+}
+
+/// Back-reference representing an incoming foreign key from another table
+#[derive(Debug, Clone)]
+pub struct BackRef {
+    /// Table that references this table (the "child" table)
+    pub source_table: String,
+    /// Column in source table that holds the FK
+    pub source_column: String,
+    /// This table being referenced (the "parent" table)
+    pub target_table: String,
+    /// Column in this table being referenced (usually "id")
+    pub target_column: String,
+    /// Constraint name
+    pub constraint_name: String,
+    /// What to do on delete of parent row
+    pub on_delete: CascadeRule,
+    /// What to do on update of parent row
+    pub on_update: CascadeRule,
+}
+
 /// Represents a database table.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TableInfo {
@@ -909,6 +967,59 @@ impl SchemaInspector {
         }
 
         Ok(foreign_keys)
+    }
+
+    /// Get all tables that reference a given table (back-references).
+    ///
+    /// Returns a list of back-references showing which tables have foreign keys
+    /// pointing to the specified table.
+    pub async fn get_backreferences(&self, table: &str, schema: Option<&str>) -> Result<Vec<BackRef>> {
+        let schema_name = schema.unwrap_or("public");
+
+        let query = r#"
+            SELECT
+                tc.table_name as source_table,
+                kcu.column_name as source_column,
+                ccu.table_name as target_table,
+                ccu.column_name as target_column,
+                tc.constraint_name,
+                rc.delete_rule,
+                rc.update_rule
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            JOIN information_schema.referential_constraints rc
+                ON rc.constraint_name = tc.constraint_name
+                AND rc.constraint_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND ccu.table_name = $1
+                AND tc.table_schema = $2
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(table)
+            .bind(schema_name)
+            .fetch_all(self.conn.pool())
+            .await?;
+
+        let mut backrefs = Vec::new();
+        for row in rows {
+            backrefs.push(BackRef {
+                source_table: row.try_get("source_table")?,
+                source_column: row.try_get("source_column")?,
+                target_table: row.try_get("target_table")?,
+                target_column: row.try_get("target_column")?,
+                constraint_name: row.try_get("constraint_name")?,
+                on_delete: CascadeRule::from_sql(&row.try_get::<String, _>("delete_rule")?),
+                on_update: CascadeRule::from_sql(&row.try_get::<String, _>("update_rule")?),
+            });
+        }
+
+        Ok(backrefs)
     }
 }
 

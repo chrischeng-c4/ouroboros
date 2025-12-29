@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel};
+use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector};
 use sqlx::Row as SqlxRow;
 
 // For base64 encoding of binary data
@@ -1316,6 +1316,133 @@ fn delete_many<'py>(
     })
 }
 
+/// Delete a row with cascade handling based on foreign key rules
+///
+/// This manually handles ON DELETE rules:
+/// - CASCADE: Deletes child rows first (recursively)
+/// - RESTRICT: Returns error if children exist
+/// - SET NULL: Sets FK to NULL before delete
+/// - SET DEFAULT: Sets FK to DEFAULT before delete
+///
+/// Args:
+///     table: Table name to delete from
+///     id: Primary key value of row to delete
+///     id_column: Name of primary key column (default: "id")
+///
+/// Returns:
+///     Total number of rows deleted (including cascaded children)
+///
+/// Example:
+///     deleted = await delete_with_cascade("users", 1, "id")
+#[pyfunction]
+#[pyo3(signature = (table, id, id_column=None))]
+fn delete_with_cascade<'py>(
+    py: Python<'py>,
+    table: String,
+    id: i64,
+    id_column: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let id_col = id_column.unwrap_or_else(|| "id".to_string());
+
+    future_into_py(py, async move {
+        let deleted = Row::delete_with_cascade(conn.pool(), &table, id, &id_col)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(deleted)
+    })
+}
+
+/// Delete a row after checking RESTRICT constraints
+///
+/// Checks for RESTRICT/NO ACTION constraints and returns an error
+/// if children exist. For CASCADE, relies on database-level handling.
+///
+/// Args:
+///     table: Table name to delete from
+///     id: Primary key value of row to delete
+///     id_column: Name of primary key column (default: "id")
+///
+/// Returns:
+///     Number of rows deleted (1 if success, 0 if not found)
+///
+/// Example:
+///     deleted = await delete_checked("users", 1, "id")
+#[pyfunction]
+#[pyo3(signature = (table, id, id_column=None))]
+fn delete_checked<'py>(
+    py: Python<'py>,
+    table: String,
+    id: i64,
+    id_column: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let id_col = id_column.unwrap_or_else(|| "id".to_string());
+
+    future_into_py(py, async move {
+        let deleted = Row::delete_checked(conn.pool(), &table, id, &id_col)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        Ok(deleted)
+    })
+}
+
+/// Get all tables that reference a given table (back-references)
+///
+/// Useful for understanding relationships before delete operations.
+///
+/// Args:
+///     table: Table name to find references to
+///     schema: Schema name (default: "public")
+///
+/// Returns:
+///     List of dicts with keys:
+///     - source_table: Table that references this table
+///     - source_column: FK column in source table
+///     - target_table: This table
+///     - target_column: Referenced column (usually "id")
+///     - constraint_name: Name of FK constraint
+///     - on_delete: DELETE rule ("CASCADE", "RESTRICT", etc.)
+///     - on_update: UPDATE rule
+///
+/// Example:
+///     backrefs = await get_backreferences("users", "public")
+#[pyfunction]
+#[pyo3(signature = (table, schema=None))]
+fn get_backreferences<'py>(
+    py: Python<'py>,
+    table: String,
+    schema: Option<String>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        let inspector = SchemaInspector::new((*conn).clone());
+        let backrefs = inspector.get_backreferences(&table, schema.as_deref())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        // Convert to Python list of dicts
+        Python::with_gil(|py| {
+            let result = PyList::empty(py);
+
+            for br in backrefs {
+                let dict = PyDict::new(py);
+                dict.set_item("source_table", br.source_table)?;
+                dict.set_item("source_column", br.source_column)?;
+                dict.set_item("target_table", br.target_table)?;
+                dict.set_item("target_column", br.target_column)?;
+                dict.set_item("constraint_name", br.constraint_name)?;
+                dict.set_item("on_delete", br.on_delete.to_sql())?;
+                dict.set_item("on_update", br.on_update.to_sql())?;
+                result.append(dict)?;
+            }
+
+            Ok(result.into_any().unbind())
+        })
+    })
+}
+
 /// Count rows matching WHERE clause
 ///
 /// Args:
@@ -2467,6 +2594,8 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(update_many, m)?)?;
     m.add_function(wrap_pyfunction!(delete_one, m)?)?;
     m.add_function(wrap_pyfunction!(delete_many, m)?)?;
+    m.add_function(wrap_pyfunction!(delete_with_cascade, m)?)?;
+    m.add_function(wrap_pyfunction!(delete_checked, m)?)?;
     m.add_function(wrap_pyfunction!(count, m)?)?;
     m.add_function(wrap_pyfunction!(execute, m)?)?;
     m.add_function(wrap_pyfunction!(begin_transaction, m)?)?;
@@ -2477,6 +2606,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_columns, m)?)?;
     m.add_function(wrap_pyfunction!(get_indexes, m)?)?;
     m.add_function(wrap_pyfunction!(get_foreign_keys, m)?)?;
+    m.add_function(wrap_pyfunction!(get_backreferences, m)?)?;
     m.add_function(wrap_pyfunction!(inspect_table, m)?)?;
     m.add_function(wrap_pyfunction!(find_by_foreign_key, m)?)?;
 

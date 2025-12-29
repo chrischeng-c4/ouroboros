@@ -1095,6 +1095,277 @@ impl Row {
 
         Self::find_with_relations(pool, table, id, &relations).await
     }
+
+    /// Delete a row with cascade handling based on foreign key rules.
+    /// This method respects ON DELETE rules from child tables.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Table name
+    /// * `id` - Primary key value
+    /// * `id_column` - Name of the primary key column (default: "id")
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - Delete fails
+    /// - RESTRICT constraint prevents deletion
+    /// - Table or column names are invalid
+    ///
+    /// # Returns
+    ///
+    /// Returns total number of rows deleted (including cascaded deletions).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Delete a user and cascade to related records
+    /// let deleted_count = Row::delete_with_cascade(pool, "users", 42, "id").await?;
+    /// println!("Deleted {} rows total", deleted_count);
+    /// ```
+    pub async fn delete_with_cascade(
+        pool: &PgPool,
+        table: &str,
+        id: i64,
+        id_column: &str,
+    ) -> Result<u64> {
+        use crate::schema::CascadeRule;
+
+        // Validate identifiers
+        QueryBuilder::validate_identifier(table)?;
+        QueryBuilder::validate_identifier(id_column)?;
+
+        // Start a transaction
+        let mut tx = pool.begin().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        // Get all back-references (tables that reference this table)
+        let backrefs = Self::get_backreferences_internal(&mut *tx, table).await?;
+
+        let mut total_deleted = 0u64;
+
+        for backref in &backrefs {
+            match backref.on_delete {
+                CascadeRule::Restrict | CascadeRule::NoAction => {
+                    // Check if any child rows exist
+                    let check_query = format!(
+                        "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE \"{}\" = $1) as has_children",
+                        backref.source_table, backref.source_column
+                    );
+                    let row: (bool,) = sqlx::query_as(&check_query)
+                        .bind(id)
+                        .fetch_one(&mut *tx)
+                        .await
+                        .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+                    if row.0 {
+                        tx.rollback().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                        return Err(DataBridgeError::Validation(format!(
+                            "Cannot delete from '{}': referenced by '{}' ({})",
+                            table, backref.source_table, backref.constraint_name
+                        )));
+                    }
+                }
+                CascadeRule::Cascade => {
+                    // Recursively delete child rows
+                    let delete_children = format!(
+                        "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+                        backref.source_table, backref.source_column
+                    );
+                    let result = sqlx::query(&delete_children)
+                        .bind(id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                    total_deleted += result.rows_affected();
+                }
+                CascadeRule::SetNull => {
+                    // Set foreign key to NULL
+                    let update_query = format!(
+                        "UPDATE \"{}\" SET \"{}\" = NULL WHERE \"{}\" = $1",
+                        backref.source_table, backref.source_column, backref.source_column
+                    );
+                    sqlx::query(&update_query)
+                        .bind(id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                }
+                CascadeRule::SetDefault => {
+                    // Set foreign key to DEFAULT
+                    let update_query = format!(
+                        "UPDATE \"{}\" SET \"{}\" = DEFAULT WHERE \"{}\" = $1",
+                        backref.source_table, backref.source_column, backref.source_column
+                    );
+                    sqlx::query(&update_query)
+                        .bind(id)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                }
+            }
+        }
+
+        // Delete the parent row
+        let delete_query = format!(
+            "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+            table, id_column
+        );
+        let result = sqlx::query(&delete_query)
+            .bind(id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+        total_deleted += result.rows_affected();
+
+        // Commit transaction
+        tx.commit().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(total_deleted)
+    }
+
+    /// Delete a row, checking for RESTRICT constraints.
+    /// For CASCADE, relies on database-level ON DELETE CASCADE.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Table name
+    /// * `id` - Primary key value
+    /// * `id_column` - Name of the primary key column (default: "id")
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - RESTRICT constraint prevents deletion
+    /// - Delete fails
+    /// - Table or column names are invalid
+    ///
+    /// # Returns
+    ///
+    /// Returns number of rows deleted (database handles cascades).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Delete a user, checking RESTRICT but letting DB handle CASCADE
+    /// let deleted = Row::delete_checked(pool, "users", 42, "id").await?;
+    /// ```
+    pub async fn delete_checked(
+        pool: &PgPool,
+        table: &str,
+        id: i64,
+        id_column: &str,
+    ) -> Result<u64> {
+        use crate::schema::CascadeRule;
+
+        QueryBuilder::validate_identifier(table)?;
+        QueryBuilder::validate_identifier(id_column)?;
+
+        // Get back-references with RESTRICT rule
+        let backrefs = Self::get_backreferences_internal(pool, table).await?;
+
+        for backref in &backrefs {
+            if matches!(backref.on_delete, CascadeRule::Restrict | CascadeRule::NoAction) {
+                // Check if any child rows exist
+                let check_query = format!(
+                    "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE \"{}\" = $1) as has_children",
+                    backref.source_table, backref.source_column
+                );
+                let row: (bool,) = sqlx::query_as(&check_query)
+                    .bind(id)
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+                if row.0 {
+                    return Err(DataBridgeError::Validation(format!(
+                        "Cannot delete from '{}': referenced by '{}' via column '{}' (constraint: {})",
+                        table, backref.source_table, backref.source_column, backref.constraint_name
+                    )));
+                }
+            }
+        }
+
+        // Perform the actual delete (database handles CASCADE)
+        let query = format!(
+            "DELETE FROM \"{}\" WHERE \"{}\" = $1",
+            table, id_column
+        );
+
+        let result = sqlx::query(&query)
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Internal helper to get back-references without requiring a SchemaInspector instance.
+    /// This queries the database directly for foreign key relationships.
+    async fn get_backreferences_internal<'a, E>(
+        executor: E,
+        table: &str,
+    ) -> Result<Vec<crate::schema::BackRef>>
+    where
+        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+    {
+        use crate::schema::{BackRef, CascadeRule};
+
+        let query = r#"
+            SELECT
+                tc.table_name as source_table,
+                kcu.column_name as source_column,
+                ccu.table_name as target_table,
+                ccu.column_name as target_column,
+                tc.constraint_name,
+                rc.delete_rule,
+                rc.update_rule
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            JOIN information_schema.referential_constraints rc
+                ON rc.constraint_name = tc.constraint_name
+                AND rc.constraint_schema = tc.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND ccu.table_name = $1
+                AND tc.table_schema = $2
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(table)
+            .bind("public")
+            .fetch_all(executor)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        let mut backrefs = Vec::new();
+        for row in rows {
+            backrefs.push(BackRef {
+                source_table: row.try_get("source_table")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?,
+                source_column: row.try_get("source_column")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?,
+                target_table: row.try_get("target_table")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?,
+                target_column: row.try_get("target_column")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?,
+                constraint_name: row.try_get("constraint_name")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?,
+                on_delete: CascadeRule::from_sql(&row.try_get::<String, _>("delete_rule")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?),
+                on_update: CascadeRule::from_sql(&row.try_get::<String, _>("update_rule")
+                    .map_err(|e| DataBridgeError::Database(e.to_string()))?),
+            });
+        }
+
+        Ok(backrefs)
+    }
 }
 
 /// Helper function to convert ExtractedValue to JSON.

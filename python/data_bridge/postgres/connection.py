@@ -826,3 +826,102 @@ def migration_create(description: str, migrations_dir: str = "migrations") -> st
     if _engine is None:
         raise RuntimeError("PostgreSQL engine not available.")
     return _engine.migration_create(description, migrations_dir)
+
+
+# ============================================================================
+# CASCADE DELETE FUNCTIONS
+# ============================================================================
+
+
+async def delete_with_cascade(table: str, id: int, id_column: str = "id") -> int:
+    """
+    Delete a row with cascade handling based on foreign key rules.
+
+    This manually handles ON DELETE rules:
+    - CASCADE: Deletes child rows first
+    - RESTRICT: Returns error if children exist
+    - SET NULL: Sets FK to NULL before delete
+    - SET DEFAULT: Sets FK to DEFAULT before delete
+
+    Args:
+        table: Table name to delete from
+        id: Primary key value of row to delete
+        id_column: Name of primary key column (default: "id")
+
+    Returns:
+        Total number of rows deleted (including cascaded children)
+
+    Raises:
+        RuntimeError: If RESTRICT constraint prevents deletion
+
+    Example:
+        >>> # Delete user and all their posts (CASCADE)
+        >>> deleted = await delete_with_cascade("users", 1)
+        >>> print(f"Deleted {deleted} rows total")
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.delete_with_cascade(table, id, id_column)
+
+
+async def delete_checked(table: str, id: int, id_column: str = "id") -> int:
+    """
+    Delete a row after checking RESTRICT constraints.
+
+    Checks for RESTRICT/NO ACTION constraints and returns an error
+    if children exist. For CASCADE, relies on database-level handling.
+
+    Args:
+        table: Table name to delete from
+        id: Primary key value of row to delete
+        id_column: Name of primary key column (default: "id")
+
+    Returns:
+        Number of rows deleted (1 if success, 0 if not found)
+
+    Raises:
+        RuntimeError: If RESTRICT constraint prevents deletion
+
+    Example:
+        >>> # Delete user only if no posts exist
+        >>> try:
+        ...     deleted = await delete_checked("users", 1)
+        ...     print(f"User deleted")
+        ... except RuntimeError as e:
+        ...     print(f"Cannot delete: {e}")
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.delete_checked(table, id, id_column)
+
+
+async def get_backreferences(table: str, schema: str = None) -> list[dict]:
+    """
+    Get all tables that reference a given table (back-references).
+
+    Useful for understanding relationships before delete operations.
+
+    Args:
+        table: Table name to find references to
+        schema: Schema name (default: "public")
+
+    Returns:
+        List of dicts with keys:
+        - source_table: Table that references this table
+        - source_column: FK column in source table
+        - target_table: This table
+        - target_column: Referenced column (usually "id")
+        - constraint_name: Name of FK constraint
+        - on_delete: DELETE rule ("CASCADE", "RESTRICT", etc.)
+        - on_update: UPDATE rule
+
+    Example:
+        >>> # Find all tables that reference users
+        >>> backrefs = await get_backreferences("users")
+        >>> for ref in backrefs:
+        ...     print(f"{ref['source_table']}.{ref['source_column']} -> {ref['target_table']}")
+        ...     print(f"  ON DELETE {ref['on_delete']}")
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+    return await _engine.get_backreferences(table, schema)
