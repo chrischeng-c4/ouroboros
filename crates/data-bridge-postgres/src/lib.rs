@@ -32,8 +32,8 @@ pub mod schema;
 pub mod validation;
 
 pub use connection::{Connection, PoolConfig};
-pub use query::{QueryBuilder, Operator, OrderDirection};
-pub use row::Row;
+pub use query::{QueryBuilder, Operator, OrderDirection, JoinType};
+pub use row::{Row, RelationConfig};
 pub use transaction::Transaction;
 pub use types::{ExtractedValue, row_to_extracted};
 pub use migration::{Migration, MigrationRunner, MigrationStatus};

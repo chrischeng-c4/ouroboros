@@ -92,6 +92,24 @@ use sqlx::Row as SqlxRow;
 use std::collections::HashMap;
 
 use crate::{DataBridgeError, ExtractedValue, QueryBuilder, Result, row_to_extracted};
+use crate::query::{JoinType, Operator, OrderDirection};
+
+/// Relation configuration for eager loading
+#[derive(Debug, Clone)]
+pub struct RelationConfig {
+    /// Name of the relation (used as key in result)
+    pub name: String,
+    /// Table to join
+    pub table: String,
+    /// Column in main table that references the foreign table
+    pub foreign_key: String,
+    /// Column in foreign table being referenced (usually "id")
+    pub reference_column: String,
+    /// Type of join (usually Left for optional relations)
+    pub join_type: JoinType,
+    /// Columns to select from the related table (None = all)
+    pub select_columns: Option<Vec<String>>,
+}
 
 /// Represents a single row from a PostgreSQL query result.
 ///
@@ -817,6 +835,265 @@ impl Row {
             .map_err(|e| DataBridgeError::Query(format!("Failed to extract count: {}", e)))?;
 
         Ok(count)
+    }
+
+    /// Fetch a single row with related data using JOINs.
+    ///
+    /// Returns a Row where related data is nested under the relation name.
+    /// This eliminates N+1 queries by fetching everything in one query.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Main table name
+    /// * `id` - Primary key value
+    /// * `relations` - Configuration for relations to eager load
+    ///
+    /// # Errors
+    ///
+    /// Returns error if query fails or table is invalid.
+    ///
+    /// # Returns
+    ///
+    /// Returns Some(Row) with nested relation data if found, None if not found.
+    pub async fn find_with_relations(
+        pool: &PgPool,
+        table: &str,
+        id: i64,
+        relations: &[RelationConfig],
+    ) -> Result<Option<Self>> {
+        // Build SELECT columns: main table + relations
+        let mut select_cols = vec![format!("\"{}\".*", table)];
+
+        for (idx, rel) in relations.iter().enumerate() {
+            let alias = format!("_rel{}", idx);
+            match &rel.select_columns {
+                Some(cols) => {
+                    for col in cols {
+                        select_cols.push(format!("\"{}\".\"{}\" AS \"{}__{}\"", alias, col, rel.name, col));
+                    }
+                }
+                None => {
+                    // Select all columns with prefix using row_to_json
+                    select_cols.push(format!("row_to_json(\"{}\") AS \"{}__data\"", alias, rel.name));
+                }
+            }
+        }
+
+        // Build query with JOINs
+        let mut qb = QueryBuilder::new(table)?;
+
+        for (idx, rel) in relations.iter().enumerate() {
+            let alias = format!("_rel{}", idx);
+            let on_condition = format!(
+                "\"{}\".\"{}\" = \"{}\".\"{}\"",
+                table, rel.foreign_key,
+                alias, rel.reference_column
+            );
+
+            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), &on_condition)?;
+        }
+
+        // Qualify the id column with the table name to avoid ambiguity with JOINs
+        let qualified_id_col = format!("{}.id", table);
+        qb = qb.where_clause(&qualified_id_col, Operator::Eq, ExtractedValue::BigInt(id))?;
+
+        let (sql, params) = qb.build_select();
+
+        // Bind parameters
+        let mut args = PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)?;
+        }
+
+        // Execute query
+        let row = sqlx::query_with(&sql, args)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        match row {
+            Some(pg_row) => {
+                let mut result = Self::from_sqlx(&pg_row)?;
+
+                // Extract relation data from prefixed columns
+                for rel in relations {
+                    let prefix = format!("{}__", rel.name);
+                    let mut rel_data = serde_json::Map::new();
+
+                    // Get columns that match this relation's prefix
+                    let keys_to_process: Vec<String> = result.columns
+                        .keys()
+                        .filter(|k| k.starts_with(&prefix))
+                        .cloned()
+                        .collect();
+
+                    for key in keys_to_process {
+                        if let Some(value) = result.columns.remove(&key) {
+                            let rel_key = key.strip_prefix(&prefix).unwrap().to_string();
+                            let json_value = extracted_value_to_json(&value)?;
+                            rel_data.insert(rel_key, json_value);
+                        }
+                    }
+
+                    if !rel_data.is_empty() {
+                        // Store as JSON object
+                        result.columns.insert(rel.name.clone(), ExtractedValue::Json(JsonValue::Object(rel_data)));
+                    }
+                }
+
+                Ok(Some(result))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Fetch multiple rows with related data using JOINs.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Main table name
+    /// * `relations` - Configuration for relations to eager load
+    /// * `where_clause` - Optional WHERE condition
+    /// * `order_by` - Optional ORDER BY clause
+    /// * `limit` - Optional LIMIT
+    /// * `offset` - Optional OFFSET
+    ///
+    /// # Errors
+    ///
+    /// Returns error if query fails or table is invalid.
+    ///
+    /// # Returns
+    ///
+    /// Returns vector of rows with nested relation data.
+    pub async fn find_many_with_relations(
+        pool: &PgPool,
+        table: &str,
+        relations: &[RelationConfig],
+        where_clause: Option<(&str, Operator, ExtractedValue)>,
+        order_by: Option<(&str, OrderDirection)>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<Self>> {
+        let mut qb = QueryBuilder::new(table)?;
+
+        // Add JOINs
+        for (idx, rel) in relations.iter().enumerate() {
+            let alias = format!("_rel{}", idx);
+            let on_condition = format!(
+                "\"{}\".\"{}\" = \"{}\".\"{}\"",
+                table, rel.foreign_key,
+                alias, rel.reference_column
+            );
+
+            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), &on_condition)?;
+        }
+
+        // Add WHERE if provided - qualify column with table name to avoid ambiguity
+        if let Some((col, op, val)) = where_clause {
+            // If column doesn't already contain a dot (not already qualified), qualify it
+            let qualified_col = if col.contains('.') {
+                col.to_string()
+            } else {
+                format!("{}.{}", table, col)
+            };
+            qb = qb.where_clause(&qualified_col, op, val)?;
+        }
+
+        // Add ORDER BY if provided - qualify column with table name to avoid ambiguity
+        if let Some((col, dir)) = order_by {
+            // If column doesn't already contain a dot (not already qualified), qualify it
+            let qualified_col = if col.contains('.') {
+                col.to_string()
+            } else {
+                format!("{}.{}", table, col)
+            };
+            qb = qb.order_by(&qualified_col, dir)?;
+        }
+
+        // Add LIMIT/OFFSET
+        if let Some(l) = limit {
+            qb = qb.limit(l);
+        }
+        if let Some(o) = offset {
+            qb = qb.offset(o);
+        }
+
+        let (sql, params) = qb.build_select();
+
+        // Bind parameters
+        let mut args = PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)?;
+        }
+
+        // Execute query
+        let rows = sqlx::query_with(&sql, args)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for pg_row in rows {
+            results.push(Self::from_sqlx(&pg_row)?);
+        }
+
+        Ok(results)
+    }
+
+    /// Simple eager loading helper - fetches with LEFT JOINs.
+    ///
+    /// This is a convenience wrapper around `find_with_relations` for common cases.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - Database connection pool
+    /// * `table` - Main table name
+    /// * `id` - Primary key value
+    /// * `joins` - Tuples of (relation_name, fk_column, ref_table)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if query fails or table is invalid.
+    ///
+    /// # Returns
+    ///
+    /// Returns Some(Row) with nested relation data if found, None if not found.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// // Load user with their posts and comments
+    /// let user = Row::find_one_eager(
+    ///     pool,
+    ///     "users",
+    ///     42,
+    ///     &[
+    ///         ("posts", "user_id", "posts"),
+    ///         ("comments", "user_id", "comments"),
+    ///     ]
+    /// ).await?;
+    /// ```
+    pub async fn find_one_eager(
+        pool: &PgPool,
+        table: &str,
+        id: i64,
+        joins: &[(&str, &str, &str)],  // (relation_name, fk_column, ref_table)
+    ) -> Result<Option<Self>> {
+        let relations: Vec<RelationConfig> = joins
+            .iter()
+            .map(|(name, fk, ref_table)| RelationConfig {
+                name: name.to_string(),
+                table: ref_table.to_string(),
+                foreign_key: fk.to_string(),
+                reference_column: "id".to_string(),
+                join_type: JoinType::Left,
+                select_columns: None,
+            })
+            .collect();
+
+        Self::find_with_relations(pool, table, id, &relations).await
     }
 }
 

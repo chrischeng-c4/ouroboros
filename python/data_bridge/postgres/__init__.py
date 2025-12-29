@@ -9,6 +9,7 @@ from .connection import (
     upsert_one, upsert_many,
     list_tables, table_exists, get_columns, get_indexes, get_foreign_keys, inspect_table,
     find_by_foreign_key,
+    fetch_one_with_relations, fetch_one_eager, fetch_many_with_relations,
     migration_init, migration_status, migration_apply,
     migration_rollback, migration_create
 )
@@ -43,6 +44,9 @@ __all__ = [
     "inspect_table",
     # Relationships
     "find_by_foreign_key",
+    "fetch_one_with_relations",
+    "fetch_one_eager",
+    "fetch_many_with_relations",
     # Transactions
     "pg_transaction",
     "Transaction",

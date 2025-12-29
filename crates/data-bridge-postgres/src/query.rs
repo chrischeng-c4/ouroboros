@@ -132,6 +132,44 @@ impl OrderDirection {
     }
 }
 
+/// Type of SQL JOIN
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinType {
+    /// INNER JOIN
+    Inner,
+    /// LEFT JOIN
+    Left,
+    /// RIGHT JOIN
+    Right,
+    /// FULL OUTER JOIN
+    Full,
+}
+
+impl JoinType {
+    /// Returns the SQL JOIN type string.
+    fn to_sql(&self) -> &'static str {
+        match self {
+            JoinType::Inner => "INNER JOIN",
+            JoinType::Left => "LEFT JOIN",
+            JoinType::Right => "RIGHT JOIN",
+            JoinType::Full => "FULL OUTER JOIN",
+        }
+    }
+}
+
+/// Represents a JOIN clause
+#[derive(Debug, Clone)]
+pub struct JoinClause {
+    /// Type of JOIN (INNER, LEFT, RIGHT, FULL)
+    pub join_type: JoinType,
+    /// Table to join
+    pub table: String,
+    /// Optional alias for the joined table
+    pub alias: Option<String>,
+    /// ON condition for the join
+    pub on_condition: String,
+}
+
 /// Type-safe SQL query builder.
 ///
 /// Provides a fluent API for constructing SELECT, INSERT, UPDATE, and DELETE queries
@@ -141,6 +179,8 @@ pub struct QueryBuilder {
     table: String,
     /// SELECT columns (empty means SELECT *)
     select_columns: Vec<String>,
+    /// JOIN clauses
+    joins: Vec<JoinClause>,
     /// WHERE conditions (field, operator, value)
     where_conditions: Vec<WhereCondition>,
     /// ORDER BY clauses (field, direction)
@@ -174,6 +214,7 @@ impl QueryBuilder {
         Ok(Self {
             table: table.to_string(),
             select_columns: Vec::new(),
+            joins: Vec::new(),
             where_conditions: Vec::new(),
             order_by_clauses: Vec::new(),
             limit_value: None,
@@ -247,6 +288,77 @@ impl QueryBuilder {
         self
     }
 
+    /// Add a JOIN clause.
+    ///
+    /// # Arguments
+    ///
+    /// * `join_type` - Type of JOIN (INNER, LEFT, RIGHT, FULL)
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `on_condition` - ON condition for the join
+    ///
+    /// # Errors
+    ///
+    /// Returns error if table or alias name is invalid.
+    pub fn join(mut self, join_type: JoinType, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+        Self::validate_identifier(table)?;
+        if let Some(a) = alias {
+            Self::validate_identifier(a)?;
+        }
+
+        self.joins.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            alias: alias.map(|s| s.to_string()),
+            on_condition: on_condition.to_string(),
+        });
+        Ok(self)
+    }
+
+    /// Add an INNER JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `on_condition` - ON condition for the join
+    pub fn inner_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+        self.join(JoinType::Inner, table, alias, on_condition)
+    }
+
+    /// Add a LEFT JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `on_condition` - ON condition for the join
+    pub fn left_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+        self.join(JoinType::Left, table, alias, on_condition)
+    }
+
+    /// Add a RIGHT JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `on_condition` - ON condition for the join
+    pub fn right_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+        self.join(JoinType::Right, table, alias, on_condition)
+    }
+
+    /// Add a FULL OUTER JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `on_condition` - ON condition for the join
+    pub fn full_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+        self.join(JoinType::Full, table, alias, on_condition)
+    }
+
     /// Builds a SELECT SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders.
@@ -262,6 +374,15 @@ impl QueryBuilder {
 
         sql.push_str(" FROM ");
         sql.push_str(&self.table);
+
+        // JOIN clauses
+        for join in &self.joins {
+            let table_ref = match &join.alias {
+                Some(alias) => format!("\"{}\" AS \"{}\"", join.table, alias),
+                None => format!("\"{}\"", join.table),
+            };
+            sql.push_str(&format!(" {} {} ON {}", join.join_type.to_sql(), table_ref, join.on_condition));
+        }
 
         // WHERE clause
         let mut params = Vec::new();
@@ -1479,5 +1600,112 @@ mod tests {
         let conflict_target = vec!["drop".to_string()];
         let result = qb.build_upsert(&values, &conflict_target, None);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_inner_join() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", None, "posts.author_id = users.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("INNER JOIN \"users\" ON posts.author_id = users.id"));
+        assert_eq!(sql, "SELECT posts.id, posts.title, users.name FROM posts INNER JOIN \"users\" ON posts.author_id = users.id");
+    }
+
+    #[test]
+    fn test_left_join_with_alias() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
+            .left_join("users", Some("u"), "p.author_id = u.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id"));
+        assert_eq!(sql, "SELECT p.id, u.name FROM posts LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id");
+    }
+
+    #[test]
+    fn test_multiple_joins() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
+            .left_join("categories", Some("c"), "posts.category_id = c.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("LEFT JOIN"));
+        assert_eq!(sql, "SELECT * FROM posts INNER JOIN \"users\" AS \"u\" ON posts.author_id = u.id LEFT JOIN \"categories\" AS \"c\" ON posts.category_id = c.id");
+    }
+
+    #[test]
+    fn test_right_join() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .right_join("users", None, "posts.author_id = users.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("RIGHT JOIN \"users\" ON posts.author_id = users.id"));
+    }
+
+    #[test]
+    fn test_full_join() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .full_join("users", None, "posts.author_id = users.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("FULL OUTER JOIN \"users\" ON posts.author_id = users.id"));
+    }
+
+    #[test]
+    fn test_join_with_where() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
+            .where_clause("posts.published", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("WHERE posts.published = $1"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_join_with_order_and_limit() {
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
+            .order_by("posts.created_at", OrderDirection::Desc).unwrap()
+            .limit(10);
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("ORDER BY posts.created_at DESC"));
+        assert!(sql.contains("LIMIT $1"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_join_invalid_table_name() {
+        let result = QueryBuilder::new("posts").unwrap()
+            .inner_join("drop", None, "posts.author_id = drop.id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_invalid_alias() {
+        let result = QueryBuilder::new("posts").unwrap()
+            .inner_join("users", Some("select"), "posts.author_id = select.id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_with_schema_qualified_table() {
+        let qb = QueryBuilder::new("public.posts").unwrap()
+            .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
+            .inner_join("public.users", Some("u"), "p.author_id = u.id").unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("FROM public.posts"));
+        assert!(sql.contains("INNER JOIN \"public.users\" AS \"u\""));
     }
 }

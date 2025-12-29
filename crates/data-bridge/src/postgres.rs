@@ -789,6 +789,287 @@ fn fetch_all<'py>(
     })
 }
 
+/// Fetch a single row with related data using JOINs (eager loading)
+///
+/// Args:
+///     table: Table name
+///     id: Primary key value
+///     relations: List of relation configurations (dictionaries)
+///
+/// Returns:
+///     Dictionary with row data including nested relations, or None if not found
+///
+/// Example:
+///     user = await fetch_one_with_relations("users", 1, [
+///         {
+///             "name": "posts",
+///             "table": "posts",
+///             "foreign_key": "user_id",
+///             "reference_column": "id",
+///             "join_type": "left",
+///             "select_columns": None
+///         }
+///     ])
+#[pyfunction]
+#[pyo3(signature = (table, id, relations))]
+fn fetch_one_with_relations<'py>(
+    py: Python<'py>,
+    table: String,
+    id: i64,
+    relations: Vec<Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    use data_bridge_postgres::row::{RelationConfig, Row};
+    use data_bridge_postgres::query::JoinType;
+
+    let conn = get_connection()?;
+
+    // Parse relations from Python dicts
+    let mut relation_configs: Vec<RelationConfig> = Vec::new();
+    for rel_dict in &relations {
+        let name: String = rel_dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name' in relation"))?
+            .extract()?;
+
+        let rel_table: String = rel_dict.get_item("table")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'table' in relation"))?
+            .extract()?;
+
+        let foreign_key: String = rel_dict.get_item("foreign_key")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'foreign_key' in relation"))?
+            .extract()?;
+
+        let reference_column: String = rel_dict.get_item("reference_column")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "id".to_string());
+
+        let join_type_str: String = rel_dict.get_item("join_type")?
+            .map(|v| v.extract())
+            .transpose()?
+            .unwrap_or_else(|| "left".to_string());
+
+        let join_type = match join_type_str.to_lowercase().as_str() {
+            "inner" => JoinType::Inner,
+            "left" => JoinType::Left,
+            "right" => JoinType::Right,
+            "full" => JoinType::Full,
+            _ => JoinType::Left,
+        };
+
+        let select_columns: Option<Vec<String>> = rel_dict.get_item("select_columns")?
+            .and_then(|v| if v.is_none() { None } else { Some(v) })
+            .map(|v| v.extract())
+            .transpose()?;
+
+        relation_configs.push(RelationConfig {
+            name,
+            table: rel_table,
+            foreign_key,
+            reference_column,
+            join_type,
+            select_columns,
+        });
+    }
+
+    future_into_py(py, async move {
+        let result = Row::find_with_relations(
+            conn.pool(),
+            &table,
+            id,
+            &relation_configs,
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(format!("Fetch with relations failed: {}", e)))?;
+
+        match result {
+            Some(row) => {
+                RowWrapper::from_row(&row)
+                    .map(|r| Some(r))
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))
+            }
+            None => Ok(None),
+        }
+    })
+}
+
+/// Simple eager loading - fetch one row with related data
+///
+/// Args:
+///     table: Table name
+///     id: Primary key value
+///     joins: List of (relation_name, fk_column, ref_table) tuples
+///
+/// Returns:
+///     Dictionary with row data including nested relations, or None if not found
+///
+/// Example:
+///     user = await fetch_one_eager("users", 1, [
+///         ("posts", "user_id", "posts"),
+///         ("profile", "user_id", "profiles")
+///     ])
+#[pyfunction]
+#[pyo3(signature = (table, id, joins))]
+fn fetch_one_eager<'py>(
+    py: Python<'py>,
+    table: String,
+    id: i64,
+    joins: Vec<(String, String, String)>,
+) -> PyResult<Bound<'py, PyAny>> {
+    use data_bridge_postgres::row::Row;
+
+    let conn = get_connection()?;
+
+    future_into_py(py, async move {
+        // Convert tuples to borrowed slices inside the async block
+        let join_refs: Vec<(&str, &str, &str)> = joins
+            .iter()
+            .map(|(name, fk, ref_table)| (name.as_str(), fk.as_str(), ref_table.as_str()))
+            .collect();
+
+        let result = Row::find_one_eager(
+            conn.pool(),
+            &table,
+            id,
+            &join_refs,
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(format!("Eager fetch failed: {}", e)))?;
+
+        match result {
+            Some(row) => {
+                RowWrapper::from_row(&row)
+                    .map(|r| Some(r))
+                    .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))
+            }
+            None => Ok(None),
+        }
+    })
+}
+
+/// Fetch multiple rows with related data using JOINs
+///
+/// Args:
+///     table: Table name
+///     relations: List of relation configurations (dictionaries)
+///     filter: Optional dictionary of WHERE conditions
+///     order_by: Optional (column, direction) tuple
+///     limit: Optional maximum number of rows to return
+///     offset: Optional number of rows to skip
+///
+/// Returns:
+///     List of dictionaries with row data including nested relations
+///
+/// Example:
+///     users = await fetch_many_with_relations("users", [
+///         {
+///             "name": "posts",
+///             "table": "posts",
+///             "foreign_key": "user_id",
+///             "reference_column": "id",
+///             "join_type": "left"
+///         }
+///     ], filter={"age": 30}, limit=10)
+#[pyfunction]
+#[pyo3(signature = (table, relations, filter=None, order_by=None, limit=None, offset=None))]
+fn fetch_many_with_relations<'py>(
+    py: Python<'py>,
+    table: String,
+    relations: Vec<Bound<'py, PyDict>>,
+    filter: Option<Bound<'py, PyDict>>,
+    order_by: Option<(String, String)>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    use data_bridge_postgres::row::{RelationConfig, Row};
+    use data_bridge_postgres::query::{JoinType, Operator, OrderDirection};
+    use data_bridge_postgres::ExtractedValue;
+
+    let conn = get_connection()?;
+
+    // Parse relations
+    let mut relation_configs: Vec<RelationConfig> = Vec::new();
+    for rel_dict in &relations {
+        let name: String = rel_dict.get_item("name")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'name'"))?
+            .extract()?;
+        let rel_table: String = rel_dict.get_item("table")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'table'"))?
+            .extract()?;
+        let foreign_key: String = rel_dict.get_item("foreign_key")?
+            .ok_or_else(|| PyValueError::new_err("Missing 'foreign_key'"))?
+            .extract()?;
+        let reference_column: String = rel_dict.get_item("reference_column")?
+            .map(|v| v.extract()).transpose()?.unwrap_or_else(|| "id".to_string());
+        let join_type_str: String = rel_dict.get_item("join_type")?
+            .map(|v| v.extract()).transpose()?.unwrap_or_else(|| "left".to_string());
+        let join_type = match join_type_str.to_lowercase().as_str() {
+            "inner" => JoinType::Inner,
+            "right" => JoinType::Right,
+            "full" => JoinType::Full,
+            _ => JoinType::Left,
+        };
+
+        relation_configs.push(RelationConfig {
+            name,
+            table: rel_table,
+            foreign_key,
+            reference_column,
+            join_type,
+            select_columns: None,
+        });
+    }
+
+    // Parse filter if provided
+    let where_clause: Option<(String, Operator, ExtractedValue)> = match filter {
+        Some(ref f) => {
+            if f.len() > 0 {
+                let items: Vec<_> = f.iter().collect();
+                if let Some((key, value)) = items.first() {
+                    let col: String = key.extract()?;
+                    let val = py_value_to_extracted(py, value)?;
+                    Some((col, Operator::Eq, val))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        None => None,
+    };
+
+    // Parse order_by
+    let order: Option<(String, OrderDirection)> = order_by.map(|(col, dir)| {
+        let direction = match dir.to_lowercase().as_str() {
+            "desc" => OrderDirection::Desc,
+            _ => OrderDirection::Asc,
+        };
+        (col, direction)
+    });
+
+    future_into_py(py, async move {
+        let results = Row::find_many_with_relations(
+            conn.pool(),
+            &table,
+            &relation_configs,
+            where_clause.as_ref().map(|(c, o, v)| (c.as_str(), o.clone(), v.clone())),
+            order.as_ref().map(|(c, d)| (c.as_str(), d.clone())),
+            limit,
+            offset,
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(format!("Fetch many with relations failed: {}", e)))?;
+
+        let rows: Vec<RowWrapper> = results
+            .iter()
+            .map(RowWrapper::from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert rows: {}", e)))?;
+
+        Ok(RowsWrapper(rows))
+    })
+}
+
 /// Update a single row in a table by primary key
 ///
 /// Args:
@@ -2178,6 +2459,9 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(upsert_many, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_one, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_all, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_one_with_relations, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_one_eager, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_many_with_relations, m)?)?;
     m.add_function(wrap_pyfunction!(find_many, m)?)?;
     m.add_function(wrap_pyfunction!(update_one, m)?)?;
     m.add_function(wrap_pyfunction!(update_many, m)?)?;

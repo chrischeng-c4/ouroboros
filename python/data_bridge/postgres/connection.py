@@ -615,6 +615,148 @@ async def find_by_foreign_key(table: str, foreign_key_column: str, foreign_key_v
     return await _engine.find_by_foreign_key(table, foreign_key_column, foreign_key_value)
 
 
+async def fetch_one_with_relations(
+    table: str,
+    id: int,
+    relations: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """
+    Fetch a single row with related data using JOINs (eager loading).
+
+    This uses SQL JOINs to efficiently fetch a row and its relations in a single query.
+
+    Args:
+        table: Table name
+        id: Primary key value
+        relations: List of relation configurations, each dict contains:
+            - name: Name of the relation (how it appears in results)
+            - table: Name of the related table
+            - foreign_key: Foreign key column name
+            - reference_column: Referenced column (default: "id")
+            - join_type: JOIN type - "inner", "left", "right", or "full" (default: "left")
+            - select_columns: Optional list of columns to select from related table
+
+    Returns:
+        Dictionary with row data including nested relations, or None if not found
+
+    Example:
+        >>> # Fetch user with their posts
+        >>> user = await fetch_one_with_relations("users", 1, [
+        ...     {
+        ...         "name": "posts",
+        ...         "table": "posts",
+        ...         "foreign_key": "user_id",
+        ...         "reference_column": "id",
+        ...         "join_type": "left"
+        ...     }
+        ... ])
+        >>> if user:
+        ...     print(f"User: {user['name']}")
+        ...     print(f"Posts: {user['posts']}")
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.fetch_one_with_relations(table, id, relations)
+
+
+async def fetch_one_eager(
+    table: str,
+    id: int,
+    joins: List[tuple]
+) -> Optional[Dict[str, Any]]:
+    """
+    Simple eager loading - fetch one row with related data.
+
+    This is a simplified version of fetch_one_with_relations that uses tuples
+    instead of dictionaries for relation configuration.
+
+    Args:
+        table: Table name
+        id: Primary key value
+        joins: List of (relation_name, fk_column, ref_table) tuples
+
+    Returns:
+        Dictionary with row data including nested relations, or None if not found
+
+    Example:
+        >>> # Fetch user with posts and profile
+        >>> user = await fetch_one_eager("users", 1, [
+        ...     ("posts", "user_id", "posts"),
+        ...     ("profile", "user_id", "profiles")
+        ... ])
+        >>> if user:
+        ...     print(f"User: {user['name']}")
+        ...     print(f"Posts: {user['posts']}")
+        ...     print(f"Profile: {user['profile']}")
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.fetch_one_eager(table, id, joins)
+
+
+async def fetch_many_with_relations(
+    table: str,
+    relations: List[Dict[str, Any]],
+    filter: Optional[Dict[str, Any]] = None,
+    order_by: Optional[tuple] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch multiple rows with related data using JOINs.
+
+    This efficiently fetches multiple rows and their relations in a single query.
+
+    Args:
+        table: Table name
+        relations: List of relation configurations (same as fetch_one_with_relations)
+        filter: Optional dictionary of WHERE conditions (simple equality only)
+        order_by: Optional (column, direction) tuple for ordering
+        limit: Optional maximum number of rows to return
+        offset: Optional number of rows to skip
+
+    Returns:
+        List of dictionaries with row data including nested relations
+
+    Example:
+        >>> # Fetch all active users with their posts
+        >>> users = await fetch_many_with_relations("users", [
+        ...     {
+        ...         "name": "posts",
+        ...         "table": "posts",
+        ...         "foreign_key": "user_id",
+        ...         "reference_column": "id",
+        ...         "join_type": "left"
+        ...     }
+        ... ], filter={"status": "active"}, limit=10)
+        >>> for user in users:
+        ...     print(f"{user['name']}: {len(user['posts'])} posts")
+
+    Raises:
+        RuntimeError: If PostgreSQL engine is not available or query fails
+    """
+    if _engine is None:
+        raise RuntimeError(
+            "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+        )
+
+    return await _engine.fetch_many_with_relations(
+        table, relations, filter, order_by, limit, offset
+    )
+
+
 async def inspect_table(table: str, schema: str = "public") -> Dict[str, Any]:
     """
     Get complete information about a table including columns and indexes.
