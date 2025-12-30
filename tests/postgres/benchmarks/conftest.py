@@ -227,8 +227,18 @@ def benchmark_data_10000():
 # =====================
 
 @pytest.fixture(autouse=True)
-async def setup_tables(data_bridge_db, asyncpg_pool, psycopg2_conn):
+async def setup_tables(request):
     """Setup tables before tests and cleanup after."""
+    # Skip this fixture for tests marked with no_db_required
+    if request.node.get_closest_marker('no_db_required'):
+        yield
+        return
+
+    # Get fixtures only when needed
+    data_bridge_db = request.getfixturevalue('data_bridge_db')
+    asyncpg_pool = request.getfixturevalue('asyncpg_pool')
+    psycopg2_conn = request.getfixturevalue('psycopg2_conn')
+
     from .models import ASYNCPG_TABLE_SCHEMA, PSYCOPG2_TABLE_SCHEMA
 
     # Create asyncpg table

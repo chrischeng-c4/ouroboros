@@ -67,6 +67,7 @@ testpaths = ["tests"]
 markers = [
     "benchmark: performance benchmark tests (deselect with '-m \"not benchmark\"')",
     "integration: integration tests requiring external services (database, etc.)",
+    "no_db_required: unit tests that do not require database connection",
 ]
 
 [dependency-groups]
