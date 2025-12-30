@@ -629,22 +629,18 @@ fn raw_bson_to_py(py: Python<'_>, raw_bson: bson::raw::RawBsonRef<'_>) -> PyResu
         RawBsonRef::String(s) => Ok(s.into_pyobject(py)?.into_any().unbind()),
         RawBsonRef::Document(doc) => {
             let py_dict = PyDict::new(py);
-            for result in doc.iter_elements() {
-                if let Ok(element) = result {
-                    let key = element.key();
-                    if let Ok(value) = element.value() {
-                        py_dict.set_item(key, raw_bson_to_py(py, value)?)?;
-                    }
+            for element in doc.iter_elements().flatten() {
+                let key = element.key();
+                if let Ok(value) = element.value() {
+                    py_dict.set_item(key, raw_bson_to_py(py, value)?)?;
                 }
             }
             Ok(py_dict.into())
         }
         RawBsonRef::Array(arr) => {
             let py_list = PyList::empty(py);
-            for result in arr.into_iter() {
-                if let Ok(value) = result {
-                    py_list.append(raw_bson_to_py(py, value)?)?;
-                }
+            for value in arr.into_iter().flatten() {
+                py_list.append(raw_bson_to_py(py, value)?)?;
             }
             Ok(py_list.into())
         }
@@ -2248,13 +2244,11 @@ impl RustDocument {
                     let py_dict = PyDict::new(py);
 
                     // Iterate over raw document elements
-                    for result in raw_doc.iter_elements() {
-                        if let Ok(element) = result {
-                            let key = element.key();
-                            if let Ok(raw_bson) = element.value() {
-                                let py_value = raw_bson_to_py(py, raw_bson)?;
-                                py_dict.set_item(key, py_value)?;
-                            }
+                    for element in raw_doc.iter_elements().flatten() {
+                        let key = element.key();
+                        if let Ok(raw_bson) = element.value() {
+                            let py_value = raw_bson_to_py(py, raw_bson)?;
+                            py_dict.set_item(key, py_value)?;
                         }
                     }
                     results.push(py_dict.into_any().unbind());
@@ -2343,13 +2337,11 @@ impl RustDocument {
                     for raw_doc in raw_docs {
                         let py_dict = PyDict::new(py);
 
-                        for result in raw_doc.iter_elements() {
-                            if let Ok(element) = result {
-                                let key = element.key();
-                                if let Ok(raw_bson) = element.value() {
-                                    let py_value = raw_bson_to_py(py, raw_bson)?;
-                                    py_dict.set_item(key, py_value)?;
-                                }
+                        for element in raw_doc.iter_elements().flatten() {
+                            let key = element.key();
+                            if let Ok(raw_bson) = element.value() {
+                                let py_value = raw_bson_to_py(py, raw_bson)?;
+                                py_dict.set_item(key, py_value)?;
                             }
                         }
                         results.push(py_dict.into_any().unbind());

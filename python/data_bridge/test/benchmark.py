@@ -501,6 +501,68 @@ def discover_benchmarks(
     }
 
 
+async def _cleanup_postgres_tables():
+    """
+    Clean up PostgreSQL benchmark tables between groups.
+
+    Truncates all framework tables and runs VACUUM ANALYZE to remove dead tuples
+    and update statistics, ensuring consistent benchmark results.
+    """
+    import os
+
+    postgres_uri = os.environ.get(
+        "POSTGRES_URI",
+        "postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark"
+    )
+
+    # Only cleanup if PostgreSQL is being used
+    if not postgres_uri.startswith("postgresql"):
+        return
+
+    try:
+        import asyncpg
+
+        # Parse URI to get connection parameters
+        import urllib.parse
+        parsed = urllib.parse.urlparse(postgres_uri)
+
+        conn = await asyncpg.connect(
+            host=parsed.hostname or "localhost",
+            port=parsed.port or 5432,
+            user=parsed.username or "postgres",
+            password=parsed.password or "postgres",
+            database=parsed.path.lstrip("/") or "data_bridge_benchmark",
+        )
+
+        try:
+            # Truncate all benchmark tables to remove bloat
+            await conn.execute("""
+                TRUNCATE TABLE bench_db_users,
+                             bench_asyncpg_users,
+                             bench_psycopg2_users,
+                             bench_sa_users
+                RESTART IDENTITY CASCADE;
+            """)
+
+            # VACUUM ANALYZE to reclaim space and update statistics
+            # Note: VACUUM cannot run inside a transaction block, but asyncpg runs each
+            # statement in auto-commit mode by default
+            await conn.execute("VACUUM ANALYZE bench_db_users;")
+            await conn.execute("VACUUM ANALYZE bench_asyncpg_users;")
+            await conn.execute("VACUUM ANALYZE bench_psycopg2_users;")
+            await conn.execute("VACUUM ANALYZE bench_sa_users;")
+
+        finally:
+            await conn.close()
+
+    except ImportError:
+        # asyncpg not available, skip cleanup
+        pass
+    except Exception as e:
+        # Cleanup failure shouldn't stop benchmarks
+        print(f"Warning: PostgreSQL table cleanup failed: {e}")
+
+
 async def run_benchmarks(
     *,
     auto: bool = True,
@@ -539,6 +601,10 @@ async def run_benchmarks(
     # Run BenchmarkGroups
     for group in _group_registry:
         print(f"\nRunning: {group.name}")
+
+        # Clean up PostgreSQL tables before each group to prevent bloat
+        await _cleanup_postgres_tables()
+
         await group.run(auto=auto, rounds=rounds, warmup=warmup)
 
         # Create Rust report group

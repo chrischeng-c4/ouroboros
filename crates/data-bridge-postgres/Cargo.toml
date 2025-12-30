@@ -13,7 +13,7 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 
 # PostgreSQL
-sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "json", "rust_decimal"] }
 
 # Serialization
 serde = { workspace = true }
@@ -36,5 +36,12 @@ rayon = "1.10"
 # Tracing
 tracing = { workspace = true }
 
+# Hashing for migration checksums
+sha2 = "0.10"
+
+# Unicode normalization for security
+unicode-normalization = "0.1"
+
 [dev-dependencies]
 tokio-test = "0.4"
+data-bridge-test = { path = "../data-bridge-test" }

@@ -28,6 +28,7 @@ chrono.workspace = true
 regex.workspace = true
 walkdir.workspace = true
 tracing.workspace = true
+rand = "0.8"
 
 # Flamegraph generation
 inferno = "0.12"

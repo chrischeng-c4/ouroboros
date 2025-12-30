@@ -50,11 +50,6 @@ async def _async_setup():
     postgres_uri = get_postgres_uri()
     conn_params = parse_postgres_uri(postgres_uri)
 
-    # Initialize data-bridge
-    if is_connected():
-        await close()
-    await init(postgres_uri)
-
     # Initialize asyncpg
     try:
         import asyncpg
@@ -70,6 +65,57 @@ async def _async_setup():
         )
     except ImportError:
         pass
+
+    # Initialize data-bridge
+    if is_connected():
+        await close()
+    await init(postgres_uri)
+
+    # Create tables for data-bridge models
+    # We need to do this manually since we don't have a migration tool yet
+    from data_bridge.postgres import is_connected as db_is_connected
+    if db_is_connected():
+        # Use asyncpg or psycopg2 to create tables if available, or use data-bridge execute if implemented
+        # For now, we'll use asyncpg if available, otherwise fail gracefully
+        if _asyncpg_pool:
+            async with _asyncpg_pool.acquire() as conn:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS bench_db_users (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL,
+                        age INTEGER NOT NULL,
+                        city VARCHAR(100),
+                        score DOUBLE PRECISION,
+                        active BOOLEAN DEFAULT TRUE
+                    );
+                    CREATE TABLE IF NOT EXISTS bench_asyncpg_users (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL,
+                        age INTEGER NOT NULL,
+                        city VARCHAR(100),
+                        score DOUBLE PRECISION,
+                        active BOOLEAN DEFAULT TRUE
+                    );
+                    CREATE TABLE IF NOT EXISTS bench_psycopg2_users (
+                        id SERIAL PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL,
+                        age INTEGER NOT NULL,
+                        city VARCHAR(100),
+                        score DOUBLE PRECISION,
+                        active BOOLEAN DEFAULT TRUE
+                    );
+                """)
+
+                # Add indexes for filtered columns to prevent full table scans
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_bench_db_users_age ON bench_db_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_asyncpg_users_age ON bench_asyncpg_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_psycopg2_users_age ON bench_psycopg2_users(age);
+                    CREATE INDEX IF NOT EXISTS idx_bench_sa_users_age ON bench_sa_users(age);
+                """)
 
     # Initialize psycopg2
     try:
@@ -90,7 +136,7 @@ async def _async_setup():
     # Initialize SQLAlchemy
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
-        from .models import Base
+        from tests.postgres.benchmarks.models import Base
 
         async_uri = postgres_uri.replace("postgresql://", "postgresql+asyncpg://")
         _sqlalchemy_engine = create_async_engine(

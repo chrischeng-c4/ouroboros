@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from data_bridge import Document
-from data_bridge.timeseries import TimeSeriesConfig, Granularity
+from data_bridge.mongodb.timeseries import TimeSeriesConfig, Granularity
 from data_bridge.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
@@ -201,7 +201,7 @@ class TestTimeSeriesDocument(MongoTestSuite):
 
         await EventLog.ensure_timeseries_collection()
 
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("event_logs_test", {})
 
         now = datetime.now(timezone.utc)

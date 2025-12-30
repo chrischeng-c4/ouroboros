@@ -62,7 +62,8 @@
 //! // Result: "DELETE FROM users WHERE id = $1"
 //! ```
 
-use crate::{Connection, DataBridgeError, ExtractedValue, Result, Row};
+use crate::{DataBridgeError, ExtractedValue, Result};
+use unicode_normalization::UnicodeNormalization;
 
 /// Query comparison operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -132,6 +133,81 @@ impl OrderDirection {
     }
 }
 
+/// Type of SQL JOIN
+#[derive(Debug, Clone, PartialEq)]
+pub enum JoinType {
+    /// INNER JOIN
+    Inner,
+    /// LEFT JOIN
+    Left,
+    /// RIGHT JOIN
+    Right,
+    /// FULL OUTER JOIN
+    Full,
+}
+
+impl JoinType {
+    /// Returns the SQL JOIN type string.
+    fn to_sql(&self) -> &'static str {
+        match self {
+            JoinType::Inner => "INNER JOIN",
+            JoinType::Left => "LEFT JOIN",
+            JoinType::Right => "RIGHT JOIN",
+            JoinType::Full => "FULL OUTER JOIN",
+        }
+    }
+}
+
+/// Structured JOIN condition to prevent SQL injection
+/// Only allows safe table.column = table.column patterns
+#[derive(Debug, Clone)]
+pub struct JoinCondition {
+    /// Column from the left (main) table
+    pub left_column: String,
+    /// Table/alias on the right side of the join
+    pub right_table: String,
+    /// Column from the right table
+    pub right_column: String,
+}
+
+impl JoinCondition {
+    /// Create a new JOIN condition with validated identifiers
+    pub fn new(left_column: &str, right_table: &str, right_column: &str) -> Result<Self> {
+        QueryBuilder::validate_identifier(left_column)?;
+        QueryBuilder::validate_identifier(right_table)?;
+        QueryBuilder::validate_identifier(right_column)?;
+        Ok(Self {
+            left_column: left_column.to_string(),
+            right_table: right_table.to_string(),
+            right_column: right_column.to_string(),
+        })
+    }
+
+    /// Generate SQL for the ON clause
+    pub fn to_sql(&self, main_table: &str) -> String {
+        format!(
+            "\"{}\".\"{}\" = \"{}\".\"{}\"",
+            main_table,
+            self.left_column,
+            self.right_table,
+            self.right_column
+        )
+    }
+}
+
+/// Represents a JOIN clause
+#[derive(Debug, Clone)]
+pub struct JoinClause {
+    /// Type of JOIN (INNER, LEFT, RIGHT, FULL)
+    pub join_type: JoinType,
+    /// Table to join
+    pub table: String,
+    /// Optional alias for the joined table
+    pub alias: Option<String>,
+    /// ON condition for the join
+    pub on_condition: JoinCondition,
+}
+
 /// Type-safe SQL query builder.
 ///
 /// Provides a fluent API for constructing SELECT, INSERT, UPDATE, and DELETE queries
@@ -141,6 +217,8 @@ pub struct QueryBuilder {
     table: String,
     /// SELECT columns (empty means SELECT *)
     select_columns: Vec<String>,
+    /// JOIN clauses
+    joins: Vec<JoinClause>,
     /// WHERE conditions (field, operator, value)
     where_conditions: Vec<WhereCondition>,
     /// ORDER BY clauses (field, direction)
@@ -174,6 +252,7 @@ impl QueryBuilder {
         Ok(Self {
             table: table.to_string(),
             select_columns: Vec::new(),
+            joins: Vec::new(),
             where_conditions: Vec::new(),
             order_by_clauses: Vec::new(),
             limit_value: None,
@@ -247,6 +326,77 @@ impl QueryBuilder {
         self
     }
 
+    /// Add a JOIN clause.
+    ///
+    /// # Arguments
+    ///
+    /// * `join_type` - Type of JOIN (INNER, LEFT, RIGHT, FULL)
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `condition` - Structured JOIN condition for security
+    ///
+    /// # Errors
+    ///
+    /// Returns error if table or alias name is invalid.
+    pub fn join(mut self, join_type: JoinType, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        Self::validate_identifier(table)?;
+        if let Some(a) = alias {
+            Self::validate_identifier(a)?;
+        }
+
+        self.joins.push(JoinClause {
+            join_type,
+            table: table.to_string(),
+            alias: alias.map(|s| s.to_string()),
+            on_condition: condition,
+        });
+        Ok(self)
+    }
+
+    /// Add an INNER JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `condition` - Structured JOIN condition for security
+    pub fn inner_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Inner, table, alias, condition)
+    }
+
+    /// Add a LEFT JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `condition` - Structured JOIN condition for security
+    pub fn left_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Left, table, alias, condition)
+    }
+
+    /// Add a RIGHT JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `condition` - Structured JOIN condition for security
+    pub fn right_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Right, table, alias, condition)
+    }
+
+    /// Add a FULL OUTER JOIN.
+    ///
+    /// # Arguments
+    ///
+    /// * `table` - Table to join
+    /// * `alias` - Optional alias for the joined table
+    /// * `condition` - Structured JOIN condition for security
+    pub fn full_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Full, table, alias, condition)
+    }
+
     /// Builds a SELECT SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders.
@@ -257,35 +407,53 @@ impl QueryBuilder {
         if self.select_columns.is_empty() {
             sql.push('*');
         } else {
-            sql.push_str(&self.select_columns.join(", "));
+            let quoted_cols: Vec<String> = self.select_columns.iter()
+                .map(|c| Self::quote_identifier(c))
+                .collect();
+            sql.push_str(&quoted_cols.join(", "));
         }
 
         sql.push_str(" FROM ");
-        sql.push_str(&self.table);
+        sql.push_str(&Self::quote_identifier(&self.table));
+
+        // JOIN clauses
+        for join in &self.joins {
+            let table_ref = match &join.alias {
+                Some(alias) => format!("{} AS \"{}\"", Self::quote_identifier(&join.table), alias),
+                None => Self::quote_identifier(&join.table),
+            };
+            sql.push_str(&format!(
+                " {} {} ON {}",
+                join.join_type.to_sql(),
+                table_ref,
+                join.on_condition.to_sql(&self.table)
+            ));
+        }
 
         // WHERE clause
         let mut params = Vec::new();
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     Operator::In | Operator::NotIn => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} (${})", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} (${})", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} (NULL)", cond.field, cond.operator.to_sql())
+                            format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
                         }
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -297,7 +465,7 @@ impl QueryBuilder {
         if !self.order_by_clauses.is_empty() {
             sql.push_str(" ORDER BY ");
             let order_parts: Vec<String> = self.order_by_clauses.iter()
-                .map(|(field, dir)| format!("{} {}", field, dir.to_sql()))
+                .map(|(field, dir)| format!("{} {}", Self::quote_identifier(field), dir.to_sql()))
                 .collect();
             sql.push_str(&order_parts.join(", "));
         }
@@ -330,8 +498,8 @@ impl QueryBuilder {
             Self::validate_identifier(col)?;
         }
 
-        let mut sql = format!("INSERT INTO {} (", self.table);
-        let columns: Vec<&str> = values.iter().map(|(col, _)| col.as_str()).collect();
+        let mut sql = format!("INSERT INTO {} (", Self::quote_identifier(&self.table));
+        let columns: Vec<String> = values.iter().map(|(col, _)| Self::quote_identifier(col)).collect();
         sql.push_str(&columns.join(", "));
         sql.push_str(") VALUES (");
 
@@ -357,13 +525,13 @@ impl QueryBuilder {
             Self::validate_identifier(col)?;
         }
 
-        let mut sql = format!("UPDATE {} SET ", self.table);
+        let mut sql = format!("UPDATE {} SET ", Self::quote_identifier(&self.table));
         let mut params: Vec<ExtractedValue> = Vec::new();
 
         // SET clause
         let set_parts: Vec<String> = values.iter().map(|(col, val)| {
             params.push(val.clone());
-            format!("{} = ${}", col, params.len())
+            format!("{} = ${}", Self::quote_identifier(col), params.len())
         }).collect();
         sql.push_str(&set_parts.join(", "));
 
@@ -371,16 +539,17 @@ impl QueryBuilder {
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -391,27 +560,128 @@ impl QueryBuilder {
         Ok((sql, params))
     }
 
+    /// Builds an UPSERT SQL query (INSERT ON CONFLICT UPDATE).
+    ///
+    /// # Arguments
+    ///
+    /// * `values` - Column values to insert
+    /// * `conflict_target` - Columns for ON CONFLICT clause (unique constraint)
+    /// * `update_columns` - Optional columns to update on conflict (None = all except conflict_target)
+    ///
+    /// # Returns
+    ///
+    /// Returns the SQL string with $1, $2, etc. placeholders and the parameter values.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let qb = QueryBuilder::new("users")?;
+    /// let values = vec![
+    ///     ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+    ///     ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+    /// ];
+    /// let conflict_target = vec!["email".to_string()];
+    /// let (sql, params) = qb.build_upsert(&values, &conflict_target, None)?;
+    /// // Result: "INSERT INTO users (email, name) VALUES ($1, $2)
+    /// //          ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name RETURNING *"
+    /// ```
+    pub fn build_upsert(
+        &self,
+        values: &[(String, ExtractedValue)],
+        conflict_target: &[String],
+        update_columns: Option<&[String]>,
+    ) -> Result<(String, Vec<ExtractedValue>)> {
+        // Validation
+        if values.is_empty() {
+            return Err(DataBridgeError::Query("Cannot upsert with no values".to_string()));
+        }
+        if conflict_target.is_empty() {
+            return Err(DataBridgeError::Query("Conflict target cannot be empty".to_string()));
+        }
+
+        // Validate column names
+        for (col, _) in values {
+            Self::validate_identifier(col)?;
+        }
+        for col in conflict_target {
+            Self::validate_identifier(col)?;
+        }
+        if let Some(cols) = update_columns {
+            for col in cols {
+                Self::validate_identifier(col)?;
+            }
+        }
+
+        // Build INSERT clause
+        let mut sql = format!("INSERT INTO {} (", Self::quote_identifier(&self.table));
+        let columns: Vec<String> = values.iter().map(|(col, _)| Self::quote_identifier(col)).collect();
+        sql.push_str(&columns.join(", "));
+        sql.push_str(") VALUES (");
+
+        let placeholders: Vec<String> = (1..=values.len()).map(|i| format!("${}", i)).collect();
+        sql.push_str(&placeholders.join(", "));
+        sql.push(')');
+
+        // Build ON CONFLICT clause
+        sql.push_str(" ON CONFLICT (");
+        let quoted_targets: Vec<String> = conflict_target.iter().map(|c| Self::quote_identifier(c)).collect();
+        sql.push_str(&quoted_targets.join(", "));
+        sql.push_str(") DO UPDATE SET ");
+
+        // Determine which columns to update
+        let columns_to_update: Vec<String> = if let Some(update_cols) = update_columns {
+            update_cols.to_vec()
+        } else {
+            // Update all columns except conflict target
+            values.iter()
+                .map(|(col, _)| col.clone())
+                .filter(|col| !conflict_target.contains(col))
+                .collect()
+        };
+
+        if columns_to_update.is_empty() {
+            return Err(DataBridgeError::Query(
+                "No columns to update after excluding conflict target".to_string()
+            ));
+        }
+
+        // Build SET clause using EXCLUDED
+        let set_parts: Vec<String> = columns_to_update
+            .iter()
+            .map(|col| format!("{} = EXCLUDED.{}", Self::quote_identifier(col), Self::quote_identifier(col)))
+            .collect();
+        sql.push_str(&set_parts.join(", "));
+
+        // Add RETURNING *
+        sql.push_str(" RETURNING *");
+
+        let params: Vec<ExtractedValue> = values.iter().map(|(_, val)| val.clone()).collect();
+
+        Ok((sql, params))
+    }
+
     /// Builds a DELETE SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders and the parameter values.
     pub fn build_delete(&self) -> (String, Vec<ExtractedValue>) {
-        let mut sql = format!("DELETE FROM {}", self.table);
+        let mut sql = format!("DELETE FROM {}", Self::quote_identifier(&self.table));
         let mut params: Vec<ExtractedValue> = Vec::new();
 
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
+                let quoted_field = Self::quote_identifier(&cond.field);
                 match cond.operator {
                     Operator::IsNull | Operator::IsNotNull => {
-                        format!("{} {}", cond.field, cond.operator.to_sql())
+                        format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     _ => {
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
-                            format!("{} {} ${}", cond.field, cond.operator.to_sql(), params.len())
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
                         } else {
-                            format!("{} {} NULL", cond.field, cond.operator.to_sql())
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
                 }
@@ -422,29 +692,18 @@ impl QueryBuilder {
         (sql, params)
     }
 
-    /// Builds and executes a SELECT query.
-    pub async fn execute_select(&self, _conn: &Connection) -> Result<Vec<Row>> {
-        // TODO: Implement SELECT query execution with SQLx
-        // This requires implementing Row::from_sqlx and binding ExtractedValue to SQLx parameters
-        todo!("Implement QueryBuilder::execute_select - requires SQLx integration")
-    }
-
-    /// Builds and executes an INSERT query.
-    pub async fn execute_insert(&self, _conn: &Connection, _values: Vec<(String, ExtractedValue)>) -> Result<Row> {
-        // TODO: Implement INSERT query execution with SQLx
-        todo!("Implement QueryBuilder::execute_insert - requires SQLx integration")
-    }
-
-    /// Builds and executes an UPDATE query.
-    pub async fn execute_update(&self, _conn: &Connection, _values: Vec<(String, ExtractedValue)>) -> Result<u64> {
-        // TODO: Implement UPDATE query execution with SQLx
-        todo!("Implement QueryBuilder::execute_update - requires SQLx integration")
-    }
-
-    /// Builds and executes a DELETE query.
-    pub async fn execute_delete(&self, _conn: &Connection) -> Result<u64> {
-        // TODO: Implement DELETE query execution with SQLx
-        todo!("Implement QueryBuilder::execute_delete - requires SQLx integration")
+    /// Quotes a SQL identifier.
+    ///
+    /// Handles schema-qualified names by quoting each part separately.
+    pub fn quote_identifier(name: &str) -> String {
+        if name.contains('.') {
+            name.split('.')
+                .map(|part| format!("\"{}\"", part))
+                .collect::<Vec<_>>()
+                .join(".")
+        } else {
+            format!("\"{}\"", name)
+        }
     }
 
     /// Validates a SQL identifier (table/column name).
@@ -484,6 +743,13 @@ impl QueryBuilder {
             return Err(DataBridgeError::Query("Identifier part cannot be empty".to_string()));
         }
 
+        // Normalize to NFKC to prevent Unicode confusables
+        // This prevents attacks using visually similar characters:
+        // - Cyrillic 'а' (U+0430) vs ASCII 'a' (U+0061)
+        // - Greek 'Α' (U+0391) vs ASCII 'A' (U+0041)
+        // - Fullwidth characters (U+FF01-U+FF5E)
+        let name = name.nfkc().collect::<String>();
+
         // Check length (PostgreSQL limit is 63 bytes per part)
         if name.len() > 63 {
             return Err(DataBridgeError::Query(
@@ -492,7 +758,10 @@ impl QueryBuilder {
         }
 
         // Must start with letter or underscore
-        let first_char = name.chars().next().unwrap();
+        let first_char = name.chars().next()
+            .ok_or_else(|| DataBridgeError::Query(
+                format!("Identifier '{}' is empty or invalid", name)
+            ))?;
         if !first_char.is_ascii_alphabetic() && first_char != '_' {
             return Err(DataBridgeError::Query(
                 format!("Identifier '{}' must start with a letter or underscore", name)
@@ -559,7 +828,7 @@ mod tests {
     fn test_simple_select() {
         let qb = QueryBuilder::new("users").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users");
+        assert_eq!(sql, "SELECT * FROM \"users\"");
         assert_eq!(params.len(), 0);
     }
 
@@ -568,7 +837,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .select(vec!["id".to_string(), "name".to_string()]).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT id, name FROM users");
+        assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\"");
         assert_eq!(params.len(), 0);
     }
 
@@ -577,7 +846,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE id = $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -587,7 +856,7 @@ mod tests {
             .where_clause("age", Operator::Gt, ExtractedValue::Int(18)).unwrap()
             .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE age > $1 AND status = $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"age\" > $1 AND \"status\" = $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -596,7 +865,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .order_by("created_at", OrderDirection::Desc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC");
         assert_eq!(params.len(), 0);
     }
 
@@ -606,7 +875,7 @@ mod tests {
             .limit(10)
             .offset(20);
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users LIMIT $1 OFFSET $2");
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
         assert_eq!(params.len(), 2);
     }
 
@@ -622,7 +891,7 @@ mod tests {
         let (sql, params) = qb.build_select();
         assert_eq!(
             sql,
-            "SELECT id, name, email FROM users WHERE age >= $1 AND active = $2 ORDER BY name ASC LIMIT $3 OFFSET $4"
+            "SELECT \"id\", \"name\", \"email\" FROM \"users\" WHERE \"age\" >= $1 AND \"active\" = $2 ORDER BY \"name\" ASC LIMIT $3 OFFSET $4"
         );
         assert_eq!(params.len(), 4);
     }
@@ -635,7 +904,7 @@ mod tests {
             ("age".to_string(), ExtractedValue::Int(30)),
         ];
         let (sql, params) = qb.build_insert(&values).unwrap();
-        assert_eq!(sql, "INSERT INTO users (name, age) VALUES ($1, $2) RETURNING *");
+        assert_eq!(sql, "INSERT INTO \"users\" (\"name\", \"age\") VALUES ($1, $2) RETURNING *");
         assert_eq!(params.len(), 2);
     }
 
@@ -648,7 +917,7 @@ mod tests {
             ("age".to_string(), ExtractedValue::Int(35)),
         ];
         let (sql, params) = qb.build_update(&values).unwrap();
-        assert_eq!(sql, "UPDATE users SET name = $1, age = $2 WHERE id = $3");
+        assert_eq!(sql, "UPDATE \"users\" SET \"name\" = $1, \"age\" = $2 WHERE \"id\" = $3");
         assert_eq!(params.len(), 3);
     }
 
@@ -657,7 +926,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
         let (sql, params) = qb.build_delete();
-        assert_eq!(sql, "DELETE FROM users WHERE id = $1");
+        assert_eq!(sql, "DELETE FROM \"users\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -666,7 +935,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_null("email").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE email IS NULL");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" IS NULL");
         assert_eq!(params.len(), 0);
     }
 
@@ -675,7 +944,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_not_null("email").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE email IS NOT NULL");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" IS NOT NULL");
         assert_eq!(params.len(), 0);
     }
 
@@ -764,14 +1033,14 @@ mod tests {
         // Test that queries work with schema-qualified names
         let qb = QueryBuilder::new("public.users").unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM public.users");
+        assert_eq!(sql, "SELECT * FROM \"public\".\"users\"");
         assert_eq!(params.len(), 0);
 
         // Test with WHERE clause
         let qb = QueryBuilder::new("public.bench_insert_one_db").unwrap()
             .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM public.bench_insert_one_db WHERE id = $1");
+        assert_eq!(sql, "SELECT * FROM \"public\".\"bench_insert_one_db\" WHERE \"id\" = $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -802,7 +1071,7 @@ mod tests {
         let qb = QueryBuilder::new("users").unwrap()
             .where_clause("name", Operator::Like, ExtractedValue::String("%John%".to_string())).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE name LIKE $1");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" LIKE $1");
         assert_eq!(params.len(), 1);
     }
 
@@ -816,7 +1085,7 @@ mod tests {
                 ])
             ).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users WHERE status IN ($1)");
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
         assert_eq!(params.len(), 1);
     }
 
@@ -858,7 +1127,690 @@ mod tests {
             .order_by("created_at", OrderDirection::Desc).unwrap()
             .order_by("name", OrderDirection::Asc).unwrap();
         let (sql, params) = qb.build_select();
-        assert_eq!(sql, "SELECT * FROM users ORDER BY created_at DESC, name ASC");
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC, \"name\" ASC");
         assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_complex_where_4_conditions() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("age", Operator::Gte, ExtractedValue::Int(18)).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string())).unwrap()
+            .where_clause("score", Operator::Lt, ExtractedValue::Int(100)).unwrap()
+            .where_clause("verified", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"users\" WHERE \"age\" >= $1 AND \"status\" = $2 AND \"score\" < $3 AND \"verified\" = $4"
+        );
+        assert_eq!(params.len(), 4);
+
+        // Verify parameter values
+        match &params[0] {
+            ExtractedValue::Int(18) => {},
+            _ => panic!("Expected Int(18)"),
+        }
+        match &params[1] {
+            ExtractedValue::String(s) if s == "active" => {},
+            _ => panic!("Expected String(active)"),
+        }
+        match &params[2] {
+            ExtractedValue::Int(100) => {},
+            _ => panic!("Expected Int(100)"),
+        }
+        match &params[3] {
+            ExtractedValue::Bool(true) => {},
+            _ => panic!("Expected Bool(true)"),
+        }
+    }
+
+    #[test]
+    fn test_schema_qualified_table_names() {
+        // Test SELECT with schema-qualified table
+        let qb = QueryBuilder::new("public.users").unwrap()
+            .select(vec!["id".to_string(), "name".to_string()]).unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"public\".\"users\" WHERE \"active\" = $1");
+        assert_eq!(params.len(), 1);
+
+        // Test INSERT with schema-qualified table
+        let qb = QueryBuilder::new("myschema.products").unwrap();
+        let values = vec![
+            ("name".to_string(), ExtractedValue::String("Widget".to_string())),
+            ("price".to_string(), ExtractedValue::Int(999)),
+        ];
+        let (sql, params) = qb.build_insert(&values).unwrap();
+        assert_eq!(sql, "INSERT INTO \"myschema\".\"products\" (\"name\", \"price\") VALUES ($1, $2) RETURNING *");
+        assert_eq!(params.len(), 2);
+
+        // Test UPDATE with schema-qualified table
+        let qb = QueryBuilder::new("analytics.events").unwrap()
+            .where_clause("id", Operator::Eq, ExtractedValue::Int(42)).unwrap();
+        let values = vec![
+            ("processed".to_string(), ExtractedValue::Bool(true)),
+        ];
+        let (sql, params) = qb.build_update(&values).unwrap();
+        assert_eq!(sql, "UPDATE \"analytics\".\"events\" SET \"processed\" = $1 WHERE \"id\" = $2");
+        assert_eq!(params.len(), 2);
+
+        // Test DELETE with schema-qualified table
+        let qb = QueryBuilder::new("logs.audit_log").unwrap()
+            .where_clause("created_at", Operator::Lt, ExtractedValue::String("2020-01-01".to_string())).unwrap();
+        let (sql, params) = qb.build_delete();
+        assert_eq!(sql, "DELETE FROM \"logs\".\"audit_log\" WHERE \"created_at\" < $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_very_large_limit() {
+        // Test with i64::MAX
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(i64::MAX);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(val) if *val == i64::MAX => {},
+            _ => panic!("Expected BigInt(i64::MAX)"),
+        }
+
+        // Test with a very large but reasonable limit
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(1_000_000_000);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(1_000_000_000) => {},
+            _ => panic!("Expected BigInt(1_000_000_000)"),
+        }
+    }
+
+    #[test]
+    fn test_zero_limit() {
+        // Test LIMIT 0 behavior - should be valid SQL
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(0) => {},
+            _ => panic!("Expected BigInt(0)"),
+        }
+
+        // Test LIMIT 0 with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1 LIMIT $2");
+        assert_eq!(params.len(), 2);
+
+        // Test LIMIT 0 with ORDER BY
+        let qb = QueryBuilder::new("users").unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .limit(0);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"created_at\" DESC LIMIT $1");
+        assert_eq!(params.len(), 1);
+
+        // Test LIMIT 0 with OFFSET
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(0)
+            .offset(10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
+        assert_eq!(params.len(), 2);
+        match &params[0] {
+            ExtractedValue::BigInt(0) => {},
+            _ => panic!("Expected BigInt(0) for limit"),
+        }
+        match &params[1] {
+            ExtractedValue::BigInt(10) => {},
+            _ => panic!("Expected BigInt(10) for offset"),
+        }
+    }
+
+    #[test]
+    fn test_negative_offset() {
+        // PostgreSQL allows negative offsets (they're treated as 0)
+        // The query builder should accept them and let PostgreSQL handle it
+        let qb = QueryBuilder::new("users").unwrap()
+            .offset(-10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" OFFSET $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::BigInt(-10) => {},
+            _ => panic!("Expected BigInt(-10)"),
+        }
+
+        // Test negative offset with positive limit
+        let qb = QueryBuilder::new("users").unwrap()
+            .limit(20)
+            .offset(-5);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" LIMIT $1 OFFSET $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_empty_select_columns() {
+        // When no columns are specified, should default to SELECT *
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec![]).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\"");
+        assert_eq!(params.len(), 0);
+
+        // Empty select with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec![]).unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_in_operator_with_empty_list() {
+        // IN operator with empty array
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(vec![])).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        // Verify the parameter is an empty array
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.is_empty() => {},
+            _ => panic!("Expected empty Array"),
+        }
+
+        // NOT IN with empty array
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("user_role", Operator::NotIn, ExtractedValue::Array(vec![])).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"user_role\" NOT IN ($1)");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_in_operator_with_many_values() {
+        // Create an array with 150 values
+        let values: Vec<ExtractedValue> = (0..150)
+            .map(|i| ExtractedValue::Int(i))
+            .collect();
+
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("id", Operator::In, ExtractedValue::Array(values.clone())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"id\" IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        // Verify the parameter contains 150 values
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 150 => {},
+            _ => panic!("Expected Array with 150 elements"),
+        }
+
+        // Test with strings
+        let string_values: Vec<ExtractedValue> = (0..100)
+            .map(|i| ExtractedValue::String(format!("value_{}", i)))
+            .collect();
+
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(string_values)).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"status\" IN ($1)");
+        assert_eq!(params.len(), 1);
+
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 100 => {},
+            _ => panic!("Expected Array with 100 elements"),
+        }
+    }
+
+    #[test]
+    fn test_like_patterns_escaping() {
+        // Test basic LIKE patterns
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("name", Operator::Like, ExtractedValue::String("%John%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" LIKE $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%John%" => {},
+            _ => panic!("Expected String(%John%)"),
+        }
+
+        // Test LIKE with special characters (underscore wildcard)
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("email", Operator::Like, ExtractedValue::String("user_@%.com".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"email\" LIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "user_@%.com" => {},
+            _ => panic!("Expected String(user_@%.com)"),
+        }
+
+        // Test ILIKE (case-insensitive)
+        let qb = QueryBuilder::new("products").unwrap()
+            .where_clause("description", Operator::ILike, ExtractedValue::String("%widget%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"products\" WHERE \"description\" ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%widget%" => {},
+            _ => panic!("Expected String(%widget%)"),
+        }
+
+        // Test multiple LIKE conditions
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("first_name", Operator::Like, ExtractedValue::String("J%".to_string())).unwrap()
+            .where_clause("last_name", Operator::Like, ExtractedValue::String("%son".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"first_name\" LIKE $1 AND \"last_name\" LIKE $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_ilike_case_insensitive() {
+        // Test ILIKE basic usage
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("name", Operator::ILike, ExtractedValue::String("%john%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"name\" ILIKE $1");
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%john%" => {},
+            _ => panic!("Expected String(%john%)"),
+        }
+
+        // Test ILIKE with mixed case pattern
+        let qb = QueryBuilder::new("products").unwrap()
+            .where_clause("name", Operator::ILike, ExtractedValue::String("%WiDgEt%".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"products\" WHERE \"name\" ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "%WiDgEt%" => {},
+            _ => panic!("Expected String(%WiDgEt%)"),
+        }
+
+        // Test ILIKE with underscore wildcard
+        let qb = QueryBuilder::new("emails").unwrap()
+            .where_clause("address", Operator::ILike, ExtractedValue::String("USER_@example.com".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"emails\" WHERE \"address\" ILIKE $1");
+        match &params[0] {
+            ExtractedValue::String(s) if s == "USER_@example.com" => {},
+            _ => panic!("Expected String(USER_@example.com)"),
+        }
+
+        // Test combining ILIKE with other conditions
+        let qb = QueryBuilder::new("articles").unwrap()
+            .where_clause("title", Operator::ILike, ExtractedValue::String("%RUST%".to_string())).unwrap()
+            .where_clause("published", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .limit(10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"articles\" WHERE \"title\" ILIKE $1 AND \"published\" = $2 ORDER BY \"created_at\" DESC LIMIT $3"
+        );
+        assert_eq!(params.len(), 3);
+
+        // Test multiple ILIKE conditions
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("first_name", Operator::ILike, ExtractedValue::String("j%".to_string())).unwrap()
+            .where_clause("last_name", Operator::ILike, ExtractedValue::String("%SON".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"first_name\" ILIKE $1 AND \"last_name\" ILIKE $2");
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_order_by_multiple_columns() {
+        // Test ORDER BY with 3 columns
+        let qb = QueryBuilder::new("users").unwrap()
+            .order_by("department", OrderDirection::Asc).unwrap()
+            .order_by("salary", OrderDirection::Desc).unwrap()
+            .order_by("name", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" ORDER BY \"department\" ASC, \"salary\" DESC, \"name\" ASC");
+        assert_eq!(params.len(), 0);
+
+        // Test with 5 columns
+        let qb = QueryBuilder::new("products").unwrap()
+            .order_by("category", OrderDirection::Asc).unwrap()
+            .order_by("subcategory", OrderDirection::Asc).unwrap()
+            .order_by("price", OrderDirection::Desc).unwrap()
+            .order_by("rating", OrderDirection::Desc).unwrap()
+            .order_by("name", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"products\" ORDER BY \"category\" ASC, \"subcategory\" ASC, \"price\" DESC, \"rating\" DESC, \"name\" ASC"
+        );
+        assert_eq!(params.len(), 0);
+
+        // Test ORDER BY with WHERE clause
+        let qb = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .order_by("id", OrderDirection::Asc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\" WHERE \"active\" = $1 ORDER BY \"created_at\" DESC, \"id\" ASC");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_combined_query_builder() {
+        // Test combining all query options: SELECT columns, WHERE (multiple conditions),
+        // ORDER BY (multiple), LIMIT, and OFFSET
+        let qb = QueryBuilder::new("orders").unwrap()
+            .select(vec![
+                "id".to_string(),
+                "customer_id".to_string(),
+                "total".to_string(),
+                "status".to_string(),
+                "created_at".to_string(),
+            ]).unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(vec![
+                ExtractedValue::String("pending".to_string()),
+                ExtractedValue::String("processing".to_string()),
+                ExtractedValue::String("shipped".to_string()),
+            ])).unwrap()
+            .where_clause("total", Operator::Gte, ExtractedValue::Int(100)).unwrap()
+            .where_clause("customer_id", Operator::Ne, ExtractedValue::Int(0)).unwrap()
+            .where_not_null("payment_method").unwrap()
+            .order_by("created_at", OrderDirection::Desc).unwrap()
+            .order_by("total", OrderDirection::Desc).unwrap()
+            .order_by("id", OrderDirection::Asc).unwrap()
+            .limit(50)
+            .offset(100);
+
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"customer_id\", \"total\", \"status\", \"created_at\" FROM \"orders\" WHERE \"status\" IN ($1) AND \"total\" >= $2 AND \"customer_id\" != $3 AND \"payment_method\" IS NOT NULL ORDER BY \"created_at\" DESC, \"total\" DESC, \"id\" ASC LIMIT $4 OFFSET $5"
+        );
+        assert_eq!(params.len(), 5);
+
+        // Verify parameter types
+        match &params[0] {
+            ExtractedValue::Array(arr) if arr.len() == 3 => {},
+            _ => panic!("Expected Array with 3 elements"),
+        }
+        match &params[1] {
+            ExtractedValue::Int(100) => {},
+            _ => panic!("Expected Int(100)"),
+        }
+        match &params[2] {
+            ExtractedValue::Int(0) => {},
+            _ => panic!("Expected Int(0)"),
+        }
+        match &params[3] {
+            ExtractedValue::BigInt(50) => {},
+            _ => panic!("Expected BigInt(50)"),
+        }
+        match &params[4] {
+            ExtractedValue::BigInt(100) => {},
+            _ => panic!("Expected BigInt(100)"),
+        }
+
+        // Test combined query with schema-qualified table
+        let qb = QueryBuilder::new("public.analytics_events").unwrap()
+            .select(vec!["event_type".to_string(), "user_id".to_string(), "timestamp".to_string()]).unwrap()
+            .where_clause("event_type", Operator::Like, ExtractedValue::String("click%".to_string())).unwrap()
+            .where_clause("timestamp", Operator::Gte, ExtractedValue::String("2024-01-01".to_string())).unwrap()
+            .order_by("timestamp", OrderDirection::Desc).unwrap()
+            .limit(1000);
+
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT \"event_type\", \"user_id\", \"timestamp\" FROM \"public\".\"analytics_events\" WHERE \"event_type\" LIKE $1 AND \"timestamp\" >= $2 ORDER BY \"timestamp\" DESC LIMIT $3"
+        );
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_single_conflict() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+            ("age".to_string(), ExtractedValue::Int(30)),
+        ];
+        let conflict_target = vec!["email".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
+
+        assert!(sql.contains("INSERT INTO \"users\""));
+        assert!(sql.contains("ON CONFLICT (\"email\")"));
+        assert!(sql.contains("DO UPDATE SET"));
+        assert!(sql.contains("\"name\" = EXCLUDED.\"name\""));
+        assert!(sql.contains("\"age\" = EXCLUDED.\"age\""));
+        assert!(sql.contains("RETURNING *"));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_selective_update() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+            ("age".to_string(), ExtractedValue::Int(30)),
+        ];
+        let conflict_target = vec!["email".to_string()];
+        let update_cols = vec!["name".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, Some(&update_cols)).unwrap();
+
+        assert!(sql.contains("DO UPDATE SET \"name\" = EXCLUDED.\"name\""));
+        assert!(!sql.contains("\"age\" = EXCLUDED.\"age\""));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_composite_key() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+            ("department".to_string(), ExtractedValue::String("Engineering".to_string())),
+            ("name".to_string(), ExtractedValue::String("Alice".to_string())),
+        ];
+        let conflict_target = vec!["email".to_string(), "department".to_string()];
+        let (sql, params) = qb.build_upsert(&values, &conflict_target, None).unwrap();
+
+        assert!(sql.contains("ON CONFLICT (\"email\", \"department\")"));
+        assert!(sql.contains("DO UPDATE SET \"name\" = EXCLUDED.\"name\""));
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_upsert_empty_conflict_target() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("email".to_string(), ExtractedValue::String("alice@example.com".to_string())),
+        ];
+        let conflict_target: Vec<String> = vec![];
+        let result = qb.build_upsert(&values, &conflict_target, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_upsert_invalid_column_name() {
+        let qb = QueryBuilder::new("users").unwrap();
+        let values = vec![
+            ("drop".to_string(), ExtractedValue::String("value".to_string())),
+        ];
+        let conflict_target = vec!["drop".to_string()];
+        let result = qb.build_upsert(&values, &conflict_target, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_inner_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", None, condition).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("INNER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
+        assert_eq!(sql, "SELECT \"posts\".\"id\", \"posts\".\"title\", \"users\".\"name\" FROM \"posts\" INNER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\"");
+    }
+
+    #[test]
+    fn test_left_join_with_alias() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
+            .left_join("users", Some("u"), condition).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("LEFT JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\""));
+        assert_eq!(sql, "SELECT \"p\".\"id\", \"u\".\"name\" FROM \"posts\" LEFT JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\"");
+    }
+
+    #[test]
+    fn test_multiple_joins() {
+        let condition1 = JoinCondition::new("author_id", "u", "id").unwrap();
+        let condition2 = JoinCondition::new("category_id", "c", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .inner_join("users", Some("u"), condition1).unwrap()
+            .left_join("categories", Some("c"), condition2).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("LEFT JOIN"));
+        assert_eq!(sql, "SELECT * FROM \"posts\" INNER JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\" LEFT JOIN \"categories\" AS \"c\" ON \"posts\".\"category_id\" = \"c\".\"id\"");
+    }
+
+    #[test]
+    fn test_right_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .right_join("users", None, condition).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("RIGHT JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
+    }
+
+    #[test]
+    fn test_full_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .full_join("users", None, condition).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("FULL OUTER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
+    }
+
+    #[test]
+    fn test_join_with_where() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", Some("u"), condition).unwrap()
+            .where_clause("posts.published", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("WHERE \"posts\".\"published\" = $1"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_join_with_order_and_limit() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let qb = QueryBuilder::new("posts").unwrap()
+            .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
+            .inner_join("users", Some("u"), condition).unwrap()
+            .order_by("posts.created_at", OrderDirection::Desc).unwrap()
+            .limit(10);
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("INNER JOIN"));
+        assert!(sql.contains("ORDER BY \"posts\".\"created_at\" DESC"));
+        assert!(sql.contains("LIMIT $1"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_join_invalid_table_name() {
+        let result = QueryBuilder::new("posts").unwrap()
+            .inner_join("drop", None, JoinCondition::new("author_id", "users", "id").unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_invalid_alias() {
+        let result = QueryBuilder::new("posts").unwrap()
+            .inner_join("users", Some("select"), JoinCondition::new("author_id", "users", "id").unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_with_schema_qualified_table() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let qb = QueryBuilder::new("public.posts").unwrap()
+            .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
+            .inner_join("public.users", Some("u"), condition).unwrap();
+
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("FROM \"public\".\"posts\""));
+        assert!(sql.contains("INNER JOIN \"public\".\"users\" AS \"u\""));
+    }
+
+    #[test]
+    fn test_join_condition_valid() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
+        let sql = condition.to_sql("posts");
+        assert_eq!(sql, "\"posts\".\"author_id\" = \"users\".\"id\"");
+    }
+
+    #[test]
+    fn test_join_condition_with_alias() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let sql = condition.to_sql("posts");
+        assert_eq!(sql, "\"posts\".\"author_id\" = \"u\".\"id\"");
+    }
+
+    #[test]
+    fn test_join_condition_invalid_left_column() {
+        let result = JoinCondition::new("drop", "users", "id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_invalid_right_table() {
+        let result = JoinCondition::new("author_id", "select", "id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_invalid_right_column() {
+        let result = JoinCondition::new("author_id", "users", "delete");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_sql_injection_attempt() {
+        // Attempt SQL injection in column name
+        let result = JoinCondition::new("author_id; DROP TABLE users--", "users", "id");
+        assert!(result.is_err());
+
+        // Attempt SQL injection in table name
+        let result = JoinCondition::new("author_id", "users; DROP TABLE posts--", "id");
+        assert!(result.is_err());
+
+        // Attempt SQL injection in right column
+        let result = JoinCondition::new("author_id", "users", "id OR 1=1--");
+        assert!(result.is_err());
     }
 }

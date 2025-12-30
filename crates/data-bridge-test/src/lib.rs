@@ -26,9 +26,10 @@ pub mod http_server;
 pub mod profiler;
 pub mod reporter;
 pub mod runner;
+pub mod security;
 
 // Re-export main types
-pub use assertions::{Expectation, AssertionError, AssertionResult};
+pub use assertions::{expect, Expectation, AssertionError, AssertionResult};
 pub use benchmark::{
     BenchmarkConfig, BenchmarkResult, BenchmarkStats, Benchmarker, compare_results,
     print_comparison_table, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
@@ -45,3 +46,8 @@ pub use profiler::{
 };
 pub use reporter::{Reporter, ReportFormat, TestReport, CoverageInfo, FileCoverage, EnvironmentInfo};
 pub use runner::{TestRunner, TestMeta, TestResult, TestStatus, TestType};
+pub use security::{
+    FuzzConfig, FuzzCrash, FuzzResult, Fuzzer, MutationStrategy,
+    PayloadCategory, PayloadDatabase,
+    InjectionResult, InjectionTest, SqlInjectionTester,
+};

@@ -138,7 +138,7 @@ impl Expectation<bool> {
             } else {
                 "Expected value to be true, but was false"
             };
-            Err(AssertionError::new(msg, "to_be_true").with_actual(&self.value))
+            Err(AssertionError::new(msg, "to_be_true").with_actual(self.value))
         }
     }
 
@@ -155,7 +155,7 @@ impl Expectation<bool> {
             } else {
                 "Expected value to be false, but was true"
             };
-            Err(AssertionError::new(msg, "to_be_false").with_actual(&self.value))
+            Err(AssertionError::new(msg, "to_be_false").with_actual(self.value))
         }
     }
 }
@@ -287,7 +287,7 @@ impl<T: PartialOrd + fmt::Debug + Copy> Expectation<T> {
                 "Expected {:?} to be between {:?} and {:?}",
                 self.value, low, high
             );
-            Err(AssertionError::new(msg, "to_be_between").with_actual(&self.value))
+            Err(AssertionError::new(msg, "to_be_between").with_actual(self.value))
         }
     }
 }
@@ -379,8 +379,8 @@ impl Expectation<String> {
                 length, actual_len
             );
             Err(AssertionError::new(msg, "to_have_length")
-                .with_expected(&length)
-                .with_actual(&actual_len))
+                .with_expected(length)
+                .with_actual(actual_len))
         }
     }
 
@@ -414,7 +414,7 @@ impl Expectation<&str> {
             let msg = format!("Expected {:?} to contain {:?}", self.value, substring);
             Err(AssertionError::new(msg, "to_contain")
                 .with_expected(substring)
-                .with_actual(&self.value))
+                .with_actual(self.value))
         }
     }
 
@@ -433,7 +433,7 @@ impl Expectation<&str> {
             let msg = format!("Expected {:?} to match pattern {:?}", self.value, pattern);
             Err(AssertionError::new(msg, "to_match")
                 .with_expected(pattern)
-                .with_actual(&self.value))
+                .with_actual(self.value))
         }
     }
 }
@@ -470,8 +470,8 @@ impl<T: PartialEq + fmt::Debug> Expectation<Vec<T>> {
                 length, actual_len
             );
             Err(AssertionError::new(msg, "to_have_length")
-                .with_expected(&length)
-                .with_actual(&actual_len))
+                .with_expected(length)
+                .with_actual(actual_len))
         }
     }
 
@@ -540,7 +540,7 @@ impl Expectation<JsonValue> {
             );
             Err(AssertionError::new(msg, "to_have_path_value")
                 .with_expected(expected)
-                .with_actual(&actual))
+                .with_actual(actual))
         }
     }
 }

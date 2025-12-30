@@ -282,21 +282,30 @@ data-bridge/
 │       └── src/
 │           └── error.rs            # Common error types
 ├── python/data_bridge/             # Python API layer
-│   ├── __init__.py                 # Public API exports
-│   ├── _engine.py                  # Rust backend bridge (27,604 lines)
-│   ├── document.py                 # Document base class (2,119 lines)
-│   ├── fields.py                   # FieldProxy & QueryExpr (18,745 lines)
-│   ├── query.py                    # QueryBuilder (27,188 lines)
-│   ├── bulk.py                     # Bulk operations (16,085 lines)
-│   ├── types.py                    # PydanticObjectId, Indexed (9,877 lines)
-│   ├── validation.py               # Type & constraint validation
-│   ├── state.py                    # Copy-on-Write state tracker (7,442 lines)
-│   └── connection.py               # Connection management (5,719 lines)
-├── tests/                          # Python tests (68 files, 313+ tests)
-│   ├── conftest.py                 # Pytest fixtures
-│   ├── unit/                       # Unit tests (no MongoDB)
-│   ├── integration/                # Integration tests (MongoDB required)
-│   └── mongo/benchmarks/           # Performance benchmarks
+│   ├── __init__.py                 # Facade exports
+│   ├── mongodb/                    # MongoDB ORM submodule
+│   │   ├── __init__.py
+│   │   ├── _engine.py              # Rust bridge
+│   │   ├── document.py             # Document base class
+│   │   ├── query.py                # Query builder
+│   │   └── ...
+│   ├── http/                       # HTTP Client submodule
+│   │   └── __init__.py
+│   ├── postgres/                   # PostgreSQL submodule (Stub)
+│   │   └── ...
+│   └── test/                       # Python test runner implementation
+│       ├── __init__.py
+│       ├── cli.py                  # dbtest CLI
+│       └── suite.py                # TestSuite base class
+├── tests/                          # Python tests (Root level)
+│   ├── mongo/                      # MongoDB tests
+│   │   ├── unit/
+│   │   ├── integration/
+│   │   └── benchmarks/
+│   ├── http/                       # HTTP tests
+│   ├── postgres/                   # PostgreSQL tests
+│   ├── common/                     # Shared test utilities
+│   └── unit/                       # General unit tests
 └── benchmarks/
     └── bench_comparison.py         # Beanie/PyMongo comparison
 </repository-structure>

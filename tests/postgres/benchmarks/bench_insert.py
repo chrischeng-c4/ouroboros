@@ -2,8 +2,9 @@
 
 import pytest
 from data_bridge.test import BenchmarkGroup, register_group
-from .models import DBUser, SAUser, SQLALCHEMY_AVAILABLE
-from .conftest import generate_user_data
+from tests.postgres.benchmarks.models import DBUser, SAUser, SQLALCHEMY_AVAILABLE
+from tests.postgres.benchmarks.conftest import generate_user_data
+from tests.postgres.benchmarks import benchmark_setup
 
 
 # =====================
@@ -16,14 +17,15 @@ insert_one = BenchmarkGroup("Insert One")
 @insert_one.add("data-bridge")
 async def db_insert_one():
     """Insert one record with data-bridge."""
+    await benchmark_setup.async_ensure_setup()
     user = DBUser(name="Test", email="test@test.com", age=30, active=True)
     await user.save()
 
 
 @insert_one.add("asyncpg")
-async def asyncpg_insert_one(asyncpg_pool):
+async def asyncpg_insert_one():
     """Insert one record with asyncpg."""
-    async with asyncpg_pool.acquire() as conn:
+    async with benchmark_setup._asyncpg_pool.acquire() as conn:
         await conn.execute(
             """
             INSERT INTO bench_asyncpg_users (name, email, age, active)
@@ -37,9 +39,9 @@ async def asyncpg_insert_one(asyncpg_pool):
 
 
 @insert_one.add("psycopg2")
-def psycopg2_insert_one(psycopg2_conn):
+def psycopg2_insert_one():
     """Insert one record with psycopg2."""
-    conn = psycopg2_conn.getconn()
+    conn = benchmark_setup._psycopg2_pool.getconn()
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -51,17 +53,26 @@ def psycopg2_insert_one(psycopg2_conn):
             )
             conn.commit()
     finally:
-        psycopg2_conn.putconn(conn)
+        benchmark_setup._psycopg2_pool.putconn(conn)
 
 
 if SQLALCHEMY_AVAILABLE:
 
     @insert_one.add("SQLAlchemy")
-    async def sqlalchemy_insert_one(sqlalchemy_session):
+    async def sqlalchemy_insert_one():
         """Insert one record with SQLAlchemy."""
-        user = SAUser(name="Test", email="test@test.com", age=30, active=True)
-        sqlalchemy_session.add(user)
-        await sqlalchemy_session.commit()
+        async with benchmark_setup._sqlalchemy_engine.begin() as conn:
+             pass # just for context manager
+        
+        # We need a new session for each operation
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.ext.asyncio import AsyncSession
+        async_session = sessionmaker(benchmark_setup._sqlalchemy_engine, class_=AsyncSession, expire_on_commit=False)
+        
+        async with async_session() as session:
+            user = SAUser(name="Test", email="test@test.com", age=30, active=True)
+            session.add(user)
+            await session.commit()
 
 
 register_group(insert_one)
@@ -84,9 +95,9 @@ async def db_bulk_insert_1000():
 
 
 @bulk_insert_1000.add("asyncpg")
-async def asyncpg_bulk_insert_1000(asyncpg_pool):
+async def asyncpg_bulk_insert_1000():
     """Bulk insert 1000 records with asyncpg."""
-    async with asyncpg_pool.acquire() as conn:
+    async with benchmark_setup._asyncpg_pool.acquire() as conn:
         await conn.executemany(
             """
             INSERT INTO bench_asyncpg_users (name, email, age, city, score, active)
@@ -97,9 +108,9 @@ async def asyncpg_bulk_insert_1000(asyncpg_pool):
 
 
 @bulk_insert_1000.add("psycopg2")
-def psycopg2_bulk_insert_1000(psycopg2_conn):
+def psycopg2_bulk_insert_1000():
     """Bulk insert 1000 records with psycopg2."""
-    conn = psycopg2_conn.getconn()
+    conn = benchmark_setup._psycopg2_pool.getconn()
     try:
         with conn.cursor() as cur:
             from psycopg2.extras import execute_values
@@ -118,17 +129,22 @@ def psycopg2_bulk_insert_1000(psycopg2_conn):
             )
             conn.commit()
     finally:
-        psycopg2_conn.putconn(conn)
+        benchmark_setup._psycopg2_pool.putconn(conn)
 
 
 if SQLALCHEMY_AVAILABLE:
 
     @bulk_insert_1000.add("SQLAlchemy")
-    async def sqlalchemy_bulk_insert_1000(sqlalchemy_session):
+    async def sqlalchemy_bulk_insert_1000():
         """Bulk insert 1000 records with SQLAlchemy."""
-        users = [SAUser(**d) for d in DATA_1000]
-        sqlalchemy_session.add_all(users)
-        await sqlalchemy_session.commit()
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.ext.asyncio import AsyncSession
+        async_session = sessionmaker(benchmark_setup._sqlalchemy_engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with async_session() as session:
+            users = [SAUser(**d) for d in DATA_1000]
+            session.add_all(users)
+            await session.commit()
 
 
 register_group(bulk_insert_1000)
@@ -151,9 +167,9 @@ async def db_bulk_insert_10000():
 
 
 @bulk_insert_10000.add("asyncpg")
-async def asyncpg_bulk_insert_10000(asyncpg_pool):
+async def asyncpg_bulk_insert_10000():
     """Bulk insert 10000 records with asyncpg."""
-    async with asyncpg_pool.acquire() as conn:
+    async with benchmark_setup._asyncpg_pool.acquire() as conn:
         await conn.executemany(
             """
             INSERT INTO bench_asyncpg_users (name, email, age, city, score, active)
@@ -164,9 +180,9 @@ async def asyncpg_bulk_insert_10000(asyncpg_pool):
 
 
 @bulk_insert_10000.add("psycopg2")
-def psycopg2_bulk_insert_10000(psycopg2_conn):
+def psycopg2_bulk_insert_10000():
     """Bulk insert 10000 records with psycopg2."""
-    conn = psycopg2_conn.getconn()
+    conn = benchmark_setup._psycopg2_pool.getconn()
     try:
         with conn.cursor() as cur:
             from psycopg2.extras import execute_values
@@ -185,17 +201,22 @@ def psycopg2_bulk_insert_10000(psycopg2_conn):
             )
             conn.commit()
     finally:
-        psycopg2_conn.putconn(conn)
+        benchmark_setup._psycopg2_pool.putconn(conn)
 
 
 if SQLALCHEMY_AVAILABLE:
 
     @bulk_insert_10000.add("SQLAlchemy")
-    async def sqlalchemy_bulk_insert_10000(sqlalchemy_session):
+    async def sqlalchemy_bulk_insert_10000():
         """Bulk insert 10000 records with SQLAlchemy."""
-        users = [SAUser(**d) for d in DATA_10000]
-        sqlalchemy_session.add_all(users)
-        await sqlalchemy_session.commit()
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.ext.asyncio import AsyncSession
+        async_session = sessionmaker(benchmark_setup._sqlalchemy_engine, class_=AsyncSession, expire_on_commit=False)
+
+        async with async_session() as session:
+            users = [SAUser(**d) for d in DATA_10000]
+            session.add_all(users)
+            await session.commit()
 
 
 register_group(bulk_insert_10000)

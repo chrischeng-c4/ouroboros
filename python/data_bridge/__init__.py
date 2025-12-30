@@ -41,135 +41,49 @@ Architecture:
 
 __version__ = "0.1.0"
 
-# Import the Rust binary extension
-from data_bridge import data_bridge as _rust_module
+# Import sub-packages
+from . import mongodb
+from . import http
+from . import postgres
+from . import test
 
-# Re-export mongodb submodule from Rust
-try:
-    from data_bridge.data_bridge import mongodb
-except ImportError:
-    mongodb = None  # MongoDB module not built
-
-# Re-export http submodule from Rust
-try:
-    from data_bridge.data_bridge import http
-except ImportError:
-    http = None  # HTTP module not built
-
-# Re-export test submodule from Rust
-try:
-    from data_bridge.data_bridge import test as _test_rust
-    from . import test  # Python test package (uses Rust bindings)
-except ImportError:
-    test = None  # Test module not built
-
-# Re-export postgres submodule from Rust
-try:
-    from data_bridge.data_bridge import postgres
-except ImportError:
-    postgres = None  # PostgreSQL module not built
-
-# Import _engine to provide the bridge to Rust backend
-from . import _engine
-
-# Core classes - Python layer with Beanie-compatible API
-from .document import Document, Settings
-from .embedded import EmbeddedDocument
-from .fields import Field, FieldProxy, QueryExpr, merge_filters, text_search, TextSearch, escape_regex
-from .query import QueryBuilder, AggregationBuilder
-
-# Lifecycle actions/hooks
-from .actions import (
-    before_event,
-    after_event,
-    Insert,
-    Replace,
-    Save,
-    Delete,
-    ValidateOnSave,
-    EventType,
+# Re-export commonly used classes from mongodb for convenience/backward compatibility
+from .mongodb import (
+    Document, Settings, EmbeddedDocument,
+    Field, FieldProxy, QueryExpr, merge_filters, text_search, TextSearch, escape_regex,
+    QueryBuilder, AggregationBuilder,
+    init, is_connected, close, reset,
+    # Actions
+    before_event, after_event, Insert, Replace, Save, Delete, ValidateOnSave, EventType,
+    # Bulk
+    BulkOperation, UpdateOne, UpdateMany, InsertOne, DeleteOne, DeleteMany, ReplaceOne, BulkWriteResult,
+    # Types
+    PydanticObjectId, Indexed, IndexModelField, get_index_fields,
+    # Links
+    Link, BackLink, WriteRules, DeleteRules, get_link_fields,
+    # Transactions
+    Session, Transaction, start_session, TransactionNotSupportedError,
+    # Time-series
+    TimeSeriesConfig, Granularity,
+    # Migrations
+    Migration, MigrationHistory, IterativeMigration, FreeFallMigration, iterative_migration, free_fall_migration, run_migrations, get_pending_migrations, get_applied_migrations, get_migration_status,
+    # Constraints
+    Constraint, MinLen, MaxLen, Min, Max, Email, Url,
 )
 
-# Bulk operations with fluent API
-from .bulk import (
-    BulkOperation,
-    UpdateOne,
-    UpdateMany,
-    InsertOne,
-    DeleteOne,
-    DeleteMany,
-    ReplaceOne,
-    BulkWriteResult,
-)
-
-# Type support
-from .types import (
-    PydanticObjectId,
-    Indexed,
-    IndexModelField,
-    get_index_fields,
-)
-
-# Document relations/links
-from .links import (
-    Link,
-    BackLink,
-    WriteRules,
-    DeleteRules,
-    get_link_fields,
-)
-
-# Transactions (stub - requires Rust implementation)
-from .transactions import (
-    Session,
-    Transaction,
-    start_session,
-    TransactionNotSupportedError,
-)
-
-# Time-series collections (MongoDB 5.0+)
-from .timeseries import (
-    TimeSeriesConfig,
-    Granularity,
-)
-
-# Programmatic migrations
-from .migrations import (
-    Migration,
-    MigrationHistory,
-    IterativeMigration,
-    FreeFallMigration,
-    iterative_migration,
-    free_fall_migration,
-    run_migrations,
-    get_pending_migrations,
-    get_applied_migrations,
-    get_migration_status,
-)
-
-# Constraint validators for Annotated types
-from .constraints import (
-    Constraint,
-    MinLen,
-    MaxLen,
-    Min,
-    Max,
-    Email,
-    Url,
-)
-
-# Connection management
-from .connection import init, is_connected, close, reset
-
-# Public API
 __all__ = [
     # Version
     "__version__",
-    # Rust submodules
+    # Modules
     "mongodb",
     "http",
-    "test",
     "postgres",
+    "test",
+    # Connection
+    "init",
+    "is_connected",
+    "close",
+    "reset",
     # Core
     "Document",
     "Settings",
@@ -185,12 +99,7 @@ __all__ = [
     # Query
     "QueryBuilder",
     "AggregationBuilder",
-    # Connection
-    "init",
-    "is_connected",
-    "close",
-    "reset",
-    # Actions/Hooks
+    # Actions
     "before_event",
     "after_event",
     "Insert",
@@ -219,7 +128,7 @@ __all__ = [
     "WriteRules",
     "DeleteRules",
     "get_link_fields",
-    # Transactions (stub)
+    # Transactions
     "Session",
     "Transaction",
     "start_session",
@@ -238,4 +147,12 @@ __all__ = [
     "get_pending_migrations",
     "get_applied_migrations",
     "get_migration_status",
+    # Constraints
+    "Constraint",
+    "MinLen",
+    "MaxLen",
+    "Min",
+    "Max",
+    "Email",
+    "Url",
 ]

@@ -1,0 +1,125 @@
+======================================================================
+PostgreSQL Framework Comparison Benchmark
+======================================================================
+
+PostgreSQL URI: postgresql://rstn:rstn@localhost:5432/data_bridge_benchmark
+Comparing: data-bridge vs asyncpg vs psycopg2 vs SQLAlchemy
+
+Initializing PostgreSQL connections...
+  All frameworks initialized
+Discovered 3 benchmark files
+Found 9 benchmark groups
+
+
+Running: Find One (by ID)
+
+Running: Find Many (1000)
+
+Running: Count (with filter)
+
+Running: Insert One
+
+Running: Bulk Insert (1000)
+
+Running: Bulk Insert (10000)
+
+Running: Update One
+
+Running: Update Many (1000)
+
+Running: Delete Many (500)
+
+[1m[36m═══ PostgreSQL Framework Comparison ═══[0m
+
+[2mRust-based data-bridge vs asyncpg vs psycopg2 vs SQLAlchemy ORM[0m
+
+[1mGenerated:[0m 2025-12-27 13:08:03
+[1mTotal Duration:[0m 1600.43s
+
+[1m[33m── Find One (by ID) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                        0.372ms     0.237ms     1.061ms       2687.7 [32m   2.37x faster[0m
+  asyncpg                            0.362ms     0.192ms     0.849ms       2763.3 [32m   2.43x faster[0m
+  psycopg2                           0.383ms     0.182ms     1.303ms       2612.0 [32m   2.30x faster[0m
+  SQLAlchemy                         0.881ms     0.549ms     1.935ms       1135.5 [2m     (baseline)[0m
+
+[1m[33m── Find Many (1000) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                       10.011ms     8.052ms    20.602ms         99.9 [31m   1.08x slower[0m
+  asyncpg                            2.709ms     1.446ms    15.344ms        369.1 [32m   3.43x faster[0m
+  psycopg2                           1.076ms     0.867ms     1.579ms        929.3 [32m   8.63x faster[0m
+  SQLAlchemy                         9.286ms     5.876ms    22.932ms        107.7 [2m     (baseline)[0m
+
+[1m[33m── Count (with filter) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                       45.950ms    44.813ms    47.551ms         21.8 [31m   1.06x slower[0m
+  asyncpg                          115.606ms   113.362ms   123.763ms          8.7 [31m   2.65x slower[0m
+  psycopg2                          42.223ms    40.924ms    45.072ms         23.7 [32m   1.03x faster[0m
+  SQLAlchemy                        43.554ms    42.031ms    47.943ms         23.0 [2m     (baseline)[0m
+
+[1m[33m── Insert One ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                        2.184ms     0.918ms    11.486ms        457.9 [31m   1.07x slower[0m
+  asyncpg                            1.288ms     0.862ms     3.070ms        776.4 [32m   1.58x faster[0m
+  psycopg2                           1.246ms     0.805ms     6.278ms        802.5 [32m   1.63x faster[0m
+  SQLAlchemy                         2.035ms     1.425ms     3.214ms        491.3 [2m     (baseline)[0m
+
+[1m[33m── Bulk Insert (1000) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                       20.466ms    16.303ms    34.897ms         48.9 [32m   2.39x faster[0m
+  asyncpg                            9.772ms     8.641ms    13.180ms        102.3 [32m   5.00x faster[0m
+  psycopg2                          16.922ms    15.571ms    25.546ms         59.1 [32m   2.89x faster[0m
+  SQLAlchemy                        48.831ms    38.005ms    64.123ms         20.5 [2m     (baseline)[0m
+
+[1m[33m── Bulk Insert (10000) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                      177.732ms   155.738ms   197.014ms          5.6 [32m   2.29x faster[0m
+  asyncpg                          140.186ms    57.726ms   441.885ms          7.1 [32m   2.90x faster[0m
+  psycopg2                         175.160ms   139.788ms   207.423ms          5.7 [32m   2.32x faster[0m
+  SQLAlchemy                       406.683ms   385.375ms   457.075ms          2.5 [2m     (baseline)[0m
+
+[1m[33m── Update One ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                        1.949ms     1.114ms     3.817ms        513.2 [31m   1.92x slower[0m
+  asyncpg                            1.324ms     0.862ms     9.228ms        755.3 [31m   1.31x slower[0m
+  psycopg2                           1.238ms     0.815ms     7.084ms        807.7 [31m   1.22x slower[0m
+  SQLAlchemy                         1.013ms     0.646ms     1.628ms        986.7 [2m     (baseline)[0m
+
+[1m[33m── Update Many (1000) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                     6411.696ms  5988.076ms  7280.215ms          0.2 [32m   1.14x faster[0m
+  asyncpg                         6440.694ms  5918.026ms  6953.036ms          0.2 [32m   1.14x faster[0m
+  psycopg2                        6281.871ms  5738.844ms  7187.852ms          0.2 [32m   1.17x faster[0m
+  SQLAlchemy                      7324.985ms  6330.651ms  9206.228ms          0.1 [2m     (baseline)[0m
+
+[1m[33m── Delete Many (500) ──[0m
+
+  [2mBenchmark                            Mean        Min        Max        Ops/s     vs Baseline[0m
+  [2m───────────────────────────────────────────────────────────────────────────────────────────────[0m
+  data-bridge                      707.758ms   691.799ms   877.371ms          1.4 [32m   1.81x faster[0m
+  asyncpg                          915.645ms   871.634ms  1022.989ms          1.1 [32m   1.40x faster[0m
+  psycopg2                        1256.063ms  1013.177ms  2349.733ms          0.8 [32m   1.02x faster[0m
+  SQLAlchemy                      1280.698ms  1074.381ms  4318.742ms          0.8 [2m     (baseline)[0m
+
+[1m[36mEnvironment[0m
+
+
+Results saved to: /Users/chrischeng/projects/data-bridge/tests/postgres/benchmarks/results
+  - Markdown: /Users/chrischeng/projects/data-bridge/tests/postgres/benchmarks/results/benchmark_report.md
+  - JSON: /Users/chrischeng/projects/data-bridge/tests/postgres/benchmarks/results/full_results.json

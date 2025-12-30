@@ -21,7 +21,7 @@ from typing import Any, AsyncGenerator, Optional
 
 # Import from Rust engine when available
 try:
-    from data_bridge import postgres as _engine
+    from data_bridge.data_bridge import postgres as _engine
 except ImportError:
     _engine = None
 

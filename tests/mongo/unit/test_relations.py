@@ -86,7 +86,7 @@ class TestWriteRules(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -94,7 +94,7 @@ class TestWriteRules(MongoTestSuite):
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -167,13 +167,13 @@ class TestDeleteRules(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
@@ -224,7 +224,7 @@ class TestFetchLinks(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -233,7 +233,7 @@ class TestFetchLinks(MongoTestSuite):
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -381,12 +381,12 @@ class TestLinkClass(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
 
     @test(tags=["mongo", "relations", "link"])
@@ -467,13 +467,13 @@ class TestBackLinkClass(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 

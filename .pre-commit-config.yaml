@@ -1,4 +1,45 @@
+# Pre-commit hooks for security scanning
+# Install: pre-commit install
+# Run: pre-commit run --all-files
+
 repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      - id: cargo-audit
+        name: cargo audit
+        entry: cargo audit
+        language: system
+        pass_filenames: false
+        files: \.rs$|Cargo\.toml$|Cargo\.lock$
+
+      - id: cargo-deny
+        name: cargo deny
+        entry: cargo deny check
+        language: system
+        pass_filenames: false
+        files: \.rs$|Cargo\.toml$
+
+      - id: bandit
+        name: bandit
+        entry: bandit -c .bandit.yaml -r python/data_bridge
+        language: system
+        pass_filenames: false
+        types: [python]
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
@@ -36,6 +77,5 @@ repos:
         additional_dependencies:
           - types-redis
           - pydantic
-        args: [--config-file=pyproject.toml]
+        args: [--config-file=pyproject.toml, python/data_bridge/]
         pass_filenames: false
-        args: [src/]

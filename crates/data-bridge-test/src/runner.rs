@@ -8,8 +8,10 @@ use tokio::task::JoinHandle;
 
 /// Test type categorization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TestType {
     /// Standard unit test
+    #[default]
     Unit,
     /// Performance profiling test
     Profile,
@@ -19,11 +21,6 @@ pub enum TestType {
     Security,
 }
 
-impl Default for TestType {
-    fn default() -> Self {
-        TestType::Unit
-    }
-}
 
 impl std::fmt::Display for TestType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

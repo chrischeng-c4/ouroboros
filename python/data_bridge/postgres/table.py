@@ -34,7 +34,7 @@ from .query import QueryBuilder
 
 # Import from Rust engine when available
 try:
-    from data_bridge import postgres as _engine
+    from data_bridge.data_bridge import postgres as _engine
 except ImportError:
     _engine = None
 
@@ -516,6 +516,43 @@ class Table(metaclass=TableMeta):
         return await _engine.insert_many(table_name, converted_rows)
 
     @classmethod
+    def _build_where_clause(cls, filters: tuple) -> tuple[str, list[Any]]:
+        """
+        Build WHERE clause from filters.
+
+        Args:
+            filters: Tuple of SqlExpr or dict filters
+
+        Returns:
+            Tuple of (where_clause, parameters)
+        """
+        if not filters:
+            return ("", [])
+
+        # Convert filters to SQL
+        conditions = []
+        params = []
+        param_index = 1
+
+        for filter_item in filters:
+            if isinstance(filter_item, SqlExpr):
+                sql, filter_params = filter_item.to_sql(param_index)
+                conditions.append(sql)
+                params.extend(filter_params)
+                param_index += len(filter_params)
+            elif isinstance(filter_item, dict):
+                # Convert dict to SQL conditions
+                for key, value in filter_item.items():
+                    conditions.append(f"{key} = ${param_index}")
+                    params.append(value)
+                    param_index += 1
+            else:
+                raise TypeError(f"Invalid filter type: {type(filter_item)}")
+
+        where_clause = " AND ".join(conditions) if conditions else ""
+        return (where_clause, params)
+
+    @classmethod
     async def delete_many(cls: Type[T], *filters: SqlExpr | dict) -> int:
         """
         Delete multiple rows matching filters.
@@ -537,15 +574,8 @@ class Table(metaclass=TableMeta):
 
         table_name = cls.__table_name__()
 
-        # Convert filters to SQL
-        if not filters:
-            # Delete all (be careful!)
-            where_clause = ""
-            params = []
-        else:
-            # TODO: Implement filter conversion
-            # For now, raise an error
-            raise NotImplementedError("Filter conversion not yet implemented")
+        # Convert filters to SQL using the same logic as QueryBuilder
+        where_clause, params = cls._build_where_clause(filters)
 
         return await _engine.delete_many(table_name, where_clause, params)
 
@@ -579,14 +609,7 @@ class Table(metaclass=TableMeta):
 
         table_name = cls.__table_name__()
 
-        # Convert filters to SQL
-        if not filters:
-            # Update all (be careful!)
-            where_clause = ""
-            params = list(updates.values())
-        else:
-            # TODO: Implement filter conversion
-            # For now, raise an error
-            raise NotImplementedError("Filter conversion not yet implemented")
+        # Convert filters to SQL using the same logic as QueryBuilder
+        where_clause, params = cls._build_where_clause(filters)
 
         return await _engine.update_many(table_name, updates, where_clause, params)

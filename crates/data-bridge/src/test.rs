@@ -581,7 +581,7 @@ impl PyTestRunner {
             let setup_result = tokio::task::spawn_blocking(move || -> Result<(), String> {
                 Python::with_gil(|py| {
                     let suite_bound = suite_for_setup.bind(py);
-                    call_async_method(py, &suite_bound, "setup_suite")
+                    call_async_method(py, suite_bound, "setup_suite")
                         .map_err(|e| format!("{}", e))
                 })
             })
@@ -626,7 +626,7 @@ impl PyTestRunner {
                                     Ok(m) => {
                                         // Use test-specific timeout if configured, otherwise default to 60s
                                         m.inner.timeout
-                                            .map(|t| std::time::Duration::from_secs_f64(t))
+                                            .map(std::time::Duration::from_secs_f64)
                                             .unwrap_or(std::time::Duration::from_secs(60))
                                     }
                                     Err(_) => std::time::Duration::from_secs(60),
@@ -731,7 +731,7 @@ impl PyTestRunner {
             let _ = tokio::task::spawn_blocking(move || -> Result<(), String> {
                 Python::with_gil(|py| {
                     let suite_bound = suite_for_teardown.bind(py);
-                    call_async_method(py, &suite_bound, "teardown_suite")
+                    call_async_method(py, suite_bound, "teardown_suite")
                         .map_err(|e| format!("{}", e))
                 })
             })
@@ -795,7 +795,7 @@ fn execute_single_test_with_gil(
 
         // Run test setup
         let suite = suite_instance.bind(py);
-        if let Err(e) = call_async_method(py, &suite, "setup") {
+        if let Err(e) = call_async_method(py, suite, "setup") {
             // Setup failed - return error result
             let result = PyTestResult {
                 inner: TestResult::error(meta.inner, 0, format!("Test setup failed: {}", e)),
@@ -829,7 +829,7 @@ fn execute_single_test_with_gil(
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // Always run teardown, even if test failed
-        let _ = call_async_method(py, &suite, "teardown");
+        let _ = call_async_method(py, suite, "teardown");
 
         // Convert result
         let result = match test_result {
@@ -2413,7 +2413,7 @@ impl PyDiscoveryStats {
 #[pyfunction]
 fn discover_files(config: PyDiscoveryConfig) -> PyResult<Vec<PyFileInfo>> {
     let files = walk_files(&config.inner)
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e))?;
+        .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
 
     Ok(files.into_iter().map(|f| PyFileInfo { inner: f }).collect())
 }
@@ -3075,7 +3075,7 @@ impl PyProfileConfig {
 #[pyfunction]
 fn generate_flamegraph(folded_stacks: Vec<String>, title: &str, output_path: &str) -> PyResult<()> {
     generate_flamegraph_svg(&folded_stacks, title, output_path)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e))
+        .map_err(PyErr::new::<pyo3::exceptions::PyIOError, _>)
 }
 
 // =====================

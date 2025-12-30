@@ -37,7 +37,7 @@
 //! ```
 
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyBool, PyBytes, PyDict, PyList, IntoPyDict};
+use pyo3::types::{PyAny, PyBytes, PyDict, IntoPyDict};
 use pyo3::exceptions::PyValueError;
 use bson::{Bson, Document as BsonDocument, oid::ObjectId};
 use crate::config::SecurityConfig;
@@ -684,6 +684,7 @@ mod tests {
 
     // T010: Test float → SerializablePyValue::Float (including NaN, Inf)
     #[test]
+    #[allow(clippy::approx_constant)] // 3.14 is just a test value, not meant to be PI
     fn test_extract_float() {
         py_context(|py| {
             let context = ConversionContext::default();

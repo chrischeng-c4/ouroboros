@@ -7,7 +7,7 @@ works end-to-end through the Python → Rust boundary.
 import pytest
 from typing import Annotated
 from data_bridge import Document, init, MinLen, MaxLen, Min, Max, Email, Url
-from data_bridge.types import PydanticObjectId
+from data_bridge.mongodb.types import PydanticObjectId
 
 
 # Test models with constraints

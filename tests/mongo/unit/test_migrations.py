@@ -11,7 +11,7 @@ Tests for:
 Migrated from pytest to data_bridge.test framework.
 """
 from data_bridge import Document
-from data_bridge.migrations import (
+from data_bridge.mongodb.migrations import (
     Migration,
     iterative_migration,
     free_fall_migration,
@@ -114,13 +114,13 @@ class TestMigrationForward(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -166,13 +166,13 @@ class TestIterativeMigration(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -229,13 +229,13 @@ class TestFreeFallMigration(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -264,13 +264,13 @@ class TestRunMigrations(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -347,13 +347,13 @@ class TestMigrationHistory(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -402,13 +402,13 @@ class TestMigrationErrors(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge import _engine
+        from data_bridge.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 

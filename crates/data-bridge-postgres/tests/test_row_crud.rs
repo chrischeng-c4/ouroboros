@@ -4,10 +4,11 @@
 //! Set DATABASE_URL environment variable or skip with SKIP_INTEGRATION=true
 
 use data_bridge_postgres::{Connection, ExtractedValue, PoolConfig, QueryBuilder, Row, Operator, OrderDirection};
+use data_bridge_test::{expect, AssertionError};
 
 #[tokio::test]
 #[ignore] // Only run with --ignored flag when database is available
-async fn test_insert_and_find_by_id() {
+async fn test_insert_and_find_by_id() -> Result<(), Box<dyn std::error::Error>> {
     // This test requires a real PostgreSQL connection
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
@@ -49,7 +50,7 @@ async fn test_insert_and_find_by_id() {
         _ => panic!("Expected BigInt for id"),
     };
 
-    assert!(id > 0, "ID should be positive");
+    expect(id).to_be_greater_than(&0)?;
 
     // Find by ID
     let found_row = Row::find_by_id(pool, "test_users", id)
@@ -58,20 +59,22 @@ async fn test_insert_and_find_by_id() {
         .expect("Row should exist");
 
     // Verify values
-    assert!(matches!(found_row.get("name").unwrap(), ExtractedValue::String(s) if s == "Alice"));
-    assert!(matches!(found_row.get("age").unwrap(), ExtractedValue::Int(30)));
-    assert!(matches!(found_row.get("active").unwrap(), ExtractedValue::Bool(true)));
+    expect(matches!(found_row.get("name").unwrap(), ExtractedValue::String(s) if s == "Alice")).to_be_true()?;
+    expect(matches!(found_row.get("age").unwrap(), ExtractedValue::Int(30))).to_be_true()?;
+    expect(matches!(found_row.get("active").unwrap(), ExtractedValue::Bool(true))).to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_users CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_find_many_with_filters() {
+async fn test_find_many_with_filters() -> Result<(), Box<dyn std::error::Error>> {
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
 
@@ -123,24 +126,26 @@ async fn test_find_many_with_filters() {
         .await
         .unwrap();
 
-    assert_eq!(results.len(), 3); // Products C, B, D
+    expect(results.len()).to_equal(&3)?; // Products C, B, D
 
     // Verify first result is Product C (150)
-    assert!(matches!(
+    expect(matches!(
         results[0].get("name").unwrap(),
         ExtractedValue::String(s) if s == "Product C"
-    ));
+    )).to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_products CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_update_and_delete() {
+async fn test_update_and_delete() -> Result<(), Box<dyn std::error::Error>> {
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
 
@@ -183,37 +188,39 @@ async fn test_update_and_delete() {
     let updated = Row::update(pool, "test_items", id, &updates)
         .await
         .unwrap();
-    assert!(updated);
+    expect(updated).to_be_true()?;
 
     // Verify update
     let found = Row::find_by_id(pool, "test_items", id)
         .await
         .unwrap()
         .expect("Row should exist");
-    assert!(matches!(
+    expect(matches!(
         found.get("title").unwrap(),
         ExtractedValue::String(s) if s == "Updated Item"
-    ));
-    assert!(matches!(found.get("quantity").unwrap(), ExtractedValue::Int(20)));
+    )).to_be_true()?;
+    expect(matches!(found.get("quantity").unwrap(), ExtractedValue::Int(20))).to_be_true()?;
 
     // Delete item
     let deleted = Row::delete(pool, "test_items", id).await.unwrap();
-    assert!(deleted);
+    expect(deleted).to_be_true()?;
 
     // Verify deletion
     let not_found = Row::find_by_id(pool, "test_items", id).await.unwrap();
-    assert!(not_found.is_none());
+    expect(not_found.is_none()).to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_items CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_count() {
+async fn test_count() -> Result<(), Box<dyn std::error::Error>> {
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
 
@@ -246,7 +253,7 @@ async fn test_count() {
 
     // Count all rows
     let total = Row::count(pool, "test_counts", None).await.unwrap();
-    assert_eq!(total, 5);
+    expect(total).to_equal(&5)?;
 
     // Count active rows
     let query = QueryBuilder::new("test_counts")
@@ -254,17 +261,19 @@ async fn test_count() {
         .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string()))
         .unwrap();
     let active_count = Row::count(pool, "test_counts", Some(&query)).await.unwrap();
-    assert_eq!(active_count, 3);
+    expect(active_count).to_equal(&3)?;
 
     // Clean up
     sqlx::query("DROP TABLE test_counts CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[test]
-fn test_row_to_json() {
+fn test_row_to_json() -> Result<(), AssertionError> {
     use std::collections::HashMap;
 
     let mut columns = HashMap::new();
@@ -276,17 +285,19 @@ fn test_row_to_json() {
     let row = Row::new(columns);
     let json = row.to_json().unwrap();
 
-    assert!(json.is_object());
+    expect(json.is_object()).to_be_true()?;
     let obj = json.as_object().unwrap();
-    assert_eq!(obj.get("id").unwrap().as_i64().unwrap(), 42);
-    assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "Test");
-    assert_eq!(obj.get("active").unwrap().as_bool().unwrap(), true);
-    assert!((obj.get("price").unwrap().as_f64().unwrap() - 99.99).abs() < 0.01);
+    expect(obj.get("id").unwrap().as_i64().unwrap()).to_equal(&42)?;
+    expect(obj.get("name").unwrap().as_str().unwrap()).to_equal(&"Test")?;
+    expect(obj.get("active").unwrap().as_bool().unwrap()).to_be_true()?;
+    expect((obj.get("price").unwrap().as_f64().unwrap() - 99.99).abs() < 0.01).to_be_true()?;
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_insert_many() {
+async fn test_insert_many() -> Result<(), Box<dyn std::error::Error>> {
     use std::collections::HashMap;
 
     let uri = std::env::var("DATABASE_URL")
@@ -335,7 +346,7 @@ async fn test_insert_many() {
         .unwrap();
 
     // Verify all rows were inserted
-    assert_eq!(rows.len(), 3);
+    expect(rows.len()).to_equal(&3)?;
 
     // Verify each row has an ID and correct values
     for (idx, row) in rows.iter().enumerate() {
@@ -344,24 +355,24 @@ async fn test_insert_many() {
             ExtractedValue::BigInt(i) => *i,
             _ => panic!("Expected BigInt for id"),
         };
-        assert!(id > 0, "ID should be positive");
+        expect(id).to_be_greater_than(&0)?;
 
         // Verify other fields
         match idx {
             0 => {
-                assert!(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Alice"));
-                assert!(matches!(row.get("age").unwrap(), ExtractedValue::Int(30)));
-                assert!(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 95.5).abs() < 0.01));
+                expect(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Alice")).to_be_true()?;
+                expect(matches!(row.get("age").unwrap(), ExtractedValue::Int(30))).to_be_true()?;
+                expect(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 95.5).abs() < 0.01)).to_be_true()?;
             }
             1 => {
-                assert!(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Bob"));
-                assert!(matches!(row.get("age").unwrap(), ExtractedValue::Int(25)));
-                assert!(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 87.3).abs() < 0.01));
+                expect(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Bob")).to_be_true()?;
+                expect(matches!(row.get("age").unwrap(), ExtractedValue::Int(25))).to_be_true()?;
+                expect(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 87.3).abs() < 0.01)).to_be_true()?;
             }
             2 => {
-                assert!(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Charlie"));
-                assert!(matches!(row.get("age").unwrap(), ExtractedValue::Int(35)));
-                assert!(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 92.1).abs() < 0.01));
+                expect(matches!(row.get("name").unwrap(), ExtractedValue::String(s) if s == "Charlie")).to_be_true()?;
+                expect(matches!(row.get("age").unwrap(), ExtractedValue::Int(35))).to_be_true()?;
+                expect(matches!(row.get("score").unwrap(), ExtractedValue::Double(s) if (*s - 92.1).abs() < 0.01)).to_be_true()?;
             }
             _ => unreachable!(),
         }
@@ -369,18 +380,20 @@ async fn test_insert_many() {
 
     // Verify count in database
     let count = Row::count(pool, "test_batch_inserts", None).await.unwrap();
-    assert_eq!(count, 3);
+    expect(count).to_equal(&3)?;
 
     // Clean up
     sqlx::query("DROP TABLE test_batch_inserts CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_insert_many_empty() {
+async fn test_insert_many_empty() -> Result<(), Box<dyn std::error::Error>> {
     use std::collections::HashMap;
 
     let uri = std::env::var("DATABASE_URL")
@@ -392,12 +405,14 @@ async fn test_insert_many_empty() {
     // Empty insert should return empty vec
     let rows: Vec<HashMap<String, ExtractedValue>> = vec![];
     let result = Row::insert_many(pool, "test_table", &rows).await.unwrap();
-    assert_eq!(result.len(), 0);
+    expect(result.len()).to_equal(&0)?;
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_insert_many_mismatched_columns() {
+async fn test_insert_many_mismatched_columns() -> Result<(), Box<dyn std::error::Error>> {
     use std::collections::HashMap;
 
     let uri = std::env::var("DATABASE_URL")
@@ -434,11 +449,13 @@ async fn test_insert_many_mismatched_columns() {
 
     // Should fail due to mismatched columns
     let result = Row::insert_many(pool, "test_mismatch", &[row1, row2]).await;
-    assert!(result.is_err());
+    expect(result.is_err()).to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_mismatch CASCADE")
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }

@@ -275,6 +275,7 @@ class Column:
         nullable: bool = True,
         primary_key: bool = False,
         description: Optional[str] = None,
+        foreign_key: Optional[str] = None,
     ) -> None:
         """
         Initialize column with constraints.
@@ -287,6 +288,7 @@ class Column:
             nullable: Whether column allows NULL values
             primary_key: Whether this is a primary key column
             description: Documentation for this column
+            foreign_key: Foreign key reference ("table" or "table.column")
         """
         self.default = default
         self.default_factory = default_factory
@@ -295,6 +297,7 @@ class Column:
         self.nullable = nullable
         self.primary_key = primary_key
         self.description = description
+        self.foreign_key = foreign_key
 
     def __repr__(self) -> str:
         attrs = []
@@ -310,4 +313,120 @@ class Column:
             attrs.append("nullable=False")
         if self.primary_key:
             attrs.append("primary_key=True")
+        if self.foreign_key:
+            attrs.append(f"foreign_key={self.foreign_key!r}")
         return f"Column({', '.join(attrs)})"
+
+
+class ForeignKeyProxy:
+    """
+    Proxy for foreign key relationships with lazy loading.
+
+    This class enables lazy loading of related objects via foreign keys.
+    The related object is only fetched from the database when explicitly
+    requested via the fetch() method.
+
+    Example:
+        >>> # Assuming Post has foreign key to User
+        >>> post = await Post.fetch_one(Post.id == 1)
+        >>> print(post.author.ref)  # Get foreign key value without fetching
+        123
+        >>> author = await post.author.fetch()  # Fetch the related user
+        >>> print(author["name"])
+        "Alice"
+    """
+
+    def __init__(self, target_table: str, foreign_key_column: str, foreign_key_value: Any):
+        """
+        Initialize foreign key proxy.
+
+        Args:
+            target_table: Name of the referenced table
+            foreign_key_column: Column name in the referenced table (usually "id")
+            foreign_key_value: The foreign key value to query by
+        """
+        self.target_table = target_table
+        self.foreign_key_column = foreign_key_column
+        self._foreign_key_value = foreign_key_value
+        self._fetched_value = None
+        self._is_fetched = False
+
+    async def fetch(self) -> Optional[dict]:
+        """
+        Fetch the related object from the database.
+
+        If already fetched, returns the cached value without re-querying.
+
+        Returns:
+            Dictionary with the related row data, or None if not found
+
+        Example:
+            >>> author = await post.author.fetch()
+            >>> print(author["name"])
+        """
+        if self._is_fetched:
+            return self._fetched_value
+
+        # Import here to avoid circular dependency
+        from data_bridge.postgres import find_by_foreign_key
+
+        result = await find_by_foreign_key(
+            self.target_table,
+            self.foreign_key_column,
+            self._foreign_key_value
+        )
+        self._fetched_value = result
+        self._is_fetched = True
+        return result
+
+    @property
+    def is_fetched(self) -> bool:
+        """
+        Check if the related object has been fetched.
+
+        Returns:
+            True if fetch() has been called, False otherwise
+        """
+        return self._is_fetched
+
+    @property
+    def ref(self) -> Any:
+        """
+        Get the foreign key value (ID) without fetching the related object.
+
+        This is useful when you only need the foreign key value itself,
+        not the full related object.
+
+        Returns:
+            The foreign key value
+
+        Example:
+            >>> print(post.author.ref)  # Just the ID, no database query
+            123
+        """
+        return self._foreign_key_value
+
+    @property
+    def id(self) -> Any:
+        """
+        Alias for ref property.
+
+        Returns:
+            The foreign key value
+        """
+        return self._foreign_key_value
+
+    @property
+    def column_value(self) -> Any:
+        """
+        Get the raw column value (foreign key ID).
+
+        Returns:
+            The foreign key value
+        """
+        return self._foreign_key_value
+
+    def __repr__(self) -> str:
+        if self._is_fetched:
+            return f"ForeignKeyProxy({self.target_table}.{self.foreign_key_column}={self._foreign_key_value}, fetched)"
+        return f"ForeignKeyProxy({self.target_table}.{self.foreign_key_column}={self._foreign_key_value}, not fetched)"
