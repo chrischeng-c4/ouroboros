@@ -2,7 +2,7 @@
 //!
 //! Tests SQL injection prevention and input validation.
 
-use data_bridge_postgres::{QueryBuilder, Operator, ExtractedValue};
+use data_bridge_postgres::{QueryBuilder, Operator, ExtractedValue, RelationConfig, JoinType};
 use data_bridge_test::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
 
 // Test that SQL injection payloads are blocked in table names
@@ -463,5 +463,107 @@ fn test_path_traversal_blocked() {
     for payload in traversal_payloads {
         let result = QueryBuilder::new(payload);
         assert!(result.is_err(), "Should block path traversal: {}", payload);
+    }
+}
+
+// Test that RelationConfig fields are validated (P0-SEC-03)
+#[test]
+fn test_relation_config_field_validation() {
+    let payloads = PayloadDatabase::new();
+
+    // Test malicious relation name
+    for payload in payloads.sql_injection().iter().take(5) {
+        let malicious_name = RelationConfig {
+            name: payload.clone(),
+            table: "users".to_string(),
+            foreign_key: "author_id".to_string(),
+            reference_column: "id".to_string(),
+            join_type: JoinType::Left,
+            select_columns: None,
+        };
+        // The validation will be triggered during find_with_relations call
+        // For now, we just test direct validation
+        assert!(QueryBuilder::validate_identifier(&malicious_name.name).is_err(),
+            "Should block malicious relation name: {}", payload);
+    }
+
+    // Test malicious table name
+    for payload in payloads.sql_injection().iter().take(5) {
+        let malicious_table = RelationConfig {
+            name: "author".to_string(),
+            table: payload.clone(),
+            foreign_key: "author_id".to_string(),
+            reference_column: "id".to_string(),
+            join_type: JoinType::Left,
+            select_columns: None,
+        };
+        assert!(QueryBuilder::validate_identifier(&malicious_table.table).is_err(),
+            "Should block malicious table name: {}", payload);
+    }
+
+    // Test malicious foreign_key
+    let malicious_fk = RelationConfig {
+        name: "author".to_string(),
+        table: "users".to_string(),
+        foreign_key: "author_id'; DROP TABLE users; --".to_string(),
+        reference_column: "id".to_string(),
+        join_type: JoinType::Left,
+        select_columns: None,
+    };
+    assert!(QueryBuilder::validate_identifier(&malicious_fk.foreign_key).is_err(),
+        "Should block malicious foreign_key");
+
+    // Test malicious reference_column
+    let malicious_ref = RelationConfig {
+        name: "author".to_string(),
+        table: "users".to_string(),
+        foreign_key: "author_id".to_string(),
+        reference_column: "id'; DROP TABLE users; --".to_string(),
+        join_type: JoinType::Left,
+        select_columns: None,
+    };
+    assert!(QueryBuilder::validate_identifier(&malicious_ref.reference_column).is_err(),
+        "Should block malicious reference_column");
+
+    // Test malicious select_columns
+    let malicious_cols = RelationConfig {
+        name: "author".to_string(),
+        table: "users".to_string(),
+        foreign_key: "author_id".to_string(),
+        reference_column: "id".to_string(),
+        join_type: JoinType::Left,
+        select_columns: Some(vec!["id".to_string(), "name'; DROP TABLE users; --".to_string()]),
+    };
+    if let Some(cols) = &malicious_cols.select_columns {
+        for col in cols {
+            if col.contains("DROP") {
+                assert!(QueryBuilder::validate_identifier(col).is_err(),
+                    "Should block malicious select column: {}", col);
+            }
+        }
+    }
+
+    // Test valid RelationConfig passes validation
+    let valid_config = RelationConfig {
+        name: "author".to_string(),
+        table: "users".to_string(),
+        foreign_key: "author_id".to_string(),
+        reference_column: "id".to_string(),
+        join_type: JoinType::Left,
+        select_columns: Some(vec!["id".to_string(), "name".to_string()]),
+    };
+    assert!(QueryBuilder::validate_identifier(&valid_config.name).is_ok(),
+        "Valid relation name should pass");
+    assert!(QueryBuilder::validate_identifier(&valid_config.table).is_ok(),
+        "Valid table should pass");
+    assert!(QueryBuilder::validate_identifier(&valid_config.foreign_key).is_ok(),
+        "Valid foreign_key should pass");
+    assert!(QueryBuilder::validate_identifier(&valid_config.reference_column).is_ok(),
+        "Valid reference_column should pass");
+    if let Some(cols) = &valid_config.select_columns {
+        for col in cols {
+            assert!(QueryBuilder::validate_identifier(col).is_ok(),
+                "Valid column should pass: {}", col);
+        }
     }
 }

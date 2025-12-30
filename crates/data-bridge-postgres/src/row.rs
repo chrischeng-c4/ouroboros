@@ -146,7 +146,7 @@ impl Row {
         for row in rows {
             let mut placeholders = Vec::new();
             for _ in 0..column_names.len() {
-                placeholders.push(format!("${{}}", param_num));
+                placeholders.push(format!("${}", param_num));
                 param_num += 1;
             }
             values_clauses.push(format!("({})", placeholders.join(", ")));
@@ -248,7 +248,7 @@ impl Row {
                 let start = row_idx * num_cols + 1;
                 let mut placeholders = Vec::new();
                 for i in start..(start + num_cols) {
-                    placeholders.push(format!("${{}}", i));
+                    placeholders.push(format!("${}", i));
                 }
                 format!("({})", placeholders.join(", "))
             })
@@ -450,21 +450,34 @@ impl Row {
     where
         E: sqlx::Executor<'a, Database = sqlx::Postgres>,
     {
+        // Validate RelationConfig fields before SQL generation
+        for rel in relations {
+            QueryBuilder::validate_identifier(&rel.name)?;
+            QueryBuilder::validate_identifier(&rel.table)?;
+            QueryBuilder::validate_identifier(&rel.foreign_key)?;
+            QueryBuilder::validate_identifier(&rel.reference_column)?;
+            if let Some(cols) = &rel.select_columns {
+                for col in cols {
+                    QueryBuilder::validate_identifier(col)?;
+                }
+            }
+        }
+
         let quoted_main_table = QueryBuilder::quote_identifier(table);
         let mut select_cols = vec![format!("{}.*", quoted_main_table)];
 
         for (idx, rel) in relations.iter().enumerate() {
-            let alias = format!("_rel{{}}", idx);
+            let alias = format!("_rel{}", idx);
             match &rel.select_columns {
                 Some(cols) => {
                     for col in cols {
                         let quoted_col = QueryBuilder::quote_identifier(col);
-                        select_cols.push(format!("\"{{}}\".{} AS \"{}__{{}}\"", alias, quoted_col, rel.name, col));
+                        select_cols.push(format!("\"{}\".{} AS \"{}__{}\"", alias, quoted_col, rel.name, col));
                     }
                 }
                 None => {
-                    select_cols.push(format!("\"{{}}\".id AS \"{}__{{exists}}\"", alias, rel.name));
-                    select_cols.push(format!("row_to_json(\"{{}}\") AS \"{}__{{data}}\"", alias, rel.name));
+                    select_cols.push(format!("\"{}\".id AS \"{}__exists\"", alias, rel.name));
+                    select_cols.push(format!("row_to_json(\"{}\") AS \"{}__data\"", alias, rel.name));
                 }
             }
         }
@@ -473,10 +486,10 @@ impl Row {
             .select(select_cols)?;
 
         for (idx, rel) in relations.iter().enumerate() {
-            let alias = format!("_rel{{}}", idx);
+            let alias = format!("_rel{}", idx);
             let on_condition = format!(
-                "{{}} = \"{{}}\".\"id\"",
-                format!("{}.\"{{}}\"", quoted_main_table, rel.foreign_key),
+                "{} = \"{}\".\"id\"",
+                format!("{}.\"{}\"", quoted_main_table, rel.foreign_key),
                 alias
             );
 
@@ -503,9 +516,9 @@ impl Row {
                 let mut result = Self::from_sqlx(&pg_row)?;
 
                 for rel in relations {
-                    let real_prefix = format!("{}__{{}}", rel.name);
-                    
-                    let exists_key = format!("{{}}{{}}", real_prefix, "exists");
+                    let real_prefix = format!("{}__", rel.name);
+
+                    let exists_key = format!("{}exists", real_prefix);
                     let row_exists = match result.columns.remove(&exists_key) {
                         Some(ExtractedValue::Null) | None => false,
                         _ => true,
@@ -575,20 +588,33 @@ impl Row {
     where
         E: sqlx::Executor<'a, Database = sqlx::Postgres>,
     {
+        // Validate RelationConfig fields before SQL generation
+        for rel in relations {
+            QueryBuilder::validate_identifier(&rel.name)?;
+            QueryBuilder::validate_identifier(&rel.table)?;
+            QueryBuilder::validate_identifier(&rel.foreign_key)?;
+            QueryBuilder::validate_identifier(&rel.reference_column)?;
+            if let Some(cols) = &rel.select_columns {
+                for col in cols {
+                    QueryBuilder::validate_identifier(col)?;
+                }
+            }
+        }
+
         let quoted_main_table = QueryBuilder::quote_identifier(table);
         let mut select_cols = vec![format!("{}.*", quoted_main_table)];
         for (idx, rel) in relations.iter().enumerate() {
-            let alias = format!("_rel{{}}", idx);
+            let alias = format!("_rel{}", idx);
             match &rel.select_columns {
                 Some(cols) => {
                     for col in cols {
                         let quoted_col = QueryBuilder::quote_identifier(col);
-                        select_cols.push(format!("\"{{}}\".{} AS \"{}__{{}}\"", alias, quoted_col, rel.name, col));
+                        select_cols.push(format!("\"{}\".{} AS \"{}__{}\"", alias, quoted_col, rel.name, col));
                     }
                 }
                 None => {
-                    select_cols.push(format!("\"{{}}\".id AS \"{}__{{exists}}\"", alias, rel.name));
-                    select_cols.push(format!("row_to_json(\"{{}}\") AS \"{}__{{data}}\"", alias, rel.name));
+                    select_cols.push(format!("\"{}\".id AS \"{}__exists\"", alias, rel.name));
+                    select_cols.push(format!("row_to_json(\"{}\") AS \"{}__data\"", alias, rel.name));
                 }
             }
         }
@@ -597,10 +623,10 @@ impl Row {
             .select(select_cols)?;
 
         for (idx, rel) in relations.iter().enumerate() {
-            let alias = format!("_rel{{}}", idx);
+            let alias = format!("_rel{}", idx);
             let on_condition = format!(
-                "{{}} = \"{{}}\".\"id\"",
-                format!("{}.\"{{}}\"", quoted_main_table, rel.foreign_key),
+                "{} = \"{}\".\"id\"",
+                format!("{}.\"{}\"", quoted_main_table, rel.foreign_key),
                 alias
             );
 
@@ -611,7 +637,7 @@ impl Row {
             let qualified_col = if col.contains('.') {
                 col.to_string()
             } else {
-                format!("{}.{{}}", table, col)
+                format!("{}.{}", table, col)
             };
             qb = qb.where_clause(&qualified_col, op, val)?;
         }
@@ -620,7 +646,7 @@ impl Row {
             let qualified_col = if col.contains('.') {
                 col.to_string()
             } else {
-                format!("{}.{{}}", table, col)
+                format!("{}.{}", table, col)
             };
             qb = qb.order_by(&qualified_col, dir)?;
         }
@@ -649,9 +675,9 @@ impl Row {
             let mut result = Self::from_sqlx(&pg_row)?;
 
             for rel in relations {
-                let real_prefix = format!("{}__{{}}", rel.name);
-                
-                let exists_key = format!("{{}}{{}}", real_prefix, "exists");
+                let real_prefix = format!("{}__", rel.name);
+
+                let exists_key = format!("{}exists", real_prefix);
                 let row_exists = match result.columns.remove(&exists_key) {
                     Some(ExtractedValue::Null) | None => false,
                     _ => true,
@@ -746,13 +772,19 @@ impl Row {
         let mut tx = pool.begin().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
         let backrefs = Self::get_backreferences_internal(&mut *tx, table).await?;
 
+        // Validate all backref identifiers before use in SQL
+        for backref in &backrefs {
+            QueryBuilder::validate_identifier(&backref.source_table)?;
+            QueryBuilder::validate_identifier(&backref.source_column)?;
+        }
+
         let mut total_deleted = 0u64;
 
         for backref in &backrefs {
             match backref.on_delete {
                 CascadeRule::Restrict | CascadeRule::NoAction => {
                     let check_query = format!(
-                        "SELECT EXISTS(SELECT 1 FROM \"{{}}\" WHERE \"{{}}\" = $1) as has_children",
+                        "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE \"{}\" = $1) as has_children",
                         backref.source_table, backref.source_column
                     );
                     let row: (bool,) = sqlx::query_as(&check_query)
@@ -771,7 +803,7 @@ impl Row {
                 }
                 CascadeRule::Cascade => {
                     let delete_children = format!(
-                        "DELETE FROM \"{{}}\" WHERE \"{{}}\" = $1",
+                        "DELETE FROM \"{}\" WHERE \"{}\" = $1",
                         backref.source_table, backref.source_column
                     );
                     let result = sqlx::query(&delete_children)
@@ -783,7 +815,7 @@ impl Row {
                 }
                 CascadeRule::SetNull => {
                     let update_query = format!(
-                        "UPDATE \"{{}}\" SET \"{{}}\" = NULL WHERE \"{{}}\" = $1",
+                        "UPDATE \"{}\" SET \"{}\" = NULL WHERE \"{}\" = $1",
                         backref.source_table, backref.source_column, backref.source_column
                     );
                     sqlx::query(&update_query)
@@ -794,7 +826,7 @@ impl Row {
                 }
                 CascadeRule::SetDefault => {
                     let update_query = format!(
-                        "UPDATE \"{{}}\" SET \"{{}}\" = DEFAULT WHERE \"{{}}\" = $1",
+                        "UPDATE \"{}\" SET \"{}\" = DEFAULT WHERE \"{}\" = $1",
                         backref.source_table, backref.source_column, backref.source_column
                     );
                     sqlx::query(&update_query)
@@ -807,7 +839,7 @@ impl Row {
         }
 
         let delete_query = format!(
-            "DELETE FROM {} WHERE \"{{}}\" = $1",
+            "DELETE FROM {} WHERE \"{}\" = $1",
             QueryBuilder::quote_identifier(table), id_column
         );
         let result = sqlx::query(&delete_query)
@@ -836,10 +868,16 @@ impl Row {
 
         let backrefs = Self::get_backreferences_internal(pool, table).await?;
 
+        // Validate all backref identifiers before use in SQL
+        for backref in &backrefs {
+            QueryBuilder::validate_identifier(&backref.source_table)?;
+            QueryBuilder::validate_identifier(&backref.source_column)?;
+        }
+
         for backref in &backrefs {
             if matches!(backref.on_delete, CascadeRule::Restrict | CascadeRule::NoAction) {
                 let check_query = format!(
-                    "SELECT EXISTS(SELECT 1 FROM \"{{}}\" WHERE \"{{}}\" = $1) as has_children",
+                    "SELECT EXISTS(SELECT 1 FROM \"{}\" WHERE \"{}\" = $1) as has_children",
                     backref.source_table, backref.source_column
                 );
                 let row: (bool,) = sqlx::query_as(&check_query)
@@ -858,7 +896,7 @@ impl Row {
         }
 
         let query = format!(
-            "DELETE FROM {} WHERE \"{{}}\" = $1",
+            "DELETE FROM {} WHERE \"{}\" = $1",
             QueryBuilder::quote_identifier(table), id_column
         );
 
