@@ -476,7 +476,7 @@ impl Row {
                     }
                 }
                 None => {
-                    select_cols.push(format!("\"{}\".id AS \"{}__exists\"", alias, rel.name));
+                    select_cols.push(format!("\"{}\".\"{}\" AS \"{}__exists\"", alias, rel.reference_column, rel.name));
                     select_cols.push(format!("row_to_json(\"{}\") AS \"{}__data\"", alias, rel.name));
                 }
             }
@@ -613,7 +613,7 @@ impl Row {
                     }
                 }
                 None => {
-                    select_cols.push(format!("\"{}\".id AS \"{}__exists\"", alias, rel.name));
+                    select_cols.push(format!("\"{}\".\"{}\" AS \"{}__exists\"", alias, rel.reference_column, rel.name));
                     select_cols.push(format!("row_to_json(\"{}\") AS \"{}__data\"", alias, rel.name));
                 }
             }

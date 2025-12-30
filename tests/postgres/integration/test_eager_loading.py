@@ -67,7 +67,6 @@ class TestFetchOneEager:
         result = await fetch_one_eager("test_eager_items", 999, [])
         assert result is None
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_one_eager_null_foreign_key(self):
         """Test eager loading with NULL foreign key (LEFT JOIN)."""
         await execute("""
@@ -143,7 +142,6 @@ class TestFetchOneEager:
 class TestFetchOneWithRelations:
     """Test fetch_one_with_relations with full configuration."""
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_with_left_join_default(self):
         """Test LEFT JOIN (default) - includes rows even without matching relations."""
         await execute("""
@@ -177,7 +175,6 @@ class TestFetchOneWithRelations:
         assert result["name"] == "Bob"
         assert result["dept_id"] is None
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_with_inner_join(self):
         """Test INNER JOIN - should exclude rows without matching relations."""
         await execute("""
@@ -498,7 +495,6 @@ class TestFetchManyWithRelations:
         values = {r["value"] for r in results}
         assert values == {"A", "B", "C"}
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_many_with_null_foreign_keys(self):
         """Test that LEFT JOIN includes rows with NULL foreign keys."""
         await execute("""
