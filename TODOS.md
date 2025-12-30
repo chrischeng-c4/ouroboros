@@ -7,6 +7,36 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
+## 🔴 Audit Findings (2025-12-30)
+
+### P0 - Critical (Must Fix Before Production)
+
+| ID | Issue | Location | Status |
+|----|-------|----------|--------|
+| P0-AUDIT-01 | Production `unwrap()` calls can crash Python | `row.rs:155,291,550,709`, `validation.rs:33`, `query.rs:753` | TODO |
+| P0-AUDIT-02 | No PyO3 panic boundary protection | `crates/data-bridge/src/postgres.rs` | TODO |
+| P0-AUDIT-03 | Error messages leak table/constraint names | `row.rs:798-801` | TODO |
+| P0-AUDIT-04 | Password exposed in Python memory | `python/data_bridge/postgres/connection.py:64` | TODO |
+
+### P1 - High (Must Fix Before GA)
+
+| ID | Issue | Location | Status |
+|----|-------|----------|--------|
+| P1-AUDIT-01 | SQL injection format! audit incomplete | 25+ format! calls in row.rs, query.rs, schema.rs | TODO |
+| P1-AUDIT-02 | Missing Unicode normalization in identifier validation | `validation.rs`, `query.rs` | TODO |
+| P1-AUDIT-03 | No logging/audit trail | Entire codebase | TODO |
+| P1-AUDIT-04 | 6 eager loading tests skipped (NULL FK issues) | `test_eager_loading.py` | TODO |
+
+### P2 - Medium (Should Fix)
+
+| ID | Issue | Location | Status |
+|----|-------|----------|--------|
+| P2-AUDIT-01 | Example docs have hardcoded passwords | `connection.rs:199`, `connection.py:42` | TODO |
+| P2-AUDIT-02 | Missing Unicode validation tests | `test_security.py` | TODO |
+| P2-AUDIT-03 | No cascade delete with nested relationships tests | `test_cascade_delete.py` | TODO |
+
+---
+
 ## Legend
 
 - `[ ]` Not started

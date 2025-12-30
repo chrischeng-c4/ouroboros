@@ -48,7 +48,7 @@ impl Row {
     pub fn get(&self, column: &str) -> Result<&ExtractedValue> {
         self.columns
             .get(column)
-            .ok_or_else(|| DataBridgeError::Query(format!("Column '{}' not found", column)))
+            .ok_or_else(|| DataBridgeError::Query("Column not found in result set".to_string()))
     }
 
     /// Gets all column names.
@@ -101,7 +101,7 @@ impl Row {
         let row = sqlx::query_with(&sql, args)
             .fetch_one(executor)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Insert failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Insert operation failed".to_string()))?;
 
         Self::from_sqlx(&row)
     }
@@ -152,7 +152,9 @@ impl Row {
             values_clauses.push(format!("({})", placeholders.join(", ")));
 
             for col in &column_names {
-                params.push(row.get(*col).unwrap().clone());
+                let value = row.get(*col)
+                    .ok_or_else(|| DataBridgeError::Query("Required column not found in row data".to_string()))?;
+                params.push(value.clone());
             }
         }
 
@@ -167,7 +169,7 @@ impl Row {
         let pg_rows = sqlx::query_with(&sql, args)
             .fetch_all(executor)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Batch insert failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Batch insert operation failed".to_string()))?;
 
         pg_rows.iter()
             .map(Self::from_sqlx)
@@ -200,7 +202,7 @@ impl Row {
         let row = sqlx::query_with(&sql, args)
             .fetch_one(executor)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Upsert failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Upsert operation failed".to_string()))?;
 
         Self::from_sqlx(&row)
     }
@@ -288,7 +290,8 @@ impl Row {
         let mut args = PgArguments::default();
         for row in rows {
             for col_name in &column_names {
-                let value = row.get(*col_name).unwrap();
+                let value = row.get(*col_name)
+                    .ok_or_else(|| DataBridgeError::Query("Required column not found in row data".to_string()))?;
                 value.bind_to_arguments(&mut args)?;
             }
         }
@@ -296,7 +299,7 @@ impl Row {
         let pg_rows = sqlx::query_with(&sql, args)
             .fetch_all(executor)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Batch upsert failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Batch upsert operation failed".to_string()))?;
 
         pg_rows.iter()
             .map(Self::from_sqlx)
@@ -317,7 +320,7 @@ impl Row {
         let result = sqlx::query_with(&sql, args)
             .fetch_optional(pool)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Find by ID failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Find operation failed".to_string()))?;
 
         match result {
             Some(row) => Ok(Some(Self::from_sqlx(&row)?)),
@@ -346,7 +349,7 @@ impl Row {
         let rows = sqlx::query_with(&sql, args)
             .fetch_all(pool)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Find many failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Find operation failed".to_string()))?;
 
         rows.iter()
             .map(Self::from_sqlx)
@@ -376,7 +379,7 @@ impl Row {
         let result = sqlx::query_with(&sql, args)
             .execute(pool)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Update failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Update operation failed".to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -395,7 +398,7 @@ impl Row {
         let result = sqlx::query_with(&sql, args)
             .execute(pool)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Delete failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Delete operation failed".to_string()))?;
 
         Ok(result.rows_affected() > 0)
     }
@@ -432,10 +435,10 @@ impl Row {
         let row = sqlx::query_with(&sql, args)
             .fetch_one(pool)
             .await
-            .map_err(|e| DataBridgeError::Query(format!("Count failed: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Count operation failed".to_string()))?;
 
         let count: i64 = row.try_get(0)
-            .map_err(|e| DataBridgeError::Query(format!("Failed to extract count: {}", e)))?;
+            .map_err(|_| DataBridgeError::Query("Failed to extract count result".to_string()))?;
 
         Ok(count)
     }
@@ -519,10 +522,7 @@ impl Row {
                     let real_prefix = format!("{}__", rel.name);
 
                     let exists_key = format!("{}exists", real_prefix);
-                    let row_exists = match result.columns.remove(&exists_key) {
-                        Some(ExtractedValue::Null) | None => false,
-                        _ => true,
-                    };
+                    let row_exists = !matches!(result.columns.remove(&exists_key), Some(ExtractedValue::Null) | None);
 
                     if !row_exists {
                         result.columns.insert(rel.name.clone(), ExtractedValue::Null);
@@ -547,8 +547,10 @@ impl Row {
 
                     for key in keys_to_process {
                         if let Some(value) = result.columns.remove(&key) {
-                            let rel_key = key.strip_prefix(&real_prefix).unwrap().to_string();
-                            
+                            let rel_key = key.strip_prefix(&real_prefix)
+                                .ok_or_else(|| DataBridgeError::Query("Failed to process nested data structure".to_string()))?
+                                .to_string();
+
                             if rel_key == "data" {
                                 if let ExtractedValue::Json(JsonValue::Object(data_map)) = value {
                                     for (k, v) in data_map {
@@ -678,10 +680,7 @@ impl Row {
                 let real_prefix = format!("{}__", rel.name);
 
                 let exists_key = format!("{}exists", real_prefix);
-                let row_exists = match result.columns.remove(&exists_key) {
-                    Some(ExtractedValue::Null) | None => false,
-                    _ => true,
-                };
+                let row_exists = !matches!(result.columns.remove(&exists_key), Some(ExtractedValue::Null) | None);
 
                 if !row_exists {
                     result.columns.insert(rel.name.clone(), ExtractedValue::Null);
@@ -706,7 +705,9 @@ impl Row {
 
                 for key in keys_to_process {
                     if let Some(value) = result.columns.remove(&key) {
-                        let rel_key = key.strip_prefix(&real_prefix).unwrap().to_string();
+                        let rel_key = key.strip_prefix(&real_prefix)
+                            .ok_or_else(|| DataBridgeError::Query("Failed to process nested data structure".to_string()))?
+                            .to_string();
                         if rel_key == "data" {
                             if let ExtractedValue::Json(JsonValue::Object(data_map)) = value {
                                 for (k, v) in data_map {
@@ -795,10 +796,9 @@ impl Row {
 
                     if row.0 {
                         tx.rollback().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
-                        return Err(DataBridgeError::Validation(format!(
-                            "Cannot delete from '{}': referenced by '{}' ({})",
-                            table, backref.source_table, backref.constraint_name
-                        )));
+                        return Err(DataBridgeError::Validation(
+                            "Cannot delete record: foreign key constraint violation. Use cascade delete or remove referencing records first.".to_string()
+                        ));
                     }
                 }
                 CascadeRule::Cascade => {
@@ -887,10 +887,9 @@ impl Row {
                     .map_err(|e| DataBridgeError::Database(e.to_string()))?;
 
                 if row.0 {
-                    return Err(DataBridgeError::Validation(format!(
-                        "Cannot delete from '{}': referenced by '{}' via column '{}' (constraint: {})",
-                        table, backref.source_table, backref.source_column, backref.constraint_name
-                    )));
+                    return Err(DataBridgeError::Validation(
+                        "Cannot delete record: foreign key constraint violation. Use cascade delete or remove referencing records first.".to_string()
+                    ));
                 }
             }
         }

@@ -21,30 +21,30 @@ use crate::Result;
 /// # Returns
 ///
 /// Ok(()) if valid, Err with descriptive message if invalid
-fn validate_identifier(identifier: &str, identifier_type: &str) -> Result<()> {
+fn validate_identifier(identifier: &str, _identifier_type: &str) -> Result<()> {
     if identifier.is_empty() {
-        return Err(crate::DataBridgeError::Query(format!(
-            "{} cannot be empty",
-            identifier_type
-        )));
+        return Err(crate::DataBridgeError::Query(
+            "Identifier cannot be empty".to_string()
+        ));
     }
 
     // Check first character
-    let first_char = identifier.chars().next().unwrap();
+    let first_char = identifier.chars().next()
+        .ok_or_else(|| crate::DataBridgeError::Query(
+            "Invalid identifier format".to_string()
+        ))?;
     if first_char.is_ascii_digit() {
-        return Err(crate::DataBridgeError::Query(format!(
-            "{} '{}' cannot start with a digit",
-            identifier_type, identifier
-        )));
+        return Err(crate::DataBridgeError::Query(
+            "Identifier cannot start with a digit".to_string()
+        ));
     }
 
     // Check all characters are valid
     for c in identifier.chars() {
         if !c.is_alphanumeric() && c != '_' && c != '$' {
-            return Err(crate::DataBridgeError::Query(format!(
-                "{} '{}' contains invalid character '{}'",
-                identifier_type, identifier, c
-            )));
+            return Err(crate::DataBridgeError::Query(
+                "Identifier contains invalid characters. Only alphanumeric, underscore, and dollar sign allowed".to_string()
+            ));
         }
     }
 
@@ -53,10 +53,9 @@ fn validate_identifier(identifier: &str, identifier_type: &str) -> Result<()> {
     let dangerous_patterns = ["--", "/*", "*/", ";", "drop", "delete", "truncate"];
     for pattern in &dangerous_patterns {
         if lower.contains(pattern) {
-            return Err(crate::DataBridgeError::Query(format!(
-                "{} '{}' contains potentially dangerous pattern",
-                identifier_type, identifier
-            )));
+            return Err(crate::DataBridgeError::Query(
+                "Identifier contains potentially dangerous pattern".to_string()
+            ));
         }
     }
 
@@ -113,10 +112,9 @@ pub fn validate_foreign_key_reference(reference: &str) -> Result<(String, String
             validate_identifier(column, "Foreign key column name")?;
             Ok((table.to_string(), column.to_string()))
         }
-        _ => Err(crate::DataBridgeError::Query(format!(
-            "Invalid foreign key reference format '{}'. Expected 'table' or 'table.column'",
-            reference
-        ))),
+        _ => Err(crate::DataBridgeError::Query(
+            "Invalid foreign key reference format. Expected 'table' or 'table.column'".to_string()
+        )),
     }
 }
 

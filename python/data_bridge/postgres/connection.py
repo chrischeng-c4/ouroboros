@@ -27,6 +27,16 @@ async def init(
     """
     Initialize PostgreSQL connection pool.
 
+    Security Warning:
+        NEVER hardcode passwords in source code. Always use environment variables
+        or secure configuration management systems to handle credentials.
+
+        Passwords may be exposed in:
+        - Exception tracebacks
+        - Log files
+        - Process memory dumps
+        - Debug output
+
     Args:
         connection_string: Full PostgreSQL connection string (postgres://user:pass@host:port/db)
         host: PostgreSQL server hostname (default: localhost)
@@ -38,17 +48,26 @@ async def init(
         max_connections: Maximum number of connections in pool (default: 10)
 
     Example:
-        >>> # Using connection string
-        >>> await init("postgres://user:pass@localhost:5432/mydb")
+        >>> # RECOMMENDED: Using connection string from environment variable
+        >>> import os
+        >>> await init(os.environ.get("DATABASE_URL"))
         >>>
-        >>> # Using individual parameters
+        >>> # RECOMMENDED: Using individual parameters with environment variables
         >>> await init(
         ...     host="localhost",
         ...     port=5432,
         ...     database="mydb",
-        ...     username="user",
-        ...     password="pass",
+        ...     username=os.environ.get("PG_USER"),
+        ...     password=os.environ.get("PG_PASSWORD"),
         ...     max_connections=20
+        ... )
+        >>>
+        >>> # For development only (not production)
+        >>> await init(
+        ...     host="localhost",
+        ...     database="test_db",
+        ...     username="testuser",
+        ...     password="testpass"
         ... )
 
     Raises:
@@ -61,9 +80,16 @@ async def init(
 
     if connection_string is None:
         # Build connection string from individual parameters
+        # NOTE: Python strings are immutable, so password will remain in memory until
+        # garbage collected. For production use, prefer passing a pre-built connection
+        # string from environment variables (e.g., DATABASE_URL) to minimize password
+        # exposure in application code.
         auth = f"{username}:{password}@" if username else ""
         connection_string = f"postgres://{auth}{host}:{port}/{database}"
+        # Clear local references (though Python strings are immutable)
+        del auth
 
+    # Connection string is passed to Rust engine where it's handled securely
     await _engine.init(connection_string, min_connections, max_connections)
 
 

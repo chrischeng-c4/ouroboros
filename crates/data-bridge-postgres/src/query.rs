@@ -629,7 +629,7 @@ impl QueryBuilder {
 
         // Determine which columns to update
         let columns_to_update: Vec<String> = if let Some(update_cols) = update_columns {
-            update_cols.iter().map(|s| s.clone()).collect()
+            update_cols.to_vec()
         } else {
             // Update all columns except conflict target
             values.iter()
@@ -750,7 +750,10 @@ impl QueryBuilder {
         }
 
         // Must start with letter or underscore
-        let first_char = name.chars().next().unwrap();
+        let first_char = name.chars().next()
+            .ok_or_else(|| DataBridgeError::Query(
+                format!("Identifier '{}' is empty or invalid", name)
+            ))?;
         if !first_char.is_ascii_alphabetic() && first_char != '_' {
             return Err(DataBridgeError::Query(
                 format!("Identifier '{}' must start with a letter or underscore", name)

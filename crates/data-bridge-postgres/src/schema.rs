@@ -715,10 +715,9 @@ impl SchemaInspector {
 
         // Check if table exists
         if !self.table_exists(table, Some(schema_name)).await? {
-            return Err(crate::DataBridgeError::Query(format!(
-                "Table '{}.{}' does not exist",
-                schema_name, table
-            )));
+            return Err(crate::DataBridgeError::Query(
+                "Table does not exist".to_string()
+            ));
         }
 
         // Get columns, indexes, and foreign keys
