@@ -62,7 +62,7 @@
 //! // Result: "DELETE FROM users WHERE id = $1"
 //! ```
 
-use crate::{Connection, DataBridgeError, ExtractedValue, Result, Row};
+use crate::{DataBridgeError, ExtractedValue, Result};
 
 /// Query comparison operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -689,31 +689,6 @@ impl QueryBuilder {
         }
 
         (sql, params)
-    }
-
-    /// Builds and executes a SELECT query.
-    pub async fn execute_select(&self, _conn: &Connection) -> Result<Vec<Row>> {
-        // TODO: Implement SELECT query execution with SQLx
-        // This requires implementing Row::from_sqlx and binding ExtractedValue to SQLx parameters
-        todo!("Implement QueryBuilder::execute_select - requires SQLx integration")
-    }
-
-    /// Builds and executes an INSERT query.
-    pub async fn execute_insert(&self, _conn: &Connection, _values: Vec<(String, ExtractedValue)>) -> Result<Row> {
-        // TODO: Implement INSERT query execution with SQLx
-        todo!("Implement QueryBuilder::execute_insert - requires SQLx integration")
-    }
-
-    /// Builds and executes an UPDATE query.
-    pub async fn execute_update(&self, _conn: &Connection, _values: Vec<(String, ExtractedValue)>) -> Result<u64> {
-        // TODO: Implement UPDATE query execution with SQLx
-        todo!("Implement QueryBuilder::execute_update - requires SQLx integration")
-    }
-
-    /// Builds and executes a DELETE query.
-    pub async fn execute_delete(&self, _conn: &Connection) -> Result<u64> {
-        // TODO: Implement DELETE query execution with SQLx
-        todo!("Implement QueryBuilder::execute_delete - requires SQLx integration")
     }
 
     /// Quotes a SQL identifier.

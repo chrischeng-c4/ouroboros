@@ -56,60 +56,6 @@ pub enum ExtractedValue {
 }
 
 impl ExtractedValue {
-    /// Converts Python object to ExtractedValue.
-    ///
-    /// # Arguments
-    ///
-    /// * `py` - Python GIL guard
-    /// * `obj` - Python object to convert
-    ///
-    /// # Errors
-    ///
-    /// Returns error if Python type cannot be mapped to PostgreSQL type.
-    pub fn from_python(/* py: Python, obj: &PyAny */) -> Result<Self> {
-        // TODO: Implement Python to ExtractedValue conversion
-        // - Handle None -> Null
-        // - Handle bool -> Bool
-        // - Handle int -> Int/BigInt (based on range)
-        // - Handle float -> Double
-        // - Handle str -> String
-        // - Handle bytes -> Bytes
-        // - Handle datetime -> TimestampTz
-        // - Handle date -> Date
-        // - Handle time -> Time
-        // - Handle UUID -> Uuid
-        // - Handle dict/list -> Json
-        // - Handle list of same type -> Array
-        // - Validate types and ranges
-        todo!("Implement ExtractedValue::from_python")
-    }
-
-    /// Converts ExtractedValue to Python object.
-    ///
-    /// # Arguments
-    ///
-    /// * `py` - Python GIL guard
-    ///
-    /// # Errors
-    ///
-    /// Returns error if conversion fails.
-    pub fn to_python(/* &self, py: Python */) -> Result<()> {
-        // TODO: Implement ExtractedValue to Python conversion
-        // - Null -> None
-        // - Bool -> bool
-        // - Int/BigInt -> int
-        // - Double -> float
-        // - String -> str
-        // - Bytes -> bytes
-        // - TimestampTz -> datetime
-        // - Date -> date
-        // - Time -> time
-        // - Uuid -> UUID
-        // - Json -> dict/list
-        // - Array -> list
-        todo!("Implement ExtractedValue::to_python")
-    }
-
     /// Returns the PostgreSQL type name for this value.
     pub fn pg_type_name(&self) -> &'static str {
         match self {

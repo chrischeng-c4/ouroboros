@@ -58,34 +58,17 @@ Atomic, testable tasks organized by priority and component.
 
 ### Missing Implementations
 
-- [ ] P1-FUNC-01: Implement `from_python()` type conversion
+- [x] P1-FUNC-01: Implement `from_python()` type conversion (2025-12-30)
   - **Location**: `types.rs:70-85`
-  - **Current**: `todo!("Implement ExtractedValue::from_python")`
-  - **Fix**: Convert Python objects to ExtractedValue enum
-  - **Test**: Round-trip Python → ExtractedValue → Python
+  - **Status**: Already implemented elsewhere, removed stale TODO
 
-- [ ] P1-FUNC-02: Implement `to_python()` type conversion
+- [x] P1-FUNC-02: Implement `to_python()` type conversion (2025-12-30)
   - **Location**: `types.rs:96-111`
-  - **Current**: `todo!("Implement ExtractedValue::to_python")`
-  - **Fix**: Convert ExtractedValue to Python objects
-  - **Test**: Round-trip ExtractedValue → Python → ExtractedValue
+  - **Status**: Already implemented elsewhere, removed stale TODO
 
-- [ ] P1-FUNC-03: Implement QueryBuilder execute methods
+- [x] P1-FUNC-03: Implement QueryBuilder execute methods (2025-12-30)
   - **Location**: `query.rs:653-675`
-  - **Current**: 4 execute functions marked as TODO
-  - **Functions**:
-    - `execute_one()`
-    - `execute_many()`
-    - `execute_scalar()`
-    - `execute_raw()`
-  - **Test**: Execute queries and validate results
-
-### Security Hardening
-
-- [ ] P1-SEC-01: Add `catch_unwind` at PyO3 boundary
-  - **Issue**: Rust panics crash Python instead of raising exception
-  - **Fix**: Wrap all FFI entry points with `catch_unwind`
-  - **Test**: Trigger panic, verify Python exception raised
+  - **Status**: Already implemented elsewhere, removed stale TODO
 
 ---
 
@@ -131,6 +114,12 @@ Atomic, testable tasks organized by priority and component.
   - **Test**: Benchmark array insert performance
 
 ### Security
+
+- [ ] P2-SEC-02: Add `catch_unwind` at PyO3 boundary
+  - **Issue**: Rust panics crash Python instead of raising exception
+  - **Fix**: Wrap all FFI entry points with `catch_unwind`
+  - **Test**: Trigger panic, verify Python exception raised
+  - **Note**: Low risk - current code is panic-safe (no unwrap/expect in production). Defensive measure for dependency panics.
 
 - [ ] P2-SEC-01: Audit all format!/push_str for SQL injection
   - **Progress**: `validate_identifier()` implemented, need full audit
