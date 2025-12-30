@@ -13,17 +13,19 @@ IMPORTANT: Always use parameterized queries ($1, $2, etc.) to prevent SQL inject
 """
 
 import asyncio
+import os
 from data_bridge.postgres import init, close, execute
 
 
 async def main():
     # Initialize PostgreSQL connection
+    # IMPORTANT: Use environment variables for credentials in production
     await init(
-        host="localhost",
-        port=5432,
-        database="mydb",
-        username="user",
-        password="password"
+        host=os.environ.get("PG_HOST", "localhost"),
+        port=int(os.environ.get("PG_PORT", "5432")),
+        database=os.environ.get("PG_DATABASE", "mydb"),
+        username=os.environ.get("PG_USER", "user"),
+        password=os.environ.get("PG_PASSWORD", "password")  # Default for local dev only
     )
 
     try:

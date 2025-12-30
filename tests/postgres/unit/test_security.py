@@ -444,3 +444,335 @@ class TestInputSanitization:
 
         sql, params = expr.to_sql()
         expect(params[0]).to_equal("C:\\Users\\Admin")
+
+
+class TestUnicodeValidation:
+    """Test comprehensive Unicode handling in identifiers and values."""
+
+    def test_unicode_table_name_sql_generation(self):
+        """Test that Unicode table names generate correct SQL with proper quoting."""
+
+        class ChineseUsers(Table):
+            name: str
+
+            class Settings:
+                table_name = "用户表"  # Chinese: "User Table"
+
+        class ArabicUsers(Table):
+            name: str
+
+            class Settings:
+                table_name = "المستخدمون"  # Arabic: "Users"
+
+        class JapaneseUsers(Table):
+            name: str
+
+            class Settings:
+                table_name = "ユーザー"  # Japanese: "Users"
+
+        # Verify table names are preserved
+        expect(ChineseUsers._table_name).to_equal("用户表")
+        expect(ArabicUsers._table_name).to_equal("المستخدمون")
+        expect(JapaneseUsers._table_name).to_equal("ユーザー")
+
+        # Verify full qualified name generation
+        expect(ChineseUsers.__table_name__()).to_equal('public."用户表"')
+        expect(ArabicUsers.__table_name__()).to_equal('public."المستخدمون"')
+        expect(JapaneseUsers.__table_name__()).to_equal('public."ユーザー"')
+
+    def test_unicode_column_name_sql_generation(self):
+        """Test column filtering with Unicode column names."""
+
+        class User(Table):
+            姓名: str  # Chinese: "name"
+            年龄: int  # Chinese: "age"
+            邮箱: str  # Chinese: "email"
+
+        # Verify columns are registered
+        expect("姓名" in User._columns).to_be_true()
+        expect("年龄" in User._columns).to_be_true()
+        expect("邮箱" in User._columns).to_be_true()
+
+        # Test filter expression with Unicode column
+        expr = User.姓名 == "Alice"
+        sql, params = expr.to_sql()
+
+        # Should use parameterization and quote column name
+        expect('"姓名"' in sql).to_be_true()
+        expect("$1" in sql).to_be_true()
+        expect(params).to_equal(["Alice"])
+
+    def test_unicode_filter_values(self):
+        """Test filters with Unicode string values (Chinese, Arabic, Japanese, etc.)."""
+
+        class User(Table):
+            name: str
+            city: str
+
+        # Chinese
+        expr_chinese = User.name == "张三"  # Common Chinese name
+        sql, params = expr_chinese.to_sql()
+        expect(params[0]).to_equal("张三")
+
+        # Arabic
+        expr_arabic = User.name == "محمد"  # Muhammad in Arabic
+        sql, params = expr_arabic.to_sql()
+        expect(params[0]).to_equal("محمد")
+
+        # Japanese (Hiragana, Katakana, Kanji)
+        expr_japanese = User.name == "田中太郎"  # Tanaka Taro
+        sql, params = expr_japanese.to_sql()
+        expect(params[0]).to_equal("田中太郎")
+
+        # Korean
+        expr_korean = User.city == "서울"  # Seoul
+        sql, params = expr_korean.to_sql()
+        expect(params[0]).to_equal("서울")
+
+        # Greek
+        expr_greek = User.name == "Αλέξανδρος"  # Alexandros
+        sql, params = expr_greek.to_sql()
+        expect(params[0]).to_equal("Αλέξανδρος")
+
+        # Russian
+        expr_russian = User.name == "Владимир"  # Vladimir
+        sql, params = expr_russian.to_sql()
+        expect(params[0]).to_equal("Владимир")
+
+    def test_unicode_like_operator(self):
+        """Test LIKE operator with Unicode patterns."""
+
+        class User(Table):
+            name: str
+            email: str
+
+        # Chinese pattern with wildcard
+        expr_chinese = User.name.like("张%")  # Names starting with Zhang
+        sql, params = expr_chinese.to_sql()
+        expect("LIKE $1" in sql).to_be_true()
+        expect(params[0]).to_equal("张%")
+
+        # Arabic pattern
+        expr_arabic = User.name.like("%محمد%")  # Contains Muhammad
+        sql, params = expr_arabic.to_sql()
+        expect(params[0]).to_equal("%محمد%")
+
+        # Mixed Unicode and ASCII
+        expr_mixed = User.email.like("%.com.%")  # Email with .com domain
+        sql, params = expr_mixed.to_sql()
+        expect(params[0]).to_equal("%.com.%")
+
+        # Japanese pattern
+        expr_japanese = User.name.like("田中%")  # Tanaka family names
+        sql, params = expr_japanese.to_sql()
+        expect(params[0]).to_equal("田中%")
+
+    def test_unicode_in_operator(self):
+        """Test IN operator with Unicode values list."""
+
+        class User(Table):
+            city: str
+            status: str
+
+        # Chinese cities
+        expr_cities = User.city.in_(["北京", "上海", "广州", "深圳"])
+        sql, params = expr_cities.to_sql()
+        expect("IN ($1, $2, $3, $4)" in sql).to_be_true()
+        expect(params).to_equal(["北京", "上海", "广州", "深圳"])
+
+        # Arabic status values
+        expr_status = User.status.in_(["نشط", "غير نشط", "محظور"])  # Active, Inactive, Banned
+        sql, params = expr_status.to_sql()
+        expect("IN ($1, $2, $3)" in sql).to_be_true()
+        expect(params).to_equal(["نشط", "غير نشط", "محظور"])
+
+        # Mixed scripts
+        expr_mixed = User.city.in_(["Tokyo", "東京", "توكيو"])  # Tokyo in different scripts
+        sql, params = expr_mixed.to_sql()
+        expect(params).to_equal(["Tokyo", "東京", "توكيو"])
+
+    def test_unicode_emoji_in_values(self):
+        """Test emoji characters in filter values."""
+
+        class Post(Table):
+            title: str
+            content: str
+            reaction: str
+
+        # Emoji in filter value
+        expr_emoji = Post.reaction == "👍"
+        sql, params = expr_emoji.to_sql()
+        expect(params[0]).to_equal("👍")
+
+        # Multiple emojis
+        expr_multi = Post.title.contains("🎉🎊🎈")
+        sql, params = expr_multi.to_sql()
+        expect(params[0]).to_contain("🎉🎊🎈")
+
+        # Emoji with text
+        expr_combined = Post.content == "Great work! 💯🚀"
+        sql, params = expr_combined.to_sql()
+        expect(params[0]).to_equal("Great work! 💯🚀")
+
+        # Skin tone modifiers
+        expr_skin_tone = Post.reaction == "👋🏻"  # Waving hand with light skin tone
+        sql, params = expr_skin_tone.to_sql()
+        expect(params[0]).to_equal("👋🏻")
+
+        # Family emoji (ZWJ sequence)
+        expr_family = Post.content.contains("👨‍👩‍👧‍👦")  # Family emoji
+        sql, params = expr_family.to_sql()
+        expect(params[0]).to_contain("👨‍👩‍👧‍👦")
+
+    def test_unicode_combining_characters(self):
+        """Test combining characters (é as e + combining acute)."""
+
+        class User(Table):
+            name: str
+
+        # Precomposed (NFC): single character é (U+00E9)
+        nfc_name = "José"
+        expr_nfc = User.name == nfc_name
+        sql_nfc, params_nfc = expr_nfc.to_sql()
+        expect(params_nfc[0]).to_equal("José")
+
+        # Decomposed (NFD): e (U+0065) + combining acute (U+0301)
+        nfd_name = "José"  # Same visual appearance, different encoding
+        expr_nfd = User.name == nfd_name
+        sql_nfd, params_nfd = expr_nfd.to_sql()
+        # Both should be handled as-is, exact match depends on normalization
+        expect(params_nfd[0]).to_equal(nfd_name)
+
+        # Multiple combining characters
+        complex_combining = "a\u0300\u0301\u0302"  # a with grave, acute, circumflex
+        expr_complex = User.name == complex_combining
+        sql_complex, params_complex = expr_complex.to_sql()
+        expect(params_complex[0]).to_equal(complex_combining)
+
+        # Vietnamese with combining characters
+        vietnamese = "Nguyễn"  # Common Vietnamese surname
+        expr_vietnamese = User.name == vietnamese
+        sql_vietnamese, params_vietnamese = expr_vietnamese.to_sql()
+        expect(params_vietnamese[0]).to_equal("Nguyễn")
+
+    def test_unicode_zero_width_characters(self):
+        """Test zero-width characters (ZWJ, ZWNJ)."""
+
+        class User(Table):
+            name: str
+            text: str
+
+        # Zero-width joiner (ZWJ) - used in emoji sequences
+        zwj_text = "word\u200djoined"
+        expr_zwj = User.name == zwj_text
+        sql, params = expr_zwj.to_sql()
+        expect(params[0]).to_equal(zwj_text)
+
+        # Zero-width non-joiner (ZWNJ) - used in Persian/Arabic
+        zwnj_text = "می\u200cخواهم"  # Persian: "I want"
+        expr_zwnj = User.text == zwnj_text
+        sql, params = expr_zwnj.to_sql()
+        expect(params[0]).to_equal(zwnj_text)
+
+        # Zero-width space (U+200B)
+        zwsp_text = "word\u200bbreak"
+        expr_zwsp = User.text == zwsp_text
+        sql, params = expr_zwsp.to_sql()
+        expect(params[0]).to_equal(zwsp_text)
+
+        # Zero-width no-break space (ZWNBSP/BOM) (U+FEFF)
+        zwnbsp_text = "\ufeffstart"
+        expr_zwnbsp = User.text == zwnbsp_text
+        sql, params = expr_zwnbsp.to_sql()
+        expect(params[0]).to_equal(zwnbsp_text)
+
+    def test_unicode_rtl_characters(self):
+        """Test right-to-left text (Arabic, Hebrew)."""
+
+        class User(Table):
+            name: str
+            address: str
+
+        # Arabic (RTL)
+        arabic_name = "محمد بن سلمان"  # Muhammad bin Salman
+        expr_arabic = User.name == arabic_name
+        sql, params = expr_arabic.to_sql()
+        expect(params[0]).to_equal(arabic_name)
+
+        # Hebrew (RTL)
+        hebrew_name = "בנימין נתניהו"  # Benjamin Netanyahu
+        expr_hebrew = User.name == hebrew_name
+        sql, params = expr_hebrew.to_sql()
+        expect(params[0]).to_equal(hebrew_name)
+
+        # Mixed LTR and RTL (bidirectional text)
+        mixed_text = "Hello مرحبا World"
+        expr_mixed = User.address == mixed_text
+        sql, params = expr_mixed.to_sql()
+        expect(params[0]).to_equal(mixed_text)
+
+        # RTL with numbers (Arabic numerals in RTL context)
+        rtl_with_numbers = "الرقم ١٢٣٤٥"  # "Number 12345" in Arabic
+        expr_numbers = User.address == rtl_with_numbers
+        sql, params = expr_numbers.to_sql()
+        expect(params[0]).to_equal(rtl_with_numbers)
+
+        # RTL override mark (U+202E)
+        rtl_override = "test\u202eoverride"
+        expr_override = User.name == rtl_override
+        sql, params = expr_override.to_sql()
+        expect(params[0]).to_equal(rtl_override)
+
+    def test_unicode_normalization_nfc_nfd(self):
+        """Test NFC vs NFD normalization handling."""
+
+        class User(Table):
+            name: str
+
+        # Test case 1: Single accented character
+        # NFC: é as single codepoint (U+00E9)
+        nfc_single = "\u00e9"  # é (precomposed)
+        expr_nfc_single = User.name == nfc_single
+        sql_nfc, params_nfc = expr_nfc_single.to_sql()
+        expect(params_nfc[0]).to_equal("\u00e9")
+
+        # NFD: é as base + combining (U+0065 U+0301)
+        nfd_single = "\u0065\u0301"  # e + combining acute
+        expr_nfd_single = User.name == nfd_single
+        sql_nfd, params_nfd = expr_nfd_single.to_sql()
+        expect(params_nfd[0]).to_equal("\u0065\u0301")
+
+        # Test case 2: Full name with multiple accents
+        # NFC form
+        nfc_name = "Zürich"  # Precomposed ü
+        expr_nfc_name = User.name == nfc_name
+        sql, params = expr_nfc_name.to_sql()
+        expect(params[0]).to_equal("Zürich")
+
+        # Test case 3: Korean - decomposes significantly
+        # NFC: 한 (U+D55C) - single character
+        nfc_korean = "\ud55c"
+        # NFD: ㅎ + ㅏ + ㄴ (U+1112 U+1161 U+11AB) - three characters
+        nfd_korean = "\u1112\u1161\u11ab"
+
+        expr_nfc_korean = User.name == nfc_korean
+        sql_k1, params_k1 = expr_nfc_korean.to_sql()
+        expect(params_k1[0]).to_equal(nfc_korean)
+
+        expr_nfd_korean = User.name == nfd_korean
+        sql_k2, params_k2 = expr_nfd_korean.to_sql()
+        expect(params_k2[0]).to_equal(nfd_korean)
+
+        # Test case 4: Complex combining sequence
+        # ḱ̃ (k + acute + tilde) - multiple combining marks
+        complex_nfd = "k\u0301\u0303"
+        expr_complex = User.name == complex_nfd
+        sql_complex, params_complex = expr_complex.to_sql()
+        expect(params_complex[0]).to_equal(complex_nfd)
+
+        # Test case 5: LIKE pattern with NFD
+        # Pattern should work regardless of normalization
+        pattern_nfd = "e\u0301%"  # é% in NFD form
+        expr_pattern = User.name.like(pattern_nfd)
+        sql_pattern, params_pattern = expr_pattern.to_sql()
+        expect(params_pattern[0]).to_equal(pattern_nfd)

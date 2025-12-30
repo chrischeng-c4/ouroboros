@@ -156,22 +156,275 @@ impl ExtractedValue {
                     .map_err(|e| DataBridgeError::Query(format!("Failed to bind JSON: {}", e)))?;
             }
             ExtractedValue::Array(values) => {
-                // For arrays, we need to determine the element type and bind accordingly
-                // This is a simplified implementation - in production, you'd want to handle
-                // homogeneous arrays more efficiently
+                // Optimization: For homogeneous arrays, bind as native PostgreSQL arrays
+                // (e.g., INT4[], TEXT[], BOOL[]) instead of JSON for better performance.
+                // Heterogeneous arrays and complex nested structures fallback to JSON.
                 if values.is_empty() {
                     // Empty array - bind as NULL array
                     arguments.add(Option::<Vec<i32>>::None)
                         .map_err(|e| DataBridgeError::Query(format!("Failed to bind empty ARRAY: {}", e)))?;
                 } else {
-                    // For now, convert to JSON array as a fallback
-                    // This handles heterogeneous arrays but may not be optimal
-                    let json_array: Vec<JsonValue> = values
-                        .iter()
-                        .map(extracted_to_json)
-                        .collect::<Result<Vec<_>>>()?;
-                    arguments.add(JsonValue::Array(json_array))
-                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind ARRAY: {}", e)))?;
+                    // Detect element type from first non-null value
+                    let element_type = values.iter().find_map(|v| match v {
+                        ExtractedValue::Null => None,
+                        other => Some(other),
+                    });
+
+                    // Try to bind as native PostgreSQL array based on detected type
+                    match element_type {
+                        Some(ExtractedValue::Int(_)) => {
+                            // Check if all elements are Int or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::Int(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Option<Vec<Option<i32>>> to handle NULL elements
+                                    let int_array: Vec<Option<i32>> = values.iter().map(|v| match v {
+                                        ExtractedValue::Int(i) => Some(*i),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(), // We checked homogeneity above
+                                    }).collect();
+                                    arguments.add(int_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT4[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<i32> (no nulls)
+                                    let int_array: Vec<i32> = values.iter().map(|v| match v {
+                                        ExtractedValue::Int(i) => *i,
+                                        _ => unreachable!(), // We checked homogeneity and no nulls above
+                                    }).collect();
+                                    arguments.add(int_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT4[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::String(_)) => {
+                            // Check if all elements are String or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::String(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<String>>
+                                    let str_array: Vec<Option<String>> = values.iter().map(|v| match v {
+                                        ExtractedValue::String(s) => Some(s.clone()),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(str_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind TEXT[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<String> (no nulls)
+                                    let str_array: Vec<String> = values.iter().map(|v| match v {
+                                        ExtractedValue::String(s) => s.clone(),
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(str_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind TEXT[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::Bool(_)) => {
+                            // Check if all elements are Bool or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::Bool(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<bool>>
+                                    let bool_array: Vec<Option<bool>> = values.iter().map(|v| match v {
+                                        ExtractedValue::Bool(b) => Some(*b),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(bool_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind BOOL[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<bool> (no nulls)
+                                    let bool_array: Vec<bool> = values.iter().map(|v| match v {
+                                        ExtractedValue::Bool(b) => *b,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(bool_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind BOOL[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::BigInt(_)) => {
+                            // Check if all elements are BigInt or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::BigInt(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<i64>>
+                                    let bigint_array: Vec<Option<i64>> = values.iter().map(|v| match v {
+                                        ExtractedValue::BigInt(i) => Some(*i),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(bigint_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT8[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<i64> (no nulls)
+                                    let bigint_array: Vec<i64> = values.iter().map(|v| match v {
+                                        ExtractedValue::BigInt(i) => *i,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(bigint_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT8[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::SmallInt(_)) => {
+                            // Check if all elements are SmallInt or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::SmallInt(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<i16>>
+                                    let smallint_array: Vec<Option<i16>> = values.iter().map(|v| match v {
+                                        ExtractedValue::SmallInt(i) => Some(*i),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(smallint_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT2[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<i16> (no nulls)
+                                    let smallint_array: Vec<i16> = values.iter().map(|v| match v {
+                                        ExtractedValue::SmallInt(i) => *i,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(smallint_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind INT2[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::Float(_)) => {
+                            // Check if all elements are Float or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::Float(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<f32>>
+                                    let float_array: Vec<Option<f32>> = values.iter().map(|v| match v {
+                                        ExtractedValue::Float(f) => Some(*f),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(float_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind FLOAT4[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<f32> (no nulls)
+                                    let float_array: Vec<f32> = values.iter().map(|v| match v {
+                                        ExtractedValue::Float(f) => *f,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(float_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind FLOAT4[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::Double(_)) => {
+                            // Check if all elements are Double or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::Double(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<f64>>
+                                    let double_array: Vec<Option<f64>> = values.iter().map(|v| match v {
+                                        ExtractedValue::Double(f) => Some(*f),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(double_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind FLOAT8[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<f64> (no nulls)
+                                    let double_array: Vec<f64> = values.iter().map(|v| match v {
+                                        ExtractedValue::Double(f) => *f,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(double_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind FLOAT8[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        Some(ExtractedValue::Uuid(_)) => {
+                            // Check if all elements are Uuid or Null (homogeneous)
+                            let is_homogeneous = values.iter().all(|v| matches!(v, ExtractedValue::Uuid(_) | ExtractedValue::Null));
+
+                            if is_homogeneous {
+                                // Check if contains nulls
+                                let has_nulls = values.iter().any(|v| matches!(v, ExtractedValue::Null));
+
+                                if has_nulls {
+                                    // Bind as Vec<Option<Uuid>>
+                                    let uuid_array: Vec<Option<Uuid>> = values.iter().map(|v| match v {
+                                        ExtractedValue::Uuid(u) => Some(*u),
+                                        ExtractedValue::Null => None,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(uuid_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind UUID[] with nulls: {}", e)))?;
+                                } else {
+                                    // Bind as Vec<Uuid> (no nulls)
+                                    let uuid_array: Vec<Uuid> = values.iter().map(|v| match v {
+                                        ExtractedValue::Uuid(u) => *u,
+                                        _ => unreachable!(),
+                                    }).collect();
+                                    arguments.add(uuid_array)
+                                        .map_err(|e| DataBridgeError::Query(format!("Failed to bind UUID[]: {}", e)))?;
+                                }
+                            } else {
+                                // Heterogeneous array - fallback to JSON
+                                bind_array_as_json(values, arguments)?;
+                            }
+                        }
+                        // For other types or heterogeneous arrays, fallback to JSON
+                        _ => {
+                            bind_array_as_json(values, arguments)?;
+                        }
+                    }
                 }
             }
             ExtractedValue::Decimal(v) => {
@@ -415,6 +668,17 @@ where
             format!("Failed to extract array from column '{}': {}", column_name, e)
         )),
     }
+}
+
+/// Helper function to bind array as JSON (fallback for heterogeneous/complex arrays).
+fn bind_array_as_json(values: &[ExtractedValue], arguments: &mut PgArguments) -> Result<()> {
+    let json_array: Vec<JsonValue> = values
+        .iter()
+        .map(extracted_to_json)
+        .collect::<Result<Vec<_>>>()?;
+    arguments.add(JsonValue::Array(json_array))
+        .map_err(|e| DataBridgeError::Query(format!("Failed to bind ARRAY as JSON: {}", e)))?;
+    Ok(())
 }
 
 /// Helper function to convert ExtractedValue to JSON for array binding.
@@ -1426,6 +1690,127 @@ mod tests {
             assert!(variant.bind_to_arguments(&mut args).is_ok(),
                    "Failed to bind variant: {}", variant.pg_type_name());
         }
+    }
+
+    #[test]
+    fn test_native_array_binding_integers() {
+        let mut args = PgArguments::default();
+
+        // Test homogeneous int array (should bind as native INT4[])
+        let int_array = ExtractedValue::Array(vec![
+            ExtractedValue::Int(1),
+            ExtractedValue::Int(2),
+            ExtractedValue::Int(3),
+        ]);
+        assert!(int_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test int array with nulls (should bind as INT4[] with Option<i32>)
+        let int_array_with_nulls = ExtractedValue::Array(vec![
+            ExtractedValue::Int(1),
+            ExtractedValue::Null,
+            ExtractedValue::Int(3),
+        ]);
+        assert!(int_array_with_nulls.bind_to_arguments(&mut args).is_ok());
+
+        // Test BigInt array
+        let bigint_array = ExtractedValue::Array(vec![
+            ExtractedValue::BigInt(1000000),
+            ExtractedValue::BigInt(2000000),
+        ]);
+        assert!(bigint_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test SmallInt array
+        let smallint_array = ExtractedValue::Array(vec![
+            ExtractedValue::SmallInt(1),
+            ExtractedValue::SmallInt(2),
+        ]);
+        assert!(smallint_array.bind_to_arguments(&mut args).is_ok());
+    }
+
+    #[test]
+    fn test_native_array_binding_other_types() {
+        let mut args = PgArguments::default();
+
+        // Test string array (should bind as native TEXT[])
+        let string_array = ExtractedValue::Array(vec![
+            ExtractedValue::String("hello".to_string()),
+            ExtractedValue::String("world".to_string()),
+        ]);
+        assert!(string_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test bool array (should bind as native BOOL[])
+        let bool_array = ExtractedValue::Array(vec![
+            ExtractedValue::Bool(true),
+            ExtractedValue::Bool(false),
+        ]);
+        assert!(bool_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test float array (should bind as native FLOAT4[])
+        let float_array = ExtractedValue::Array(vec![
+            ExtractedValue::Float(1.1),
+            ExtractedValue::Float(2.2),
+        ]);
+        assert!(float_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test double array (should bind as native FLOAT8[])
+        let double_array = ExtractedValue::Array(vec![
+            ExtractedValue::Double(1.1),
+            ExtractedValue::Double(2.2),
+        ]);
+        assert!(double_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test UUID array (should bind as native UUID[])
+        let uuid_array = ExtractedValue::Array(vec![
+            ExtractedValue::Uuid(Uuid::nil()),
+            ExtractedValue::Uuid(Uuid::new_v4()),
+        ]);
+        assert!(uuid_array.bind_to_arguments(&mut args).is_ok());
+    }
+
+    #[test]
+    fn test_heterogeneous_array_fallback_to_json() {
+        let mut args = PgArguments::default();
+
+        // Test heterogeneous array (mixed types, should fallback to JSON)
+        let mixed_array = ExtractedValue::Array(vec![
+            ExtractedValue::Int(42),
+            ExtractedValue::String("test".to_string()),
+            ExtractedValue::Bool(true),
+        ]);
+        assert!(mixed_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test nested array (should fallback to JSON)
+        let nested_array = ExtractedValue::Array(vec![
+            ExtractedValue::Array(vec![
+                ExtractedValue::Int(1),
+                ExtractedValue::Int(2),
+            ]),
+            ExtractedValue::Array(vec![
+                ExtractedValue::Int(3),
+                ExtractedValue::Int(4),
+            ]),
+        ]);
+        assert!(nested_array.bind_to_arguments(&mut args).is_ok());
+
+        // Test array with complex types (should fallback to JSON)
+        let complex_array = ExtractedValue::Array(vec![
+            ExtractedValue::Json(serde_json::json!({"key": "value"})),
+            ExtractedValue::Json(serde_json::json!({"another": "object"})),
+        ]);
+        assert!(complex_array.bind_to_arguments(&mut args).is_ok());
+    }
+
+    #[test]
+    fn test_array_with_all_nulls() {
+        let mut args = PgArguments::default();
+
+        // Test array with all nulls (should use JSON fallback since no type can be detected)
+        let all_nulls = ExtractedValue::Array(vec![
+            ExtractedValue::Null,
+            ExtractedValue::Null,
+            ExtractedValue::Null,
+        ]);
+        assert!(all_nulls.bind_to_arguments(&mut args).is_ok());
     }
 
     #[test]

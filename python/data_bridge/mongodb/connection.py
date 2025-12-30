@@ -6,17 +6,18 @@ that bridges to the Rust backend.
 
 Example:
     >>> from data_bridge import init
+    >>> import os
     >>>
-    >>> # Initialize with connection string
+    >>> # Initialize with connection string (recommended)
     >>> await init("mongodb://localhost:27017/mydb")
     >>>
-    >>> # Or with separate parameters
+    >>> # Or with separate parameters using environment variables
     >>> await init(
     ...     host="localhost",
     ...     port=27017,
     ...     database="mydb",
-    ...     username="user",
-    ...     password="pass",
+    ...     username=os.environ.get("MONGODB_USER"),
+    ...     password=os.environ.get("MONGODB_PASSWORD"),
     ... )
 """
 
@@ -64,13 +65,14 @@ async def init(
         >>> # Using connection string (recommended)
         >>> await init("mongodb://localhost:27017/mydb")
         >>>
-        >>> # Using individual parameters
+        >>> # Using individual parameters with environment variables (recommended)
+        >>> import os
         >>> await init(
         ...     host="localhost",
         ...     port=27017,
         ...     database="mydb",
-        ...     username="admin",
-        ...     password="secret",
+        ...     username=os.environ.get("MONGODB_USER"),
+        ...     password=os.environ.get("MONGODB_PASSWORD"),
         ... )
         >>>
         >>> # With replica set

@@ -450,3 +450,145 @@ async fn test_find_with_relations_null_foreign_key() -> Result<(), AssertionErro
 
     Ok(())
 }
+
+#[tokio::test]
+#[ignore]
+async fn test_find_with_relations_column_collision() -> Result<(), AssertionError> {
+    // Test that main table columns don't collide with relation columns
+    // when both tables have columns with the same name (e.g., "id", "created_at")
+
+    let uri = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
+
+    let conn = Connection::new(&uri, PoolConfig::default())
+        .await
+        .unwrap();
+    let pool = conn.pool();
+
+    // Create test tables with overlapping column names
+    sqlx::query("DROP TABLE IF EXISTS test_posts CASCADE")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP TABLE IF EXISTS test_authors CASCADE")
+        .execute(pool)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE test_authors (
+            id BIGSERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "CREATE TABLE test_posts (
+            id BIGSERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            author_id BIGINT REFERENCES test_authors(id),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Insert test data
+    let author_values = vec![("name".to_string(), ExtractedValue::String("Jane Doe".to_string()))];
+    let author = Row::insert(pool, "test_authors", &author_values)
+        .await
+        .unwrap();
+    let author_id = match author.get("id").unwrap() {
+        ExtractedValue::BigInt(i) => *i,
+        _ => panic!("Expected BigInt for id"),
+    };
+
+    let post_values = vec![
+        (
+            "title".to_string(),
+            ExtractedValue::String("Collision Test".to_string()),
+        ),
+        ("author_id".to_string(), ExtractedValue::BigInt(author_id)),
+    ];
+    let post = Row::insert(pool, "test_posts", &post_values)
+        .await
+        .unwrap();
+    let post_id = match post.get("id").unwrap() {
+        ExtractedValue::BigInt(i) => *i,
+        _ => panic!("Expected BigInt for id"),
+    };
+
+    // Test find_with_relations with select_columns that include "id" and "created_at"
+    let relations = vec![RelationConfig {
+        name: "author".to_string(),
+        table: "test_authors".to_string(),
+        foreign_key: "author_id".to_string(),
+        reference_column: "id".to_string(),
+        join_type: JoinType::Left,
+        select_columns: Some(vec![
+            "id".to_string(),
+            "name".to_string(),
+            "created_at".to_string()
+        ]),
+    }];
+
+    let result = Row::find_with_relations(pool, "test_posts", post_id, &relations)
+        .await
+        .unwrap()
+        .expect("Post should exist");
+
+    // Verify main row data - should have the post's id and created_at
+    let main_id = match result.get("id").unwrap() {
+        ExtractedValue::BigInt(i) => *i,
+        _ => panic!("Expected BigInt for main id"),
+    };
+    expect(main_id).to_equal(&post_id)?;
+
+    expect(matches!(
+        result.get("title").unwrap(),
+        ExtractedValue::String(s) if s == "Collision Test"
+    )).to_be_true()?;
+
+    // Main row should have created_at
+    expect(matches!(
+        result.get("created_at").unwrap(),
+        ExtractedValue::TimestampTz(_)
+    )).to_be_true()?;
+
+    // Verify relation data - should have the author's id, name, and created_at
+    let author_data = result.get("author").unwrap();
+    match author_data {
+        ExtractedValue::Json(json_val) => {
+            let author_obj = json_val.as_object().expect("Author should be object");
+
+            // Author should have its own id
+            let author_rel_id = author_obj.get("id").unwrap().as_i64().unwrap();
+            expect(author_rel_id).to_equal(&author_id)?;
+
+            // Author should have name
+            expect(author_obj.get("name").unwrap().as_str().unwrap())
+                .to_equal(&"Jane Doe")?;
+
+            // Author should have its own created_at (different from post's created_at)
+            expect(author_obj.contains_key("created_at")).to_be_true()?;
+        }
+        _ => panic!("Expected JSON for author"),
+    }
+
+    // Clean up
+    sqlx::query("DROP TABLE test_posts CASCADE")
+        .execute(pool)
+        .await
+        .unwrap();
+    sqlx::query("DROP TABLE test_authors CASCADE")
+        .execute(pool)
+        .await
+        .unwrap();
+
+    Ok(())
+}

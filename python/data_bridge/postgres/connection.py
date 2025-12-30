@@ -62,12 +62,12 @@ async def init(
         ...     max_connections=20
         ... )
         >>>
-        >>> # For development only (not production)
+        >>> # WARNING: For local development/testing only - NEVER use in production
         >>> await init(
         ...     host="localhost",
         ...     database="test_db",
         ...     username="testuser",
-        ...     password="testpass"
+        ...     password="<your-password-here>"  # Use environment variable instead
         ... )
 
     Raises:

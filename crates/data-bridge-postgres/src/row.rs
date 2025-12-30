@@ -148,29 +148,26 @@ impl Row {
 
         let mut param_num = 1;
         let mut values_clauses = Vec::with_capacity(rows.len());
-        let mut params = Vec::with_capacity(rows.len() * column_names.len());
 
-        for row in rows {
+        for _ in 0..rows.len() {
             let mut placeholders = Vec::new();
             for _ in 0..column_names.len() {
                 placeholders.push(format!("${}", param_num));
                 param_num += 1;
             }
             values_clauses.push(format!("({})", placeholders.join(", ")));
-
-            for col in &column_names {
-                let value = row.get(*col)
-                    .ok_or_else(|| DataBridgeError::Query("Required column not found in row data".to_string()))?;
-                params.push(value.clone());
-            }
         }
 
         sql.push_str(&values_clauses.join(", "));
         sql.push_str(" RETURNING *");
 
         let mut args = PgArguments::default();
-        for param in &params {
-            param.bind_to_arguments(&mut args)?;
+        for row in rows {
+            for col_name in &column_names {
+                let value = row.get(*col_name)
+                    .ok_or_else(|| DataBridgeError::Query("Required column not found in row data".to_string()))?;
+                value.bind_to_arguments(&mut args)?;
+            }
         }
 
         let pg_rows = sqlx::query_with(&sql, args)
@@ -469,7 +466,7 @@ impl Row {
         relations: &[RelationConfig],
     ) -> Result<Option<Self>>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: sqlx::Executor<'a, Database = sqlx::Postgres> + Copy,
     {
         // Validate RelationConfig fields before SQL generation
         for rel in relations {
@@ -484,8 +481,38 @@ impl Row {
             }
         }
 
+        QueryBuilder::validate_identifier(table)?;
+
+        // Get main table columns to properly alias them
+        let query = "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position";
+
+        let column_rows = sqlx::query(query)
+            .bind("public")
+            .bind(table)
+            .fetch_all(executor)
+            .await
+            .map_err(|e| DataBridgeError::Database(format!("Failed to fetch table columns: {}", e)))?;
+
+        let mut main_columns = Vec::new();
+        for row in column_rows {
+            let col_name: String = row.try_get("column_name")
+                .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+            main_columns.push(col_name);
+        }
+
+        if main_columns.is_empty() {
+            return Err(DataBridgeError::Query(format!("Table '{}' not found or has no columns", table)));
+        }
+
         let quoted_main_table = QueryBuilder::quote_identifier(table);
-        let mut select_cols = vec![format!("{}.*", quoted_main_table)];
+
+        // Alias main table columns with _main_ prefix to avoid collisions
+        let mut select_cols: Vec<String> = main_columns.iter()
+            .map(|col| {
+                let quoted_col = QueryBuilder::quote_identifier(col);
+                format!("{}.{} AS \"_main_{}\"", quoted_main_table, quoted_col, col)
+            })
+            .collect();
 
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);
@@ -537,6 +564,22 @@ impl Row {
             Some(pg_row) => {
                 let mut result = Self::from_sqlx(&pg_row)?;
 
+                // First, strip _main_ prefix from main table columns
+                let main_keys: Vec<String> = result.columns.keys()
+                    .filter(|k| k.starts_with("_main_"))
+                    .cloned()
+                    .collect();
+
+                for key in main_keys {
+                    if let Some(value) = result.columns.remove(&key) {
+                        let final_key = key.strip_prefix("_main_")
+                            .ok_or_else(|| DataBridgeError::Query("Failed to process main table column prefix".to_string()))?
+                            .to_string();
+                        result.columns.insert(final_key, value);
+                    }
+                }
+
+                // Then process relations
                 for rel in relations {
                     let real_prefix = format!("{}__", rel.name);
 
@@ -607,7 +650,7 @@ impl Row {
         offset: Option<i64>,
     ) -> Result<Vec<Self>>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: sqlx::Executor<'a, Database = sqlx::Postgres> + Copy,
     {
         // Validate RelationConfig fields before SQL generation
         for rel in relations {
@@ -622,8 +665,38 @@ impl Row {
             }
         }
 
+        QueryBuilder::validate_identifier(table)?;
+
+        // Get main table columns to properly alias them
+        let query = "SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position";
+
+        let column_rows = sqlx::query(query)
+            .bind("public")
+            .bind(table)
+            .fetch_all(executor)
+            .await
+            .map_err(|e| DataBridgeError::Database(format!("Failed to fetch table columns: {}", e)))?;
+
+        let mut main_columns = Vec::new();
+        for row in column_rows {
+            let col_name: String = row.try_get("column_name")
+                .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+            main_columns.push(col_name);
+        }
+
+        if main_columns.is_empty() {
+            return Err(DataBridgeError::Query(format!("Table '{}' not found or has no columns", table)));
+        }
+
         let quoted_main_table = QueryBuilder::quote_identifier(table);
-        let mut select_cols = vec![format!("{}.*", quoted_main_table)];
+
+        // Alias main table columns with _main_ prefix to avoid collisions
+        let mut select_cols: Vec<String> = main_columns.iter()
+            .map(|col| {
+                let quoted_col = QueryBuilder::quote_identifier(col);
+                format!("{}.{} AS \"_main_{}\"", quoted_main_table, quoted_col, col)
+            })
+            .collect();
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);
             match &rel.select_columns {
@@ -696,6 +769,22 @@ impl Row {
         for pg_row in rows {
             let mut result = Self::from_sqlx(&pg_row)?;
 
+            // First, strip _main_ prefix from main table columns
+            let main_keys: Vec<String> = result.columns.keys()
+                .filter(|k| k.starts_with("_main_"))
+                .cloned()
+                .collect();
+
+            for key in main_keys {
+                if let Some(value) = result.columns.remove(&key) {
+                    let final_key = key.strip_prefix("_main_")
+                        .ok_or_else(|| DataBridgeError::Query("Failed to process main table column prefix".to_string()))?
+                        .to_string();
+                    result.columns.insert(final_key, value);
+                }
+            }
+
+            // Then process relations
             for rel in relations {
                 let real_prefix = format!("{}__", rel.name);
 
@@ -761,7 +850,7 @@ impl Row {
         joins: &[(&str, &str, &str)],
     ) -> Result<Option<Self>>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Postgres>,
+        E: sqlx::Executor<'a, Database = sqlx::Postgres> + Copy,
     {
         let relations: Vec<RelationConfig> = joins
             .iter()

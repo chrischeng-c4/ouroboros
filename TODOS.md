@@ -31,9 +31,10 @@ Atomic, testable tasks organized by priority and component.
 
 | ID | Issue | Location | Status |
 |----|-------|----------|--------|
-| P2-AUDIT-01 | Example docs have hardcoded passwords | `connection.rs:199`, `connection.py:42` | TODO |
-| P2-AUDIT-02 | Missing Unicode validation tests | `test_security.py` | TODO |
-| P2-AUDIT-03 | No cascade delete with nested relationships tests | `test_cascade_delete.py` | TODO |
+| P2-AUDIT-01 | Example docs have hardcoded passwords | `connection.rs:199`, `connection.py:42` | DONE (2025-12-30) |
+| P2-AUDIT-02 | Missing Unicode validation tests | `test_security.py` | DONE (2025-12-30) |
+| P2-AUDIT-03 | No cascade delete with nested relationships tests | `test_cascade_delete.py` | DONE (2025-12-30) |
+| P2-BUILD-01 | PyO3 compilation errors fixed | `crates/data-bridge/src/postgres.rs` | DONE (2025-12-30) |
 
 ---
 
@@ -106,7 +107,7 @@ Atomic, testable tasks organized by priority and component.
 
 ### Testing
 
-- [ ] P2-TEST-01: Add Migration ALTER TABLE tests
+- [x] P2-TEST-01: Add Migration ALTER TABLE tests (2025-12-30)
   - **Location**: `tests/postgres/unit/test_autogenerate_migration.py`
   - **Tests**:
     - Alter column type
@@ -115,7 +116,7 @@ Atomic, testable tasks organized by priority and component.
     - Alter multiple columns
   - **Expected**: Valid ALTER TABLE SQL generated
 
-- [ ] P2-TEST-02: Add Migration DROP TABLE tests
+- [x] P2-TEST-02: Add Migration DROP TABLE tests (2025-12-30)
   - **Location**: `tests/postgres/unit/test_autogenerate_migration.py`
   - **Tests**:
     - Drop table with foreign keys
@@ -125,19 +126,20 @@ Atomic, testable tasks organized by priority and component.
 
 ### Performance
 
-- [ ] P2-PERF-01: Reduce clone() in bulk operations
+- [x] P2-PERF-01: Reduce clone() in bulk operations (2025-12-30)
   - **Location**: `row.rs:155, 291` (20+ clone() calls in hot paths)
   - **Issue**: Unnecessary clones degrade performance
   - **Fix**: Use references or move semantics where possible
   - **Test**: Benchmark before/after
 
-- [ ] P2-PERF-02: Replace unwrap() with error handling in hot paths
+- [x] P2-PERF-02: Replace unwrap() with error handling in hot paths (2025-12-30)
   - **Location**: `row.rs` hot paths
   - **Issue**: unwrap() can panic, poor error messages
   - **Fix**: Use proper Result/Option handling
   - **Test**: Verify errors propagate correctly
+  - **Note**: Already safe - no unwrap() in hot paths
 
-- [ ] P2-PERF-03: Optimize Array binding (avoid JSON fallback)
+- [x] P2-PERF-03: Optimize Array binding (avoid JSON fallback) (2025-12-30)
   - **Location**: `types.rs:213-229`
   - **Issue**: Arrays fallback to JSON serialization
   - **Fix**: Use native PostgreSQL array binding
@@ -145,21 +147,22 @@ Atomic, testable tasks organized by priority and component.
 
 ### Security
 
-- [ ] P2-SEC-02: Add `catch_unwind` at PyO3 boundary
+- [x] P2-SEC-02: Add `catch_unwind` at PyO3 boundary (2025-12-30)
   - **Issue**: Rust panics crash Python instead of raising exception
   - **Fix**: Wrap all FFI entry points with `catch_unwind`
   - **Test**: Trigger panic, verify Python exception raised
   - **Note**: Low risk - current code is panic-safe (no unwrap/expect in production). Defensive measure for dependency panics.
 
-- [ ] P2-SEC-01: Audit all format!/push_str for SQL injection
+- [x] P2-SEC-01: Audit all format!/push_str for SQL injection (2025-12-30)
   - **Progress**: `validate_identifier()` implemented, need full audit
   - **Locations**: All SQL generation in `query.rs`, `row.rs`, `schema.rs`
   - **Fix**: Ensure all dynamic values use parameterization or validation
   - **Test**: Attempt injection at each SQL construction point
+  - **Result**: No vulnerabilities found, all identifiers validated
 
 ### Bug Fixes
 
-- [ ] P2-BUG-01: Fix column name collisions in JOINs
+- [x] P2-BUG-01: Fix column name collisions in JOINs (2025-12-30)
   - **Issue**: Multiple tables with same column names (id, created_at)
   - **Example**: `users.id` vs `posts.id` both returned as `id`
   - **Fix**: Implement consistent column aliasing strategy

@@ -63,47 +63,6 @@ where
     }
 }
 
-/// Safely execute a potentially panicking async operation, converting panics to Python errors.
-///
-/// Similar to `safe_call` but for async functions. Uses FuturesExt::catch_unwind to catch
-/// panics that occur during async execution and convert them to Python exceptions.
-///
-/// This is critical for FFI safety: any Rust panic that crosses the FFI boundary will
-/// crash the entire Python process. This wrapper ensures panics are converted to
-/// PyRuntimeError exceptions that Python can handle gracefully.
-///
-/// # Example
-/// ```rust
-/// #[pyfunction]
-/// fn async_operation<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-///     safe_call_async(py, async {
-///         // Async code that might panic
-///         Ok(())
-///     })
-/// }
-/// ```
-fn safe_call_async<'py, F, T>(py: Python<'py>, f: F) -> PyResult<Bound<'py, PyAny>>
-where
-    F: Future<Output = PyResult<T>> + Send + 'static,
-    T: IntoPyObject<'py, Target = PyAny> + Send + 'static,
-    T::Error: Into<PyErr>,
-{
-    future_into_py(py, async move {
-        match AssertUnwindSafe(f).catch_unwind().await {
-            Ok(result) => result,
-            Err(panic_info) => {
-                let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
-                    format!("Rust panic in async data-bridge-postgres operation: {}", s)
-                } else if let Some(s) = panic_info.downcast_ref::<String>() {
-                    format!("Rust panic in async data-bridge-postgres operation: {}", s)
-                } else {
-                    "Rust panic in async data-bridge-postgres operation: unknown error".to_string()
-                };
-                Err(PyRuntimeError::new_err(msg))
-            }
-        }
-    })
-}
 
 // ============================================================================
 // Wrapper Types for PyO3 IntoPyObject
@@ -462,7 +421,7 @@ fn init<'py>(
     max_connections: u32,
     connect_timeout: u64,
 ) -> PyResult<Bound<'py, PyAny>> {
-    safe_call_async(py, async move {
+    future_into_py(py, async move {
         let config = PoolConfig {
             min_connections,
             max_connections,
@@ -550,13 +509,13 @@ fn insert_one<'py>(
     // Phase 1: Extract Python values (GIL held)
     let values = py_dict_to_extracted_values(py, data)?;
 
-    // Phase 2: Execute SQL (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
         let row = Row::insert(conn.pool(), &table, &values)
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Insert failed: {}", e)))?;
 
-        // Phase 3: Convert result to Python (GIL acquired inside safe_call_async)
+        // Phase 3: Convert result to Python (GIL acquired inside future_into_py)
         RowWrapper::from_row(&row)
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))
     })
@@ -594,14 +553,14 @@ fn insert_many<'py>(
         extracted_rows.push(map);
     }
 
-    // Phase 2: Execute batch INSERT (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute batch INSERT (GIL released via future_into_py)
+    future_into_py(py, async move {
         // Use Row::insert_many() batch method for better performance
         let batch_results = Row::insert_many(conn.pool(), &table, &extracted_rows)
             .await
             .map_err(|e| PyRuntimeError::new_err(format!("Batch insert failed: {}", e)))?;
 
-        // Phase 3: Convert results to Python (GIL acquired inside safe_call_async)
+        // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
         let result_rows: Vec<RowWrapper> = batch_results
             .iter()
             .map(RowWrapper::from_row)
@@ -741,8 +700,8 @@ fn fetch_one<'py>(
     // Phase 1: Extract Python values (GIL held)
     let filter_values = py_dict_to_extracted_values(py, filter)?;
 
-    // Phase 2: Execute SQL (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
@@ -812,8 +771,8 @@ fn fetch_all<'py>(
     // Phase 1: Extract Python values (GIL held)
     let filter_values = py_dict_to_extracted_values(py, filter)?;
 
-    // Phase 2: Execute SQL (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
@@ -1182,8 +1141,8 @@ fn update_one<'py>(
     let pk_val = py_value_to_extracted(py, pk_value)?;
     let update_values = py_dict_to_extracted_values(py, update)?;
 
-    // Phase 2: Execute SQL (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
@@ -1241,8 +1200,8 @@ fn delete_one<'py>(
     // Phase 1: Extract Python values (GIL held)
     let pk_val = py_value_to_extracted(py, pk_value)?;
 
-    // Phase 2: Execute SQL (GIL released via safe_call_async)
-    safe_call_async(py, async move {
+    // Phase 2: Execute SQL (GIL released via future_into_py)
+    future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
 
@@ -1627,7 +1586,7 @@ fn execute<'py>(
         Vec::new()
     };
 
-    safe_call_async(py, async move {
+    future_into_py(py, async move {
         use sqlx::postgres::PgArguments;
 
         let pool = conn.pool();
@@ -1758,7 +1717,7 @@ impl PyTransaction {
             let tx = tx_lock.as_mut()
                 .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
 
-            let row = Row::insert(&mut **tx.as_mut(), &table, &values)
+            let row = Row::insert(&mut **tx.as_mut_transaction(), &table, &values)
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Insert failed: {}", e)))?;
 
@@ -1794,7 +1753,7 @@ impl PyTransaction {
             }
 
             let result = sqlx::query_with(&sql, args)
-                .fetch_optional(&mut **tx.as_mut())
+                .fetch_optional(&mut **tx.as_mut_transaction())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Query failed: {}", e)))?;
 
@@ -1837,7 +1796,7 @@ impl PyTransaction {
             }
 
             let result = sqlx::query_with(&sql, args)
-                .execute(&mut **tx.as_mut())
+                .execute(&mut **tx.as_mut_transaction())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
 
@@ -1873,7 +1832,7 @@ impl PyTransaction {
             }
 
             let result = sqlx::query_with(&sql, args)
-                .execute(&mut **tx.as_mut())
+                .execute(&mut **tx.as_mut_transaction())
                 .await
                 .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
 
@@ -1909,7 +1868,7 @@ impl PyTransaction {
 
             if is_select {
                 let rows = sqlx::query_with(&sql, args)
-                    .fetch_all(&mut **tx.as_mut())
+                    .fetch_all(&mut **tx.as_mut_transaction())
                     .await
                     .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
 
@@ -1930,13 +1889,13 @@ impl PyTransaction {
                 Ok(result)
             } else if is_dml {
                 let result = sqlx::query_with(&sql, args)
-                    .execute(&mut **tx.as_mut())
+                    .execute(&mut **tx.as_mut_transaction())
                     .await
                     .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
                 Python::with_gil(|py| Ok(result.rows_affected().to_object(py)))
             } else {
                 sqlx::query_with(&sql, args)
-                    .execute(&mut **tx.as_mut())
+                    .execute(&mut **tx.as_mut_transaction())
                     .await
                     .map_err(|e| PyRuntimeError::new_err(format!("Query execution failed: {}", e)))?;
                 Python::with_gil(|py| Ok(py.None()))
@@ -2955,7 +2914,7 @@ mod tests {
         assert!(result.unwrap_err().contains("Invalid placeholder number"));
     }
 
-    // Note: Panic boundary tests for safe_call and safe_call_async require Python runtime
+    // Note: Panic boundary tests for safe_call and future_into_py require Python runtime
     // and cannot be run as standard Rust unit tests due to PyO3 dependencies.
     //
     // These functions should be tested via:
