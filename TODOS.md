@@ -16,64 +16,154 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
-## Priority 1: Critical (This Week)
+## P0 - Critical Security (Immediate)
 
-*No critical tasks at this time.*
+### SQL Injection Vulnerabilities
+
+- [ ] P0-SEC-01: Fix SQL Injection in JOIN ON conditions
+  - **Location**: `query.rs:303-316`, `row.rs:477-483`
+  - **Issue**: `on_condition` parameter inserted directly without validation
+  - **Fix**: Validate ON conditions or create structured builder
+  - **Test**: Attempt injection with malicious ON clause
+
+- [ ] P0-SEC-02: Fix SQL Injection in Cascade Delete format!
+  - **Location**: `row.rs:754-812`
+  - **Issue**: `backref.source_table/source_column` in `format!` without validation
+  - **Fix**: Pre-validate BackRef fields before SQL generation
+  - **Test**: Attempt injection via BackRef struct fields
+
+- [ ] P0-SEC-03: Add RelationConfig field validation
+  - **Location**: `row.rs:454-486`
+  - **Issue**: RelationConfig fields bypass validation if constructed externally
+  - **Fix**: Validate all fields at construction time
+  - **Test**: Construct RelationConfig with malicious field names
 
 ---
 
-## Priority 2: High (Next 2 Weeks)
+## P1 - High Priority (This Week)
 
-*No high priority tasks at this time.*
+### Bug Fixes
+
+- [ ] P1-BUG-01: Fix NULL FK column aliasing (6 skipped tests)
+  - **Location**: `tests/postgres/integration/test_eager_loading.py`
+  - **Issue**: Column aliasing fails for NULL foreign keys in JOINs
+  - **Tests**:
+    - `test_fetch_with_relations_null_fk_multiple_posts`
+    - `test_fetch_many_with_relations_null_fk_mixed`
+    - `test_fetch_with_relations_nested_null_intermediate`
+    - `test_fetch_with_relations_invalid_relation_name`
+    - `test_fetch_many_with_relations_complex_scenario`
+    - `test_fetch_many_with_relations_performance`
+  - **Fix**: Implement proper column aliasing for LEFT JOIN NULL cases
+
+### Missing Implementations
+
+- [ ] P1-FUNC-01: Implement `from_python()` type conversion
+  - **Location**: `types.rs:70-85`
+  - **Current**: `todo!("Implement ExtractedValue::from_python")`
+  - **Fix**: Convert Python objects to ExtractedValue enum
+  - **Test**: Round-trip Python → ExtractedValue → Python
+
+- [ ] P1-FUNC-02: Implement `to_python()` type conversion
+  - **Location**: `types.rs:96-111`
+  - **Current**: `todo!("Implement ExtractedValue::to_python")`
+  - **Fix**: Convert ExtractedValue to Python objects
+  - **Test**: Round-trip ExtractedValue → Python → ExtractedValue
+
+- [ ] P1-FUNC-03: Implement QueryBuilder execute methods
+  - **Location**: `query.rs:653-675`
+  - **Current**: 4 execute functions marked as TODO
+  - **Functions**:
+    - `execute_one()`
+    - `execute_many()`
+    - `execute_scalar()`
+    - `execute_raw()`
+  - **Test**: Execute queries and validate results
+
+### Security Hardening
+
+- [ ] P1-SEC-01: Add `catch_unwind` at PyO3 boundary
+  - **Issue**: Rust panics crash Python instead of raising exception
+  - **Fix**: Wrap all FFI entry points with `catch_unwind`
+  - **Test**: Trigger panic, verify Python exception raised
 
 ---
 
-## Priority 3: Medium (Next Month)
+## P2 - Medium Priority (Next 2 Weeks)
+
+### Testing
+
+- [ ] P2-TEST-01: Add Migration ALTER TABLE tests
+  - **Location**: `tests/postgres/unit/test_autogenerate_migration.py`
+  - **Tests**:
+    - Alter column type
+    - Alter column nullable
+    - Alter column default
+    - Alter multiple columns
+  - **Expected**: Valid ALTER TABLE SQL generated
+
+- [ ] P2-TEST-02: Add Migration DROP TABLE tests
+  - **Location**: `tests/postgres/unit/test_autogenerate_migration.py`
+  - **Tests**:
+    - Drop table with foreign keys
+    - Drop table with indexes
+    - Drop multiple tables
+  - **Expected**: Valid DROP TABLE SQL with CASCADE if needed
+
+### Performance
+
+- [ ] P2-PERF-01: Reduce clone() in bulk operations
+  - **Location**: `row.rs:155, 291` (20+ clone() calls in hot paths)
+  - **Issue**: Unnecessary clones degrade performance
+  - **Fix**: Use references or move semantics where possible
+  - **Test**: Benchmark before/after
+
+- [ ] P2-PERF-02: Replace unwrap() with error handling in hot paths
+  - **Location**: `row.rs` hot paths
+  - **Issue**: unwrap() can panic, poor error messages
+  - **Fix**: Use proper Result/Option handling
+  - **Test**: Verify errors propagate correctly
+
+- [ ] P2-PERF-03: Optimize Array binding (avoid JSON fallback)
+  - **Location**: `types.rs:213-229`
+  - **Issue**: Arrays fallback to JSON serialization
+  - **Fix**: Use native PostgreSQL array binding
+  - **Test**: Benchmark array insert performance
+
+### Security
+
+- [ ] P2-SEC-01: Audit all format!/push_str for SQL injection
+  - **Progress**: `validate_identifier()` implemented, need full audit
+  - **Locations**: All SQL generation in `query.rs`, `row.rs`, `schema.rs`
+  - **Fix**: Ensure all dynamic values use parameterization or validation
+  - **Test**: Attempt injection at each SQL construction point
+
+### Bug Fixes
+
+- [ ] P2-BUG-01: Fix column name collisions in JOINs
+  - **Issue**: Multiple tables with same column names (id, created_at)
+  - **Example**: `users.id` vs `posts.id` both returned as `id`
+  - **Fix**: Implement consistent column aliasing strategy
+  - **Test**: JOIN 3+ tables with overlapping column names
 
 ---
+
+## P3 - Lower Priority (Next Month)
 
 ### P3-CASCADE: BackReference and Cascade Operations
 
 **Goal**: Support reverse relationships and cascade delete/update
 
-#### Rust Backend
-
-- [x] P3-CASCADE-01: Add `BackRef` struct (source_table, source_column, target_table)
-- [x] P3-CASCADE-02: Add `CascadeRule` enum (Cascade, Restrict, SetNull, NoAction)
-- [x] P3-CASCADE-03: Implement `get_backreferences()` - find reverse FK relations
-- [x] P3-CASCADE-04: Implement cascade delete in `Row::delete()`
-  - Result: `Row::delete_with_cascade()` implemented in row.rs (lines 735-872)
-- [x] P3-CASCADE-05: Implement cascade restrict in `Row::delete()`
-  - Result: `Row::delete_checked()` implemented with RESTRICT constraint checking
-- [x] P3-CASCADE-06: Implement cascade set null in `Row::delete()`
-  - Result: SET NULL and SET DEFAULT handled inside `delete_with_cascade()`
-- [x] P3-CASCADE-07: Add unit tests for cascade operations (10+ tests)
-  - Result: Unit tests for CascadeRule and BackRef added to `schema.rs`
-
 #### Python API
 
 - [ ] P3-CASCADE-08: Add `BackReference[T]` descriptor class
-  - Test: `user.posts` returns query for related posts
+  - **Test**: `user.posts` returns query for related posts
+
 - [ ] P3-CASCADE-09: Add `on_delete` parameter to `Column(foreign_key=...)`
-  - Test: `Column(foreign_key="users.id", on_delete="CASCADE")` works
+  - **Test**: `Column(foreign_key="users.id", on_delete="CASCADE")` works
+
 - [ ] P3-CASCADE-10: Add `on_update` parameter to `Column(foreign_key=...)`
-  - Test: `Column(foreign_key="users.id", on_update="CASCADE")` works
-
-#### Integration Tests
-
-- [x] P3-CASCADE-11: Test ON DELETE CASCADE
-  - Result: `test_delete_with_cascade_basic` - Delete parent cascades to children
-- [x] P3-CASCADE-12: Test ON DELETE RESTRICT
-  - Result: `test_delete_with_cascade_restrict_violation` - Blocks deletion with children
-- [x] P3-CASCADE-13: Test ON DELETE SET NULL
-  - Result: `test_delete_with_cascade_set_null` - Sets child FK to NULL
-- [ ] P3-CASCADE-14: Test BackReference query
-  - Test: `user.posts.fetch()` returns user's posts
-  - Note: Requires BackReference[T] descriptor (P3-CASCADE-08)
-- [x] P3-CASCADE-15: Test nested cascade (user → posts → comments)
-  - Result: `test_delete_with_cascade_multiple_children` - Cascades through multiple levels
-
-**Integration Test Coverage**: 9 tests in `tests/postgres/integration/test_cascade_delete.py`
+  - **Test**: `Column(foreign_key="users.id", on_update="CASCADE")` works
 
 ---
 
@@ -82,34 +172,60 @@ Atomic, testable tasks organized by priority and component.
 **Goal**: Document ForeignKeyProxy and relationship features
 
 - [ ] P3-DOCS-01: Write quick start example for ForeignKey usage
-  - Test: Example code runs successfully
+  - **Test**: Example code runs successfully
+
 - [ ] P3-DOCS-02: Document lazy loading (`.fetch()` vs `.ref` vs `.id`)
-  - Test: All three patterns explained with examples
+  - **Test**: All three patterns explained with examples
+
 - [ ] P3-DOCS-03: Document N+1 problem and how to avoid
-  - Test: Performance comparison shown
+  - **Test**: Performance comparison shown
+
 - [ ] P3-DOCS-04: Document nullable foreign keys
-  - Test: Example with Optional[ForeignKey] works
+  - **Test**: Example with Optional[ForeignKey] works
+
 - [ ] P3-DOCS-05: Document circular relationships
-  - Test: Self-referential example provided
+  - **Test**: Self-referential example provided
+
 - [ ] P3-DOCS-06: Add troubleshooting section
-  - Test: Common errors and solutions listed
+  - **Test**: Common errors and solutions listed
+
 - [ ] P3-DOCS-07: Create `docs/postgres/relationships.md`
-  - Test: File exists with all sections
+  - **Test**: File exists with all sections
 
 ---
 
-## Priority 4: Low (Future)
+### P3-FUNC: Additional Features
 
-### P4-M2M: Many-to-Many Relationships
+- [ ] P3-FUNC-01: Implement Savepoint support
+  - **Location**: `transaction.rs:100-126`
+  - **Features**:
+    - Create savepoint
+    - Rollback to savepoint
+    - Release savepoint
+  - **Test**: Nested transaction with rollback to savepoint
 
-- [ ] P4-M2M-01: Add `ManyToMany` struct in Rust
-- [ ] P4-M2M-02: Implement auto join table creation
-- [ ] P4-M2M-03: Implement `add_relation()` - insert into join table
-- [ ] P4-M2M-04: Implement `remove_relation()` - delete from join table
-- [ ] P4-M2M-05: Implement `fetch_related()` - query through join table
-- [ ] P4-M2M-06: Add `ManyToMany[T]` Python descriptor
-- [ ] P4-M2M-07: Support explicit join table with extra columns
-- [ ] P4-M2M-08: Add integration tests (10+ tests)
+### P3-SEC: Security Documentation
+
+- [ ] P3-SEC-01: Add TLS configuration documentation
+  - **Location**: `connection.rs`
+  - **Topics**: sslmode, certificate verification, client certificates
+  - **Test**: Example TLS connection works
+
+- [ ] P3-SEC-02: Remove sensitive data from error logs
+  - **Issue**: Error messages may leak query parameters
+  - **Fix**: Redact parameter values in error messages
+  - **Test**: Verify no sensitive data in logged errors
+
+---
+
+## P4 - Backlog (Future)
+
+### P4-PERF: Performance Improvements
+
+- [ ] P4-PERF-01: Server-side cursors for large results
+  - **Issue**: Memory exhaustion on large result sets
+  - **Fix**: Implement streaming with server-side cursors
+  - **Test**: Fetch 1M+ rows without OOM
 
 ### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
@@ -125,39 +241,63 @@ Atomic, testable tasks organized by priority and component.
 - [ ] P4-QUERY-10: Support RETURNING clause in Updates/Deletes
 - [ ] P4-QUERY-11: Add integration tests (25+ tests)
 
-### P4-HTTP: HTTP Client Optimization
+### P4-M2M: Many-to-Many Relationships
 
-- [ ] P4-HTTP-01: Implement lazy header parsing
-- [ ] P4-HTTP-02: Implement lazy body parsing
-- [ ] P4-HTTP-03: Add zero-copy bytes support
-- [ ] P4-HTTP-04: Benchmark vs httpx (target 1.3x faster)
+- [ ] P4-M2M-01: Add `ManyToMany` struct in Rust
+- [ ] P4-M2M-02: Implement auto join table creation
+- [ ] P4-M2M-03: Implement `add_relation()` - insert into join table
+- [ ] P4-M2M-04: Implement `remove_relation()` - delete from join table
+- [ ] P4-M2M-05: Implement `fetch_related()` - query through join table
+- [ ] P4-M2M-06: Add `ManyToMany[T]` Python descriptor
+- [ ] P4-M2M-07: Support explicit join table with extra columns
+- [ ] P4-M2M-08: Add integration tests (10+ tests)
 
-### P4-SECURITY: Security Hardening (Audit Readiness)
+---
 
-**Goal**: Prepare for professional security audit (Pen-testing/Code Review)
+## P5 - Performance Roadmap (Long-term, Low Priority)
 
-- [~] P4-SECURITY-01: Dynamic SQL Protection
-  - [x] Implement strict Identifier Whitelisting/Quoting for all dynamic names
-    - Result: `validate_identifier()` in query.rs with 67+ SQL keyword blocklist
-    - Result: System catalog protection (pg_*, information_schema blocked)
-    - Result: 30+ unit tests for SQL identifier security
-  - [ ] Audit all `format!` usages in SQL generation
-- [ ] P4-SECURITY-02: DoS Prevention
-  Implement `statement_timeout` configuration
-  Implement Server-side Cursors (Streaming results) to prevent OOM on large result sets
-  Verify Connection Pool resilience against exhaustion
-- [ ] P4-SECURITY-03: Transport Security
-  Add explicit SSL/TLS configuration (`sslmode=require/verify-full`)
-  Verify certificate validation logic
-- [ ] P4-SECURITY-04: FFI Boundary Safety
-  Audit all Rust panic points (unwrap/expect)
-  Ensure all panics are caught and converted to Python Exceptions
-- [ ] P4-SECURITY-05: Sensitive Data Handling
-  Implement log redaction for sensitive query parameters
-  Review error messages for information leakage
-- [ ] P4-SECURITY-06: Supply Chain Security
-  Run `cargo audit` and fix vulnerabilities
-  Pin dependency versions
+> **Note**: 目前性能已達可用標準，這些是長期優化目標
+> (Current performance meets production standards; these are long-term optimization goals)
+
+### P5-HTTP: HTTP Client Optimization
+
+- [ ] P5-HTTP-01: Lazy Response Parsing (Target: 1.3x faster)
+  - **Current**: Parse all headers/body immediately
+  - **Goal**: Parse only what's accessed
+  - **Benchmark**: vs httpx, aiohttp
+
+### P5-CORE: Core Optimization
+
+- [ ] P5-CORE-01: Connection Pool Lock-Free Path
+  - **Current**: Mutex contention on pool access
+  - **Goal**: Lock-free fast path for available connections
+  - **Benchmark**: 10K+ concurrent requests
+
+### P5-MONGO: MongoDB Optimization
+
+- [ ] P5-MONGO-01: Zero-Copy Deserialization (Target: 4x faster)
+  - **Current**: Copy BSON bytes to Rust structs
+  - **Goal**: Read BSON in-place with borsh/zerocopy
+  - **Benchmark**: vs current implementation
+
+### P5-PG: PostgreSQL Optimization
+
+- [ ] P5-PG-01: Binary Protocol Optimization
+  - **Current**: Text protocol for most types
+  - **Goal**: Binary protocol for numeric/date types
+  - **Benchmark**: Large numeric datasets
+
+### P5-TOOL: Tooling Optimization
+
+- [ ] P5-TOOL-01: Type-Safe SQL Generation
+  - **Current**: String-based SQL construction
+  - **Goal**: Type-safe query builder with compile-time checks
+  - **Benefit**: Eliminate SQL syntax errors at compile time
+
+- [ ] P5-TOOL-02: Migration Engine (Target: 10x faster than Alembic)
+  - **Current**: Python-based schema diffing
+  - **Goal**: Rust-based parallel schema analysis
+  - **Benchmark**: Large schema (100+ tables)
 
 ---
 
@@ -399,7 +539,7 @@ Atomic, testable tasks organized by priority and component.
 - `python/data_bridge/postgres/connection.py` - Python wrappers
 - `tests/postgres/integration/test_cascade_delete.py` - 9 tests
 
-**Remaining Tasks** (moved to Python API section):
+**Remaining Tasks** (moved to P3-CASCADE Python API section):
 - BackReference[T] descriptor class
 - on_delete/on_update parameters for Column()
 
@@ -419,6 +559,10 @@ uv run pytest tests/postgres/integration/test_upsert.py -v
 
 # Rust tests
 cargo test -p data-bridge-postgres
+
+# Security-specific tests
+cargo test -p data-bridge-postgres validate_identifier
+uv run pytest tests/postgres/unit/test_sql_injection.py -v
 ```
 
 ### Performance Benchmarks
@@ -429,4 +573,17 @@ POSTGRES_URI="..." uv run python benchmarks/bench_postgres.py
 
 # Full comparison
 uv run python benchmarks/bench_comparison.py
+```
+
+### Security Audit
+
+```bash
+# Cargo audit for dependency vulnerabilities
+cargo audit
+
+# Check for unwrap/expect in production code
+rg "\.unwrap\(\)|\.expect\(" crates/ --type rust
+
+# Check for format! in SQL generation
+rg "format!\(|push_str\(" crates/data-bridge-postgres/src/ --type rust
 ```
