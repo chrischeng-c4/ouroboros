@@ -4,20 +4,22 @@
 
 use data_bridge_postgres::{QueryBuilder, Operator, ExtractedValue, RelationConfig, JoinType};
 use data_bridge_test::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
+use data_bridge_test::{expect, AssertionError};
 
 // Test that SQL injection payloads are blocked in table names
 #[test]
-fn test_table_name_sql_injection_blocked() {
+fn test_table_name_sql_injection_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
     for payload in payloads.sql_injection() {
         let result = QueryBuilder::new(payload);
-        assert!(result.is_err(), "Should block table name: {}", payload);
+        expect(result.is_err()).to_be_true()?;
     }
+    Ok(())
 }
 
 // Test that identifier injection payloads are blocked
 #[test]
-fn test_identifier_injection_blocked() {
+fn test_identifier_injection_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
     for payload in payloads.identifier_injection() {
         let result = QueryBuilder::new(payload);
@@ -39,84 +41,100 @@ fn test_identifier_injection_blocked() {
         let has_mongodb_ops = payload.starts_with('$');
 
         if is_postgres_system || has_sql_keywords || has_special_chars || has_mongodb_ops {
-            assert!(result.is_err(), "Should block identifier: {}", payload);
+            expect(result.is_err())
+                .to_be_true()?;
         }
     }
+    Ok(())
 }
 
 // Test that unicode tricks are blocked in table names
 #[test]
-fn test_unicode_tricks_blocked() {
+fn test_unicode_tricks_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
     for payload in payloads.unicode_tricks() {
         let result = QueryBuilder::new(payload);
         // Unicode might be valid if it's just letters - check that dangerous ones are blocked
         if payload.contains('\0') || payload.contains(';') {
-            assert!(result.is_err(), "Should block unicode trick: {:?}", payload);
+            expect(result.is_err())
+                .to_be_true()?;
         }
     }
+    Ok(())
 }
 
 // Test column name validation
 #[test]
-fn test_column_name_injection_blocked() {
+fn test_column_name_injection_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
 
     for payload in payloads.sql_injection().iter().take(20) {
         // Try to use injection payload as column name
         let qb = QueryBuilder::new("users").unwrap();
         let result = qb.select(vec![payload.clone()]);
-        assert!(result.is_err(), "Should block column: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+    Ok(())
 }
 
 // Test that reserved SQL keywords are blocked as identifiers
 #[test]
-fn test_sql_keywords_blocked() {
+fn test_sql_keywords_blocked() -> Result<(), AssertionError> {
     let keywords = vec!["SELECT", "DROP", "DELETE", "INSERT", "UPDATE", "TRUNCATE", "ALTER", "CREATE"];
     for keyword in keywords {
         let result = QueryBuilder::new(keyword);
-        assert!(result.is_err(), "Should block SQL keyword: {}", keyword);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+    Ok(())
 }
 
 // Test system schema access is blocked
 #[test]
-fn test_system_schema_blocked() {
+fn test_system_schema_blocked() -> Result<(), AssertionError> {
     let schemas = vec!["pg_catalog.pg_shadow", "information_schema.tables", "pg_temp.exploit"];
     for schema in schemas {
         let result = QueryBuilder::new(schema);
-        assert!(result.is_err(), "Should block system schema: {}", schema);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+    Ok(())
 }
 
 // Test special characters are blocked
 #[test]
-fn test_special_chars_blocked() {
+fn test_special_chars_blocked() -> Result<(), AssertionError> {
     let dangerous = vec!["users;--", "users'", "users\"", "users`", "users/*", "users\\"];
     for name in dangerous {
         let result = QueryBuilder::new(name);
-        assert!(result.is_err(), "Should block special chars: {}", name);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+    Ok(())
 }
 
 // Test PostgreSQL identifier length limit
 #[test]
-fn test_identifier_length_limit() {
+fn test_identifier_length_limit() -> Result<(), AssertionError> {
     // PostgreSQL max identifier length is 63 bytes
     let long_name = "a".repeat(100);
     let result = QueryBuilder::new(&long_name);
-    assert!(result.is_err(), "Should reject identifier > 63 chars");
+    expect(result.is_err())
+        .to_be_true()?;
 
     // 63 chars should be ok
     let valid_name = "a".repeat(63);
     let result = QueryBuilder::new(&valid_name);
-    assert!(result.is_ok(), "63 chars should be valid");
+    expect(result.is_ok())
+        .to_be_true()?;
+
+    Ok(())
 }
 
 // Test values are parameterized (not concatenated)
 #[test]
-fn test_value_parameterization() {
+fn test_value_parameterization() -> Result<(), AssertionError> {
     let malicious_value = "'; DROP TABLE users; --";
     let qb = QueryBuilder::new("users").unwrap()
         .where_clause("name", Operator::Eq, ExtractedValue::String(malicious_value.to_string())).unwrap();
@@ -124,16 +142,20 @@ fn test_value_parameterization() {
     let (sql, params) = qb.build_select();
 
     // SQL should use parameter placeholder, not concatenated value
-    assert!(sql.contains("$1"), "Should use parameter placeholder");
-    assert!(!sql.contains("DROP TABLE"), "Should not contain injection in SQL");
+    expect(sql.contains("$1"))
+        .to_be_true()?;
+    expect(!sql.contains("DROP TABLE"))
+        .to_be_true()?;
 
     // The malicious value should be in params (safely)
-    assert_eq!(params.len(), 1);
+    expect(params.len()).to_equal(&1)?;
+
+    Ok(())
 }
 
 // Fuzz test table name validation
 #[test]
-fn test_fuzz_table_names() {
+fn test_fuzz_table_names() -> Result<(), AssertionError> {
     let config = FuzzConfig::new()
         .with_iterations(1000)
         .with_seed(42)
@@ -156,8 +178,7 @@ fn test_fuzz_table_names() {
 
     // Be lenient for fuzzing - allow up to 60% crashes on extreme/invalid Unicode
     // The important thing is that realistic SQL injection attempts don't crash the validator
-    assert!(crash_rate < 0.6, "Fuzzer crash rate too high: {:.1}% ({} crashes out of {} iterations)",
-            crash_rate * 100.0, result.crashes.len(), max_iterations);
+    expect(crash_rate < 0.6).to_be_true()?;
 
     // Log some crash examples for debugging (non-failing assertion)
     if !result.crashes.is_empty() {
@@ -167,11 +188,13 @@ fn test_fuzz_table_names() {
             eprintln!("Example crash input: {:?}", crash.input);
         }
     }
+
+    Ok(())
 }
 
 // Test using SqlInjectionTester
 #[test]
-fn test_sql_injection_tester_identifiers() {
+fn test_sql_injection_tester_identifiers() -> Result<(), AssertionError> {
     let tester = SqlInjectionTester::new();
 
     let results = tester.test_identifiers(|input| {
@@ -184,12 +207,15 @@ fn test_sql_injection_tester_identifiers() {
     let (blocked, allowed, _errors) = SqlInjectionTester::summarize(&results);
 
     // Most injection attempts should be blocked
-    assert!(blocked > allowed, "More payloads should be blocked than allowed: blocked={}, allowed={}", blocked, allowed);
+    expect(blocked > allowed)
+        .to_be_true()?;
+
+    Ok(())
 }
 
 // Test valid table names still work
 #[test]
-fn test_valid_identifiers_allowed() {
+fn test_valid_identifiers_allowed() -> Result<(), AssertionError> {
     let valid_names = vec![
         "users",
         "user_accounts",
@@ -202,26 +228,32 @@ fn test_valid_identifiers_allowed() {
 
     for name in valid_names {
         let result = QueryBuilder::new(name);
-        assert!(result.is_ok(), "Valid name should work: {}", name);
+        expect(result.is_ok())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that column names in ORDER BY are validated
 #[test]
-fn test_order_by_injection_blocked() {
+fn test_order_by_injection_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
 
     for payload in payloads.sql_injection().iter().take(10) {
         // Try to use injection payload in ORDER BY
         let qb = QueryBuilder::new("users").unwrap();
         let result = qb.order_by(payload, data_bridge_postgres::OrderDirection::Asc);
-        assert!(result.is_err(), "Should block ORDER BY column: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that WHERE clause field names are validated
 #[test]
-fn test_where_clause_injection_blocked() {
+fn test_where_clause_injection_blocked() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
 
     for payload in payloads.identifier_injection().iter().take(10) {
@@ -234,13 +266,16 @@ fn test_where_clause_injection_blocked() {
             continue;
         }
 
-        assert!(result.is_err(), "Should block WHERE field: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test INSERT validation
 #[test]
-fn test_insert_column_injection_blocked() {
+fn test_insert_column_injection_blocked() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap();
     let malicious_columns = vec![
         ("'; DROP TABLE users; --".to_string(), ExtractedValue::String("value".to_string())),
@@ -250,13 +285,16 @@ fn test_insert_column_injection_blocked() {
 
     for (col, _) in &malicious_columns {
         let result = qb.build_insert(&[(col.clone(), ExtractedValue::String("test".to_string()))]);
-        assert!(result.is_err(), "Should block malicious INSERT column: {}", col);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test UPDATE validation
 #[test]
-fn test_update_column_injection_blocked() {
+fn test_update_column_injection_blocked() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap();
     let malicious_columns = vec![
         ("'; DROP TABLE users; --".to_string(), ExtractedValue::String("value".to_string())),
@@ -266,13 +304,16 @@ fn test_update_column_injection_blocked() {
 
     for (col, _) in &malicious_columns {
         let result = qb.build_update(&[(col.clone(), ExtractedValue::String("test".to_string()))]);
-        assert!(result.is_err(), "Should block malicious UPDATE column: {}", col);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that VALUES are parameterized in INSERT
 #[test]
-fn test_insert_value_parameterization() {
+fn test_insert_value_parameterization() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap();
     let malicious_value = "'; DROP TABLE users; --";
     let values = vec![
@@ -283,17 +324,22 @@ fn test_insert_value_parameterization() {
     let (sql, params) = qb.build_insert(&values).unwrap();
 
     // SQL should use parameter placeholders
-    assert!(sql.contains("$1"), "Should use parameter placeholder");
-    assert!(sql.contains("$2"), "Should use parameter placeholder");
-    assert!(!sql.contains("DROP TABLE"), "Should not contain injection in SQL");
+    expect(sql.contains("$1"))
+        .to_be_true()?;
+    expect(sql.contains("$2"))
+        .to_be_true()?;
+    expect(!sql.contains("DROP TABLE"))
+        .to_be_true()?;
 
     // Values should be in params
-    assert_eq!(params.len(), 2);
+    expect(params.len()).to_equal(&2)?;
+
+    Ok(())
 }
 
 // Test that VALUES are parameterized in UPDATE
 #[test]
-fn test_update_value_parameterization() {
+fn test_update_value_parameterization() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap()
         .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
 
@@ -305,46 +351,63 @@ fn test_update_value_parameterization() {
     let (sql, params) = qb.build_update(&values).unwrap();
 
     // SQL should use parameter placeholders
-    assert!(sql.contains("$1"), "Should use parameter placeholder for SET value");
-    assert!(sql.contains("$2"), "Should use parameter placeholder for WHERE value");
-    assert!(!sql.contains("DROP TABLE"), "Should not contain injection in SQL");
+    expect(sql.contains("$1"))
+        .to_be_true()?;
+    expect(sql.contains("$2"))
+        .to_be_true()?;
+    expect(!sql.contains("DROP TABLE"))
+        .to_be_true()?;
 
     // Values should be in params
-    assert_eq!(params.len(), 2);
+    expect(params.len()).to_equal(&2)?;
+
+    Ok(())
 }
 
 // Test case sensitivity in SQL keyword detection
 #[test]
-fn test_sql_keyword_case_insensitive() {
+fn test_sql_keyword_case_insensitive() -> Result<(), AssertionError> {
     let keywords = vec!["select", "SELECT", "Select", "SeLeCt"];
     for keyword in keywords {
         let result = QueryBuilder::new(keyword);
-        assert!(result.is_err(), "Should block SQL keyword regardless of case: {}", keyword);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that schema-qualified names validate both parts
 #[test]
-fn test_schema_qualified_validation() {
+fn test_schema_qualified_validation() -> Result<(), AssertionError> {
     // Valid schema-qualified names should work
-    assert!(QueryBuilder::new("public.users").is_ok());
-    assert!(QueryBuilder::new("myapp.products").is_ok());
+    expect(QueryBuilder::new("public.users").is_ok())
+        .to_be_true()?;
+    expect(QueryBuilder::new("myapp.products").is_ok())
+        .to_be_true()?;
 
     // Invalid schema part should fail
-    assert!(QueryBuilder::new("pg_catalog.users").is_err(), "Should block system schema in qualified name");
-    assert!(QueryBuilder::new("select.users").is_err(), "Should block SQL keyword in schema");
+    expect(QueryBuilder::new("pg_catalog.users").is_err())
+        .to_be_true()?;
+    expect(QueryBuilder::new("select.users").is_err())
+        .to_be_true()?;
 
     // Invalid table part should fail
-    assert!(QueryBuilder::new("public.pg_tables").is_err(), "Should block system table in qualified name");
-    assert!(QueryBuilder::new("public.drop").is_err(), "Should block SQL keyword in table");
+    expect(QueryBuilder::new("public.pg_tables").is_err())
+        .to_be_true()?;
+    expect(QueryBuilder::new("public.drop").is_err())
+        .to_be_true()?;
 
     // Multiple dots should fail
-    assert!(QueryBuilder::new("schema.table.column").is_err(), "Should reject more than one dot");
+    expect(QueryBuilder::new("schema.table.column").is_err())
+        .to_be_true()?;
+
+    Ok(())
 }
 
 // Test comprehensive payload database
 #[test]
-fn test_comprehensive_payload_protection() {
+fn test_comprehensive_payload_protection() -> Result<(), AssertionError> {
     let tester = SqlInjectionTester::new();
 
     // Test table names against all payload types
@@ -359,12 +422,15 @@ fn test_comprehensive_payload_protection() {
 
     // We should block the vast majority of malicious payloads
     let block_rate = blocked as f64 / (blocked + allowed) as f64;
-    assert!(block_rate > 0.95, "Should block > 95% of malicious payloads, but only blocked {:.1}%", block_rate * 100.0);
+    expect(block_rate > 0.95)
+        .to_be_true()?;
+
+    Ok(())
 }
 
 // Test NULL byte injection
 #[test]
-fn test_null_byte_blocked() {
+fn test_null_byte_blocked() -> Result<(), AssertionError> {
     let null_byte_payloads = vec![
         "users\0",
         "users\0DROP",
@@ -373,13 +439,16 @@ fn test_null_byte_blocked() {
 
     for payload in null_byte_payloads {
         let result = QueryBuilder::new(payload);
-        assert!(result.is_err(), "Should block NULL byte injection: {:?}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test comment injection
 #[test]
-fn test_comment_injection_blocked() {
+fn test_comment_injection_blocked() -> Result<(), AssertionError> {
     let comment_payloads = vec![
         "users--",
         "users#",
@@ -390,13 +459,16 @@ fn test_comment_injection_blocked() {
 
     for payload in comment_payloads {
         let result = QueryBuilder::new(payload);
-        assert!(result.is_err(), "Should block comment injection: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that backtick/quote escaping is blocked
 #[test]
-fn test_quote_escaping_blocked() {
+fn test_quote_escaping_blocked() -> Result<(), AssertionError> {
     let quote_payloads = vec![
         "`users`",
         "\"users\"",
@@ -406,27 +478,34 @@ fn test_quote_escaping_blocked() {
 
     for payload in quote_payloads {
         let result = QueryBuilder::new(payload);
-        assert!(result.is_err(), "Should block quote escaping: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test LIKE operator doesn't allow SQL injection
 #[test]
-fn test_like_operator_safe() {
+fn test_like_operator_safe() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap()
         .where_clause("name", Operator::Like, ExtractedValue::String("'; DROP TABLE users; --".to_string())).unwrap();
 
     let (sql, params) = qb.build_select();
 
     // LIKE pattern should be parameterized
-    assert!(sql.contains("$1"), "Should use parameter placeholder");
-    assert!(!sql.contains("DROP TABLE"), "Should not contain injection in SQL");
-    assert_eq!(params.len(), 1);
+    expect(sql.contains("$1"))
+        .to_be_true()?;
+    expect(!sql.contains("DROP TABLE"))
+        .to_be_true()?;
+    expect(params.len()).to_equal(&1)?;
+
+    Ok(())
 }
 
 // Test IN operator doesn't allow SQL injection
 #[test]
-fn test_in_operator_safe() {
+fn test_in_operator_safe() -> Result<(), AssertionError> {
     let qb = QueryBuilder::new("users").unwrap()
         .where_clause("status", Operator::In, ExtractedValue::Array(vec![
             ExtractedValue::String("'; DROP TABLE users; --".to_string()),
@@ -436,23 +515,31 @@ fn test_in_operator_safe() {
     let (sql, params) = qb.build_select();
 
     // IN values should be parameterized
-    assert!(sql.contains("$1"), "Should use parameter placeholder");
-    assert!(!sql.contains("DROP TABLE"), "Should not contain injection in SQL");
-    assert_eq!(params.len(), 1);
+    expect(sql.contains("$1"))
+        .to_be_true()?;
+    expect(!sql.contains("DROP TABLE"))
+        .to_be_true()?;
+    expect(params.len()).to_equal(&1)?;
+
+    Ok(())
 }
 
 // Test that empty identifiers are rejected
 #[test]
-fn test_empty_identifier_rejected() {
-    assert!(QueryBuilder::new("").is_err(), "Should reject empty table name");
+fn test_empty_identifier_rejected() -> Result<(), AssertionError> {
+    expect(QueryBuilder::new("").is_err())
+        .to_be_true()?;
 
     let qb = QueryBuilder::new("users").unwrap();
-    assert!(qb.select(vec!["".to_string()]).is_err(), "Should reject empty column name");
+    expect(qb.select(vec!["".to_string()]).is_err())
+        .to_be_true()?;
+
+    Ok(())
 }
 
 // Test path traversal attempts
 #[test]
-fn test_path_traversal_blocked() {
+fn test_path_traversal_blocked() -> Result<(), AssertionError> {
     let traversal_payloads = vec![
         "../users",
         "../../etc/passwd",
@@ -462,13 +549,16 @@ fn test_path_traversal_blocked() {
 
     for payload in traversal_payloads {
         let result = QueryBuilder::new(payload);
-        assert!(result.is_err(), "Should block path traversal: {}", payload);
+        expect(result.is_err())
+            .to_be_true()?;
     }
+
+    Ok(())
 }
 
 // Test that RelationConfig fields are validated (P0-SEC-03)
 #[test]
-fn test_relation_config_field_validation() {
+fn test_relation_config_field_validation() -> Result<(), AssertionError> {
     let payloads = PayloadDatabase::new();
 
     // Test malicious relation name
@@ -483,8 +573,8 @@ fn test_relation_config_field_validation() {
         };
         // The validation will be triggered during find_with_relations call
         // For now, we just test direct validation
-        assert!(QueryBuilder::validate_identifier(&malicious_name.name).is_err(),
-            "Should block malicious relation name: {}", payload);
+        expect(QueryBuilder::validate_identifier(&malicious_name.name).is_err())
+            .to_be_true()?;
     }
 
     // Test malicious table name
@@ -497,8 +587,8 @@ fn test_relation_config_field_validation() {
             join_type: JoinType::Left,
             select_columns: None,
         };
-        assert!(QueryBuilder::validate_identifier(&malicious_table.table).is_err(),
-            "Should block malicious table name: {}", payload);
+        expect(QueryBuilder::validate_identifier(&malicious_table.table).is_err())
+            .to_be_true()?;
     }
 
     // Test malicious foreign_key
@@ -510,8 +600,8 @@ fn test_relation_config_field_validation() {
         join_type: JoinType::Left,
         select_columns: None,
     };
-    assert!(QueryBuilder::validate_identifier(&malicious_fk.foreign_key).is_err(),
-        "Should block malicious foreign_key");
+    expect(QueryBuilder::validate_identifier(&malicious_fk.foreign_key).is_err())
+        .to_be_true()?;
 
     // Test malicious reference_column
     let malicious_ref = RelationConfig {
@@ -522,8 +612,8 @@ fn test_relation_config_field_validation() {
         join_type: JoinType::Left,
         select_columns: None,
     };
-    assert!(QueryBuilder::validate_identifier(&malicious_ref.reference_column).is_err(),
-        "Should block malicious reference_column");
+    expect(QueryBuilder::validate_identifier(&malicious_ref.reference_column).is_err())
+        .to_be_true()?;
 
     // Test malicious select_columns
     let malicious_cols = RelationConfig {
@@ -537,8 +627,8 @@ fn test_relation_config_field_validation() {
     if let Some(cols) = &malicious_cols.select_columns {
         for col in cols {
             if col.contains("DROP") {
-                assert!(QueryBuilder::validate_identifier(col).is_err(),
-                    "Should block malicious select column: {}", col);
+                expect(QueryBuilder::validate_identifier(col).is_err())
+                    .to_be_true()?;
             }
         }
     }
@@ -552,18 +642,20 @@ fn test_relation_config_field_validation() {
         join_type: JoinType::Left,
         select_columns: Some(vec!["id".to_string(), "name".to_string()]),
     };
-    assert!(QueryBuilder::validate_identifier(&valid_config.name).is_ok(),
-        "Valid relation name should pass");
-    assert!(QueryBuilder::validate_identifier(&valid_config.table).is_ok(),
-        "Valid table should pass");
-    assert!(QueryBuilder::validate_identifier(&valid_config.foreign_key).is_ok(),
-        "Valid foreign_key should pass");
-    assert!(QueryBuilder::validate_identifier(&valid_config.reference_column).is_ok(),
-        "Valid reference_column should pass");
+    expect(QueryBuilder::validate_identifier(&valid_config.name).is_ok())
+        .to_be_true()?;
+    expect(QueryBuilder::validate_identifier(&valid_config.table).is_ok())
+        .to_be_true()?;
+    expect(QueryBuilder::validate_identifier(&valid_config.foreign_key).is_ok())
+        .to_be_true()?;
+    expect(QueryBuilder::validate_identifier(&valid_config.reference_column).is_ok())
+        .to_be_true()?;
     if let Some(cols) = &valid_config.select_columns {
         for col in cols {
-            assert!(QueryBuilder::validate_identifier(col).is_ok(),
-                "Valid column should pass: {}", col);
+            expect(QueryBuilder::validate_identifier(col).is_ok())
+                .to_be_true()?;
         }
     }
+
+    Ok(())
 }

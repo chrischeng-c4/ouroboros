@@ -29,7 +29,7 @@ pub mod runner;
 pub mod security;
 
 // Re-export main types
-pub use assertions::{Expectation, AssertionError, AssertionResult};
+pub use assertions::{expect, Expectation, AssertionError, AssertionResult};
 pub use benchmark::{
     BenchmarkConfig, BenchmarkResult, BenchmarkStats, Benchmarker, compare_results,
     print_comparison_table, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,

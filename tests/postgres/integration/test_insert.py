@@ -10,6 +10,7 @@ Tests cover:
 
 import pytest
 from data_bridge.postgres import init, close, execute, insert_one, insert_many
+from data_bridge.test import expect
 
 
 @pytest.mark.integration
@@ -40,17 +41,17 @@ class TestInsertOne:
         )
 
         # Verify insert happened
-        assert result["name"] == "Alice"
-        assert result["age"] == 30
-        assert result["id"] is not None
-        assert isinstance(result["id"], int)
+        expect(result["name"]).to_equal("Alice")
+        expect(result["age"]).to_equal(30)
+        expect(result["id"]).not_to_be_none()
+        expect(isinstance(result["id"], int)).to_be_true()
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_insert_users")
-        assert len(rows) == 1
-        assert rows[0]["name"] == "Alice"
-        assert rows[0]["age"] == 30
-        assert rows[0]["id"] == result["id"]
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["name"]).to_equal("Alice")
+        expect(rows[0]["age"]).to_equal(30)
+        expect(rows[0]["id"]).to_equal(result["id"])
 
     async def test_insert_one_with_unique_constraint(self):
         """
@@ -73,7 +74,7 @@ class TestInsertOne:
             "test_insert_users",
             {"email": "alice@example.com", "name": "Alice"}
         )
-        assert result1["email"] == "alice@example.com"
+        expect(result1["email"]).to_equal("alice@example.com")
 
         # Try to insert duplicate email (should fail)
         with pytest.raises(Exception) as exc_info:
@@ -84,7 +85,7 @@ class TestInsertOne:
 
         # Verify error indicates unique constraint violation
         error_msg = str(exc_info.value).lower()
-        assert "unique" in error_msg or "duplicate" in error_msg or "constraint" in error_msg
+        expect("unique" in error_msg or "duplicate" in error_msg or "constraint" in error_msg).to_be_true()
 
     async def test_insert_one_nullable_columns(self):
         """
@@ -109,17 +110,17 @@ class TestInsertOne:
         )
 
         # Verify insert happened
-        assert result["name"] == "Bob"
-        assert result["email"] is None
-        assert result["age"] is None
-        assert result["id"] is not None
+        expect(result["name"]).to_equal("Bob")
+        expect(result["email"]).to_be_none()
+        expect(result["age"]).to_be_none()
+        expect(result["id"]).not_to_be_none()
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_insert_nullable")
-        assert len(rows) == 1
-        assert rows[0]["name"] == "Bob"
-        assert rows[0]["email"] is None
-        assert rows[0]["age"] is None
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["name"]).to_equal("Bob")
+        expect(rows[0]["email"]).to_be_none()
+        expect(rows[0]["age"]).to_be_none()
 
 
 @pytest.mark.integration
@@ -153,20 +154,20 @@ class TestInsertMany:
         results = await insert_many("test_insert_users", users)
 
         # Verify all inserts happened
-        assert len(results) == 3
-        assert all(r["id"] is not None for r in results)
-        assert {r["name"] for r in results} == {"Alice", "Bob", "Charlie"}
+        expect(len(results)).to_equal(3)
+        expect(all(r["id"] is not None for r in results)).to_be_true()
+        expect({r["name"] for r in results}).to_equal({"Alice", "Bob", "Charlie"})
 
         # Verify all IDs are unique
         ids = [r["id"] for r in results]
-        assert len(set(ids)) == 3
+        expect(len(set(ids))).to_equal(3)
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_insert_users ORDER BY name")
-        assert len(rows) == 3
-        assert rows[0]["name"] == "Alice"
-        assert rows[1]["name"] == "Bob"
-        assert rows[2]["name"] == "Charlie"
+        expect(len(rows)).to_equal(3)
+        expect(rows[0]["name"]).to_equal("Alice")
+        expect(rows[1]["name"]).to_equal("Bob")
+        expect(rows[2]["name"]).to_equal("Charlie")
 
     async def test_insert_many_large_batch(self):
         """
@@ -193,16 +194,16 @@ class TestInsertMany:
         results = await insert_many("test_insert_users", large_batch)
 
         # Verify all inserts happened
-        assert len(results) == 100
-        assert all(r["id"] is not None for r in results)
+        expect(len(results)).to_equal(100)
+        expect(all(r["id"] is not None for r in results)).to_be_true()
 
         # Verify all IDs are unique
         ids = [r["id"] for r in results]
-        assert len(set(ids)) == 100
+        expect(len(set(ids))).to_equal(100)
 
         # Verify data in database
         rows = await execute("SELECT COUNT(*) as count FROM test_insert_users")
-        assert rows[0]["count"] == 100
+        expect(rows[0]["count"]).to_equal(100)
 
     async def test_insert_many_empty_list(self):
         """
@@ -223,11 +224,11 @@ class TestInsertMany:
         results = await insert_many("test_insert_users", [])
 
         # Should return empty list
-        assert results == []
+        expect(results).to_equal([])
 
         # Verify no rows in database
         rows = await execute("SELECT * FROM test_insert_users")
-        assert len(rows) == 0
+        expect(len(rows)).to_equal(0)
 
     async def test_insert_many_with_unique_constraint_violation(self):
         """
@@ -258,7 +259,7 @@ class TestInsertMany:
 
         # Verify error indicates unique constraint violation
         error_msg = str(exc_info.value).lower()
-        assert "unique" in error_msg or "duplicate" in error_msg or "constraint" in error_msg
+        expect("unique" in error_msg or "duplicate" in error_msg or "constraint" in error_msg).to_be_true()
 
 
 @pytest.mark.integration
@@ -281,7 +282,7 @@ class TestInsertErrors:
 
         # Verify error indicates table doesn't exist
         error_msg = str(exc_info.value).lower()
-        assert "table" in error_msg or "relation" in error_msg or "not" in error_msg
+        expect("table" in error_msg or "relation" in error_msg or "not" in error_msg).to_be_true()
 
     async def test_insert_missing_required_column(self):
         """
@@ -308,4 +309,4 @@ class TestInsertErrors:
 
         # Verify error indicates NULL constraint violation
         error_msg = str(exc_info.value).lower()
-        assert "null" in error_msg or "not" in error_msg or "constraint" in error_msg
+        expect("null" in error_msg or "not" in error_msg or "constraint" in error_msg).to_be_true()

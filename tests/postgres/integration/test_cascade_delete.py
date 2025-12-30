@@ -6,6 +6,7 @@ and cascade rules via the PostgreSQL database.
 
 import pytest
 from data_bridge.postgres import execute
+from data_bridge.test import expect
 
 
 @pytest.fixture
@@ -70,20 +71,20 @@ async def test_delete_with_cascade_basic(setup_cascade_tables):
 
     # Verify data exists
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 1
+    expect(len(found_user)).to_equal(1)
 
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 1
+    expect(len(found_post)).to_equal(1)
 
     # Delete user with cascade (database handles cascade)
     await execute("DELETE FROM cascade_users WHERE id = $1", [user_id])
 
     # Verify both are deleted (CASCADE handled by database)
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 0
+    expect(len(found_user)).to_equal(0)
 
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 0
+    expect(len(found_post)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -117,11 +118,11 @@ async def test_delete_with_cascade_restrict_violation(setup_cascade_tables):
     with pytest.raises(Exception) as exc_info:
         await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])
 
-    assert "violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()
+    expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 
     # Verify post still exists
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 1
+    expect(len(found_post)).to_equal(1)
 
 
 @pytest.mark.integration
@@ -162,9 +163,9 @@ async def test_delete_with_cascade_set_null(setup_cascade_tables):
 
     # Verify comment still exists but user_id is NULL
     found_comment = await execute("SELECT * FROM cascade_comments WHERE id = $1", [comment_id])
-    assert len(found_comment) == 1
-    assert found_comment[0]["user_id"] is None
-    assert found_comment[0]["text"] == "Nice post!"
+    expect(len(found_comment)).to_equal(1)
+    expect(found_comment[0]["user_id"]).to_be_none()
+    expect(found_comment[0]["text"]).to_equal("Nice post!")
 
 
 @pytest.mark.integration
@@ -194,10 +195,10 @@ async def test_delete_checked_allows_cascade(setup_cascade_tables):
 
     # Both should be deleted (CASCADE handled by database)
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 0
+    expect(len(found_user)).to_equal(0)
 
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 0
+    expect(len(found_post)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -230,11 +231,11 @@ async def test_delete_checked_blocks_restrict(setup_cascade_tables):
     with pytest.raises(Exception) as exc_info:
         await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])
 
-    assert "violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()
+    expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 
     # Verify post still exists
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 1
+    expect(len(found_post)).to_equal(1)
 
 
 @pytest.mark.integration
@@ -255,7 +256,7 @@ async def test_delete_with_cascade_no_children(setup_cascade_tables):
 
     # Verify user is deleted
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 0
+    expect(len(found_user)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -287,11 +288,11 @@ async def test_delete_with_cascade_multiple_children(setup_cascade_tables):
 
     # Verify all are deleted
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 0
+    expect(len(found_user)).to_equal(0)
 
     for post_id in post_ids:
         found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-        assert len(found_post) == 0
+        expect(len(found_post)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -329,10 +330,10 @@ async def test_delete_with_cascade_transaction_rollback(setup_cascade_tables):
 
     # Verify nothing was deleted (RESTRICT prevented deletion)
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
-    assert len(found_user) == 1
+    expect(len(found_user)).to_equal(1)
 
     found_post = await execute("SELECT * FROM cascade_posts WHERE id = $1", [post_id])
-    assert len(found_post) == 1
+    expect(len(found_post)).to_equal(1)
 
     found_comment = await execute("SELECT * FROM cascade_comments WHERE id = $1", [comment_id])
-    assert len(found_comment) == 1
+    expect(len(found_comment)).to_equal(1)

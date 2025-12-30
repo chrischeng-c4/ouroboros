@@ -5,6 +5,7 @@ Tests connection initialization and management without requiring a real database
 """
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
+from data_bridge.test import expect
 
 
 class TestConnectionInit:
@@ -19,7 +20,7 @@ class TestConnectionInit:
 
         mock_connection_engine.init.assert_called_once()
         args = mock_connection_engine.init.call_args[0]
-        assert "postgres://user:pass@localhost:5432/mydb" in args
+        expect("postgres://user:pass@localhost:5432/mydb" in args).to_be_true()
 
     @pytest.mark.asyncio
     async def test_init_with_parameters(self, mock_connection_engine):
@@ -38,12 +39,12 @@ class TestConnectionInit:
         mock_connection_engine.init.assert_called_once()
         args = mock_connection_engine.init.call_args[0]
         # Should build connection string
-        assert "postgres://" in args[0]
-        assert "user:pass" in args[0]
-        assert "localhost:5432" in args[0]
-        assert "testdb" in args[0]
+        expect("postgres://" in args[0]).to_be_true()
+        expect("user:pass" in args[0]).to_be_true()
+        expect("localhost:5432" in args[0]).to_be_true()
+        expect("testdb" in args[0]).to_be_true()
         # Should pass connection pool params
-        assert 20 in args  # max_connections
+        expect(20 in args).to_be_true()  # max_connections
 
     @pytest.mark.asyncio
     async def test_init_defaults(self, mock_connection_engine):
@@ -55,8 +56,8 @@ class TestConnectionInit:
         mock_connection_engine.init.assert_called_once()
         args = mock_connection_engine.init.call_args[0]
         # Should use defaults
-        assert "localhost:5432" in args[0]
-        assert "postgres" in args[0]
+        expect("localhost:5432" in args[0]).to_be_true()
+        expect("postgres" in args[0]).to_be_true()
 
     @pytest.mark.asyncio
     async def test_init_without_auth(self, mock_connection_engine):
@@ -67,7 +68,7 @@ class TestConnectionInit:
 
         args = mock_connection_engine.init.call_args[0]
         # Should not include auth in connection string
-        assert "postgres://localhost:5432/mydb" in args[0]
+        expect("postgres://localhost:5432/mydb" in args[0]).to_be_true()
 
     @pytest.mark.asyncio
     async def test_init_raises_without_engine(self):
@@ -110,7 +111,7 @@ class TestConnectionStatus:
 
         from data_bridge.postgres import is_connected
 
-        assert is_connected() is True
+        expect(is_connected()).to_be_true()
 
     def test_is_connected_false(self, mock_connection_engine):
         """Test is_connected returns False when not connected."""
@@ -118,14 +119,14 @@ class TestConnectionStatus:
 
         from data_bridge.postgres import is_connected
 
-        assert is_connected() is False
+        expect(is_connected()).to_be_false()
 
     def test_is_connected_no_engine(self):
         """Test is_connected returns False when engine not available."""
         with patch('data_bridge.postgres.connection._engine', None):
             from data_bridge.postgres import is_connected
 
-            assert is_connected() is False
+            expect(is_connected()).to_be_false()
 
 
 class TestConnectionPooling:
@@ -139,7 +140,7 @@ class TestConnectionPooling:
         await init("postgres://localhost/test", min_connections=2)
 
         args = mock_connection_engine.init.call_args[0]
-        assert 2 in args  # min_connections
+        expect(2 in args).to_be_true()  # min_connections
 
     @pytest.mark.asyncio
     async def test_max_connections(self, mock_connection_engine):
@@ -149,7 +150,7 @@ class TestConnectionPooling:
         await init("postgres://localhost/test", max_connections=20)
 
         args = mock_connection_engine.init.call_args[0]
-        assert 20 in args  # max_connections
+        expect(20 in args).to_be_true()  # max_connections
 
     @pytest.mark.asyncio
     async def test_pool_defaults(self, mock_connection_engine):
@@ -160,7 +161,7 @@ class TestConnectionPooling:
 
         args = mock_connection_engine.init.call_args[0]
         # Check defaults: min=1, max=10
-        assert 1 in args or 10 in args
+        expect(1 in args or 10 in args).to_be_true()
 
 
 class TestConnectionStringBuilding:
@@ -182,11 +183,11 @@ class TestConnectionStringBuilding:
         args = mock_connection_engine.init.call_args[0]
         conn_str = args[0]
 
-        assert "db.example.com" in conn_str
-        assert "5433" in conn_str
-        assert "production" in conn_str
-        assert "admin" in conn_str
-        assert "secret123" in conn_str
+        expect("db.example.com" in conn_str).to_be_true()
+        expect("5433" in conn_str).to_be_true()
+        expect("production" in conn_str).to_be_true()
+        expect("admin" in conn_str).to_be_true()
+        expect("secret123" in conn_str).to_be_true()
 
     @pytest.mark.asyncio
     async def test_connection_string_overrides_params(self, mock_connection_engine):
@@ -201,4 +202,4 @@ class TestConnectionStringBuilding:
         )
 
         args = mock_connection_engine.init.call_args[0]
-        assert args[0] == "postgres://user@host/db"
+        expect(args[0]).to_equal("postgres://user@host/db")

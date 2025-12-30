@@ -16,6 +16,7 @@ from data_bridge.postgres import (
     fetch_one_eager,
     fetch_many_with_relations,
 )
+from data_bridge.test import expect
 
 
 @pytest.mark.integration
@@ -49,9 +50,9 @@ class TestFetchOneEager:
             ("author", "author_id", "test_eager_authors")
         ])
 
-        assert result is not None
-        assert result["title"] == "My Post"
-        assert result["author_id"] == 1
+        expect(result).not_to_be_none()
+        expect(result["title"]).to_equal("My Post")
+        expect(result["author_id"]).to_equal(1)
         # Note: The exact structure of nested relations depends on Rust implementation
         # This test verifies the basic functionality works
 
@@ -65,7 +66,7 @@ class TestFetchOneEager:
         """)
 
         result = await fetch_one_eager("test_eager_items", 999, [])
-        assert result is None
+        expect(result).to_be_none()
 
     async def test_fetch_one_eager_null_foreign_key(self):
         """Test eager loading with NULL foreign key (LEFT JOIN)."""
@@ -90,9 +91,9 @@ class TestFetchOneEager:
             ("category", "category_id", "test_eager_categories")
         ])
 
-        assert result is not None
-        assert result["name"] == "Widget"
-        assert result["category_id"] is None
+        expect(result).not_to_be_none()
+        expect(result["name"]).to_equal("Widget")
+        expect(result["category_id"]).to_be_none()
 
     async def test_fetch_one_eager_multiple_relations(self):
         """Test eager loading with multiple relations."""
@@ -131,10 +132,10 @@ class TestFetchOneEager:
             ("profile", "profile_id", "test_eager_profiles")
         ])
 
-        assert result is not None
-        assert result["status"] == "active"
-        assert result["user_id"] == 1
-        assert result["profile_id"] == 1
+        expect(result).not_to_be_none()
+        expect(result["status"]).to_equal("active")
+        expect(result["user_id"]).to_equal(1)
+        expect(result["profile_id"]).to_equal(1)
 
 
 @pytest.mark.integration
@@ -171,9 +172,9 @@ class TestFetchOneWithRelations:
             }
         ])
 
-        assert result is not None
-        assert result["name"] == "Bob"
-        assert result["dept_id"] is None
+        expect(result).not_to_be_none()
+        expect(result["name"]).to_equal("Bob")
+        expect(result["dept_id"]).to_be_none()
 
     async def test_fetch_with_inner_join(self):
         """Test INNER JOIN - should exclude rows without matching relations."""
@@ -209,9 +210,9 @@ class TestFetchOneWithRelations:
             }
         ])
 
-        assert result is not None
-        assert result["name"] == "Alice"
-        assert result["company_id"] == 1
+        expect(result).not_to_be_none()
+        expect(result["name"]).to_equal("Alice")
+        expect(result["company_id"]).to_equal(1)
 
         # INNER JOIN should exclude manager without company
         result_null = await fetch_one_with_relations("test_rel_managers", 2, [
@@ -259,9 +260,9 @@ class TestFetchOneWithRelations:
             }
         ])
 
-        assert result is not None
-        assert result["name"] == "New York"
-        assert result["country_code"] == "US"
+        expect(result).not_to_be_none()
+        expect(result["name"]).to_equal("New York")
+        expect(result["country_code"]).to_equal("US")
 
 
 @pytest.mark.integration
@@ -304,12 +305,12 @@ class TestFetchManyWithRelations:
             limit=10
         )
 
-        assert len(results) == 3
+        expect(len(results)).to_equal(3)
         # Verify all rows have brand_id populated
-        assert all(r["brand_id"] is not None for r in results)
+        expect(all(r["brand_id"] is not None for r in results)).to_be_true()
         # Verify different brands exist
         brand_ids = {r["brand_id"] for r in results}
-        assert len(brand_ids) == 2  # Toyota and Honda
+        expect(len(brand_ids)).to_equal(2)  # Toyota and Honda
 
     async def test_fetch_many_with_filter(self):
         """Test fetching with filter and relations."""
@@ -346,9 +347,9 @@ class TestFetchManyWithRelations:
             limit=10
         )
 
-        assert len(results) == 1
-        assert results[0]["total"] == 100
-        assert results[0]["store_id"] == 1
+        expect(len(results)).to_equal(1)
+        expect(results[0]["total"]).to_equal(100)
+        expect(results[0]["store_id"]).to_equal(1)
 
     @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_many_with_limit_offset(self):
@@ -389,7 +390,7 @@ class TestFetchManyWithRelations:
             offset=0
         )
 
-        assert len(page1) == 5
+        expect(len(page1)).to_equal(5)
 
         # Fetch next 5 items
         page2 = await fetch_many_with_relations(
@@ -405,12 +406,12 @@ class TestFetchManyWithRelations:
             offset=5
         )
 
-        assert len(page2) == 5
+        expect(len(page2)).to_equal(5)
 
         # Verify no overlap
         page1_ids = {item["id"] for item in page1}
         page2_ids = {item["id"] for item in page2}
-        assert page1_ids.isdisjoint(page2_ids)
+        expect(page1_ids.isdisjoint(page2_ids)).to_be_true()
 
     async def test_fetch_many_with_order_by(self):
         """Test ordering results."""
@@ -448,10 +449,10 @@ class TestFetchManyWithRelations:
             limit=10
         )
 
-        assert len(results) == 3
-        assert results[0]["year"] == 2019
-        assert results[1]["year"] == 2020
-        assert results[2]["year"] == 2022
+        expect(len(results)).to_equal(3)
+        expect(results[0]["year"]).to_equal(2019)
+        expect(results[1]["year"]).to_equal(2020)
+        expect(results[2]["year"]).to_equal(2022)
 
         # Order by year descending
         results_desc = await fetch_many_with_relations(
@@ -467,10 +468,10 @@ class TestFetchManyWithRelations:
             limit=10
         )
 
-        assert len(results_desc) == 3
-        assert results_desc[0]["year"] == 2022
-        assert results_desc[1]["year"] == 2020
-        assert results_desc[2]["year"] == 2019
+        expect(len(results_desc)).to_equal(3)
+        expect(results_desc[0]["year"]).to_equal(2022)
+        expect(results_desc[1]["year"]).to_equal(2020)
+        expect(results_desc[2]["year"]).to_equal(2019)
 
     async def test_fetch_many_no_relations(self):
         """Test fetch_many with empty relations list (just fetch without joins)."""
@@ -491,9 +492,9 @@ class TestFetchManyWithRelations:
             limit=10
         )
 
-        assert len(results) == 3
+        expect(len(results)).to_equal(3)
         values = {r["value"] for r in results}
-        assert values == {"A", "B", "C"}
+        expect(values).to_equal({"A", "B", "C"})
 
     async def test_fetch_many_with_null_foreign_keys(self):
         """Test that LEFT JOIN includes rows with NULL foreign keys."""
@@ -530,11 +531,11 @@ class TestFetchManyWithRelations:
         )
 
         # LEFT JOIN should include all players (including those without teams)
-        assert len(results) == 3
+        expect(len(results)).to_equal(3)
 
         # Find player without team
         player_without_team = next(p for p in results if p["name"] == "Player 2")
-        assert player_without_team["team_id"] is None
+        expect(player_without_team["team_id"]).to_be_none()
 
 
 @pytest.mark.integration
@@ -590,10 +591,10 @@ class TestEagerLoadingComplexScenarios:
             }
         ])
 
-        assert result is not None
-        assert result["title"] == "My Article"
-        assert result["author_id"] == 1
-        assert result["category_id"] == 1
+        expect(result).not_to_be_none()
+        expect(result["title"]).to_equal("My Article")
+        expect(result["author_id"]).to_equal(1)
+        expect(result["category_id"]).to_equal(1)
 
     async def test_eager_loading_empty_table(self):
         """Test eager loading on empty table."""
@@ -622,7 +623,7 @@ class TestEagerLoadingComplexScenarios:
             limit=10
         )
 
-        assert results == []
+        expect(results).to_equal([])
 
     async def test_filter_with_multiple_conditions(self):
         """Test filtering with multiple conditions."""
@@ -660,5 +661,5 @@ class TestEagerLoadingComplexScenarios:
             limit=10
         )
 
-        assert len(results) == 2
-        assert all(r["price"] == 100 for r in results)
+        expect(len(results)).to_equal(2)
+        expect(all(r["price"] == 100 for r in results)).to_be_true()

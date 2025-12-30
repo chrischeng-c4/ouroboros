@@ -15,6 +15,7 @@ from data_bridge.postgres import (
     Column,
     ForeignKeyProxy,
 )
+from data_bridge.test import expect
 
 
 @pytest.mark.asyncio
@@ -41,11 +42,11 @@ async def test_get_foreign_keys_basic():
     foreign_keys = await get_foreign_keys("posts")
 
     # Verify results
-    assert len(foreign_keys) == 1
+    expect(len(foreign_keys)).to_equal(1)
     fk = foreign_keys[0]
-    assert "author_id" in fk["columns"]
-    assert fk["referenced_table"] == "users"
-    assert fk["on_delete"] == "CASCADE"
+    expect("author_id" in fk["columns"]).to_be_true()
+    expect(fk["referenced_table"]).to_equal("users")
+    expect(fk["on_delete"]).to_equal("CASCADE")
 
 
 @pytest.mark.asyncio
@@ -69,19 +70,19 @@ async def test_get_foreign_keys_multiple():
     foreign_keys = await get_foreign_keys("posts")
 
     # Verify results
-    assert len(foreign_keys) == 2
+    expect(len(foreign_keys)).to_equal(2)
 
     # Check that both foreign keys are present
     fk_tables = {fk["referenced_table"] for fk in foreign_keys}
-    assert "users" in fk_tables
-    assert "categories" in fk_tables
+    expect("users" in fk_tables).to_be_true()
+    expect("categories" in fk_tables).to_be_true()
 
     # Check cascade rules
     for fk in foreign_keys:
         if fk["referenced_table"] == "users":
-            assert fk["on_delete"] == "CASCADE"
+            expect(fk["on_delete"]).to_equal("CASCADE")
         elif fk["referenced_table"] == "categories":
-            assert fk["on_delete"] == "SET NULL"
+            expect(fk["on_delete"]).to_equal("SET NULL")
 
 
 @pytest.mark.asyncio
@@ -95,7 +96,7 @@ async def test_get_foreign_keys_no_foreign_keys():
     """)
 
     foreign_keys = await get_foreign_keys("users")
-    assert len(foreign_keys) == 0
+    expect(len(foreign_keys)).to_equal(0)
 
 
 @pytest.mark.asyncio
@@ -127,9 +128,9 @@ async def test_find_by_foreign_key():
     author = await find_by_foreign_key("users", "id", user_id)
 
     # Verify result
-    assert author is not None
-    assert author["name"] == "Alice"
-    assert author["id"] == user_id
+    expect(author).not_to_be_none()
+    expect(author["name"]).to_equal("Alice")
+    expect(author["id"]).to_equal(user_id)
 
 
 @pytest.mark.asyncio
@@ -140,7 +141,7 @@ async def test_find_by_foreign_key_not_found():
     # Query non-existent ID
     result = await find_by_foreign_key("users", "id", 99999)
 
-    assert result is None
+    expect(result).to_be_none()
 
 
 @pytest.mark.asyncio
@@ -149,12 +150,12 @@ async def test_column_foreign_key_parameter():
     # Create column with foreign key
     col = Column(foreign_key="users.id", nullable=False)
 
-    assert col.foreign_key == "users.id"
-    assert col.nullable is False
+    expect(col.foreign_key).to_equal("users.id")
+    expect(col.nullable).to_equal(False)
 
     # Verify __repr__ includes foreign_key
     repr_str = repr(col)
-    assert "foreign_key='users.id'" in repr_str
+    expect("foreign_key='users.id'" in repr_str).to_be_true()
 
 
 @pytest.mark.asyncio
@@ -180,20 +181,20 @@ async def test_foreign_key_proxy_basic():
     proxy = ForeignKeyProxy("users", "id", user_id)
 
     # Test ref property (should work without fetching)
-    assert proxy.ref == user_id
-    assert proxy.id == user_id
-    assert proxy.column_value == user_id
-    assert not proxy.is_fetched
+    expect(proxy.ref).to_equal(user_id)
+    expect(proxy.id).to_equal(user_id)
+    expect(proxy.column_value).to_equal(user_id)
+    expect(proxy.is_fetched).to_be_false()
 
     # Test fetch
     author = await proxy.fetch()
-    assert author is not None
-    assert author["name"] == "Bob"
-    assert proxy.is_fetched
+    expect(author).not_to_be_none()
+    expect(author["name"]).to_equal("Bob")
+    expect(proxy.is_fetched).to_be_true()
 
     # Test cached fetch (should return same result without re-querying)
     author2 = await proxy.fetch()
-    assert author2 == author
+    expect(author2).to_equal(author)
 
 
 @pytest.mark.asyncio
@@ -206,8 +207,8 @@ async def test_foreign_key_proxy_not_found():
 
     # Fetch should return None
     result = await proxy.fetch()
-    assert result is None
-    assert proxy.is_fetched
+    expect(result).to_be_none()
+    expect(proxy.is_fetched).to_be_true()
 
 
 @pytest.mark.asyncio
@@ -241,14 +242,14 @@ async def test_foreign_key_cascade_delete():
 
     # Verify posts exist
     posts_before = await execute("SELECT * FROM posts WHERE author_id = $1", [user_id])
-    assert len(posts_before) == 2
+    expect(len(posts_before)).to_equal(2)
 
     # Delete user (should cascade to posts)
     await execute("DELETE FROM users WHERE id = $1", [user_id])
 
     # Verify posts were deleted
     posts_after = await execute("SELECT * FROM posts WHERE author_id = $1", [user_id])
-    assert len(posts_after) == 0
+    expect(len(posts_after)).to_equal(0)
 
 
 @pytest.mark.asyncio
@@ -277,10 +278,10 @@ async def test_composite_foreign_key():
     foreign_keys = await get_foreign_keys("ref_table")
 
     # Verify composite foreign key
-    assert len(foreign_keys) == 1
+    expect(len(foreign_keys)).to_equal(1)
     fk = foreign_keys[0]
-    assert len(fk["columns"]) == 2
-    assert "ref_key1" in fk["columns"]
-    assert "ref_key2" in fk["columns"]
-    assert fk["referenced_table"] == "compound_keys"
-    assert len(fk["referenced_columns"]) == 2
+    expect(len(fk["columns"])).to_equal(2)
+    expect("ref_key1" in fk["columns"]).to_be_true()
+    expect("ref_key2" in fk["columns"]).to_be_true()
+    expect(fk["referenced_table"]).to_equal("compound_keys")
+    expect(len(fk["referenced_columns"])).to_equal(2)

@@ -7,6 +7,7 @@ them to the Rust engine.
 """
 import pytest
 from data_bridge.postgres import Table, Column
+from data_bridge.test import expect
 
 
 class TestTableNameValidation:
@@ -21,7 +22,7 @@ class TestTableNameValidation:
             class Settings:
                 table_name = "users"
 
-        assert Users._table_name == "users"
+        expect(Users._table_name).to_equal("users")
 
     def test_valid_table_name_with_underscore(self):
         """Test table name with underscores is accepted."""
@@ -32,7 +33,7 @@ class TestTableNameValidation:
             class Settings:
                 table_name = "user_profiles"
 
-        assert UserProfiles._table_name == "user_profiles"
+        expect(UserProfiles._table_name).to_equal("user_profiles")
 
     def test_valid_table_name_with_numbers(self):
         """Test table name with numbers is accepted."""
@@ -43,7 +44,7 @@ class TestTableNameValidation:
             class Settings:
                 table_name = "orders_2024"
 
-        assert Orders._table_name == "orders_2024"
+        expect(Orders._table_name).to_equal("orders_2024")
 
     def test_schema_qualified_table_name(self):
         """Test schema-qualified table names work correctly."""
@@ -56,9 +57,9 @@ class TestTableNameValidation:
                 schema = "auth"
 
         # Schema is stored separately, not in table_name
-        assert Users._table_name == "users"
-        assert Users._schema == "auth"
-        assert Users.__table_name__() == "auth.users"
+        expect(Users._table_name).to_equal("users")
+        expect(Users._schema).to_equal("auth")
+        expect(Users.__table_name__()).to_equal("auth.users")
 
     def test_table_name_case_preserved(self):
         """Test table name case is preserved."""
@@ -70,7 +71,7 @@ class TestTableNameValidation:
                 table_name = "MyUsers"
 
         # PostgreSQL will lowercase unless quoted, but we preserve the case
-        assert Users._table_name == "MyUsers"
+        expect(Users._table_name).to_equal("MyUsers")
 
 
 class TestColumnNameValidation:
@@ -85,10 +86,10 @@ class TestColumnNameValidation:
             email_address: str
             age: int
 
-        assert "first_name" in User._columns
-        assert "last_name" in User._columns
-        assert "email_address" in User._columns
-        assert "age" in User._columns
+        expect("first_name" in User._columns).to_be_true()
+        expect("last_name" in User._columns).to_be_true()
+        expect("email_address" in User._columns).to_be_true()
+        expect("age" in User._columns).to_be_true()
 
     def test_column_name_with_numbers(self):
         """Test column names with numbers are accepted."""
@@ -97,7 +98,7 @@ class TestColumnNameValidation:
             name: str
             price_v2: float
 
-        assert "price_v2" in Product._columns
+        expect("price_v2" in Product._columns).to_be_true()
 
     def test_column_name_case_preserved(self):
         """Test column name case is preserved."""
@@ -107,8 +108,8 @@ class TestColumnNameValidation:
             lastName: str
 
         # Case should be preserved
-        assert "firstName" in User._columns
-        assert "lastName" in User._columns
+        expect("firstName" in User._columns).to_be_true()
+        expect("lastName" in User._columns).to_be_true()
 
 
 class TestSQLInjectionPrevention:
@@ -126,7 +127,7 @@ class TestSQLInjectionPrevention:
                 table_name = "users; DROP TABLE users--"
 
         # Python allows setting it, but Rust engine would reject
-        assert Users._table_name == "users; DROP TABLE users--"
+        expect(Users._table_name).to_equal("users; DROP TABLE users--")
 
     def test_comment_in_table_name(self):
         """Test SQL comment in table name."""
@@ -138,7 +139,7 @@ class TestSQLInjectionPrevention:
                 table_name = "users--comment"
 
         # Python allows it, validation happens at Rust layer
-        assert Users._table_name == "users--comment"
+        expect(Users._table_name).to_equal("users--comment")
 
     def test_special_chars_in_filter_value(self):
         """Test special characters in filter values are safe."""
@@ -151,11 +152,11 @@ class TestSQLInjectionPrevention:
         # This should generate parameterized SQL
         expr = User.email == "test'; DROP TABLE users--"
 
-        assert expr.value == "test'; DROP TABLE users--"
+        expect(expr.value).to_equal("test'; DROP TABLE users--")
         # The to_sql() should use parameterized queries
         sql, params = expr.to_sql()
-        assert "$1" in sql  # Parameterized
-        assert params[0] == "test'; DROP TABLE users--"
+        expect("$1" in sql).to_be_true()  # Parameterized
+        expect(params[0]).to_equal("test'; DROP TABLE users--")
 
     def test_sql_keywords_in_values(self):
         """Test SQL keywords in values are safe."""
@@ -168,8 +169,8 @@ class TestSQLInjectionPrevention:
 
         sql, params = expr.to_sql()
         # Should be parameterized
-        assert "$1" in sql
-        assert "SELECT * FROM" in params[0]
+        expect("$1" in sql).to_be_true()
+        expect("SELECT * FROM" in params[0]).to_be_true()
 
     def test_union_injection_in_values(self):
         """Test UNION injection attempt in values."""
@@ -181,8 +182,8 @@ class TestSQLInjectionPrevention:
 
         sql, params = expr.to_sql()
         # Should be safely parameterized
-        assert "$1" in sql
-        assert "UNION" in params[0]  # Treated as literal value
+        expect("$1" in sql).to_be_true()
+        expect("UNION" in params[0]).to_be_true()  # Treated as literal value
 
 
 class TestIdentifierValidation:
@@ -198,7 +199,7 @@ class TestIdentifierValidation:
                 table_name = ""
 
         # Should default to lowercase class name
-        assert User._table_name == "user"
+        expect(User._table_name).to_equal("user")
 
     def test_long_identifier(self):
         """Test very long identifier names."""
@@ -213,7 +214,7 @@ class TestIdentifierValidation:
                 table_name = long_name
 
         # Python allows it, but PostgreSQL might truncate
-        assert MyTable._table_name == long_name
+        expect(MyTable._table_name).to_equal(long_name)
 
     def test_reserved_words_as_column_names(self):
         """Test SQL reserved words as column names."""
@@ -225,9 +226,9 @@ class TestIdentifierValidation:
             where: str  # SQL keyword
 
         # Python allows it
-        assert "select" in MyTable._columns
-        assert "from_" in MyTable._columns
-        assert "where" in MyTable._columns
+        expect("select" in MyTable._columns).to_be_true()
+        expect("from_" in MyTable._columns).to_be_true()
+        expect("where" in MyTable._columns).to_be_true()
 
     def test_unicode_in_identifiers(self):
         """Test unicode characters in identifiers."""
@@ -239,7 +240,7 @@ class TestIdentifierValidation:
                 table_name = "用户"  # Chinese characters
 
         # Python allows it
-        assert User._table_name == "用户"
+        expect(User._table_name).to_equal("用户")
 
 
 class TestSchemaValidation:
@@ -254,7 +255,7 @@ class TestSchemaValidation:
             class Settings:
                 schema = "public"
 
-        assert User._schema == "public"
+        expect(User._schema).to_equal("public")
 
     def test_custom_schema_name(self):
         """Test custom schema names."""
@@ -265,7 +266,7 @@ class TestSchemaValidation:
             class Settings:
                 schema = "auth"
 
-        assert User._schema == "auth"
+        expect(User._schema).to_equal("auth")
 
     def test_schema_with_underscore(self):
         """Test schema name with underscore."""
@@ -276,7 +277,7 @@ class TestSchemaValidation:
             class Settings:
                 schema = "my_schema"
 
-        assert User._schema == "my_schema"
+        expect(User._schema).to_equal("my_schema")
 
     def test_default_schema(self):
         """Test default schema is 'public'."""
@@ -284,7 +285,7 @@ class TestSchemaValidation:
         class User(Table):
             name: str
 
-        assert User._schema == "public"
+        expect(User._schema).to_equal("public")
 
 
 class TestPrimaryKeyValidation:
@@ -299,7 +300,7 @@ class TestPrimaryKeyValidation:
             class Settings:
                 primary_key = "sku"
 
-        assert Product._primary_key == "sku"
+        expect(Product._primary_key).to_equal("sku")
 
     def test_default_primary_key(self):
         """Test default primary key is 'id'."""
@@ -307,7 +308,7 @@ class TestPrimaryKeyValidation:
         class User(Table):
             name: str
 
-        assert User._primary_key == "id"
+        expect(User._primary_key).to_equal("id")
 
     def test_numeric_primary_key(self):
         """Test numeric primary key name."""
@@ -318,7 +319,7 @@ class TestPrimaryKeyValidation:
             class Settings:
                 primary_key = "user_id"
 
-        assert User._primary_key == "user_id"
+        expect(User._primary_key).to_equal("user_id")
 
 
 class TestQueryParameterization:
@@ -334,8 +335,8 @@ class TestQueryParameterization:
         sql, params = expr.to_sql()
 
         # Should use $1 placeholder
-        assert "$1" in sql
-        assert params == ["test@example.com"]
+        expect("$1" in sql).to_be_true()
+        expect(params).to_equal(["test@example.com"])
 
     def test_multiple_filters_parameterized(self):
         """Test multiple filters use sequential parameters."""
@@ -348,9 +349,9 @@ class TestQueryParameterization:
         where, params = query._build_where_clause()
 
         # Should use $1, $2
-        assert "$1" in where
-        assert "$2" in where
-        assert len(params) == 2
+        expect("$1" in where).to_be_true()
+        expect("$2" in where).to_be_true()
+        expect(len(params)).to_equal(2)
 
     def test_in_operator_parameterized(self):
         """Test IN operator uses parameterization."""
@@ -362,11 +363,11 @@ class TestQueryParameterization:
         sql, params = expr.to_sql()
 
         # Should use $1, $2, $3
-        assert "IN" in sql
-        assert "$1" in sql
-        assert "$2" in sql
-        assert "$3" in sql
-        assert params == ["NYC", "LA", "SF"]
+        expect("IN" in sql).to_be_true()
+        expect("$1" in sql).to_be_true()
+        expect("$2" in sql).to_be_true()
+        expect("$3" in sql).to_be_true()
+        expect(params).to_equal(["NYC", "LA", "SF"])
 
     def test_like_operator_parameterized(self):
         """Test LIKE operator uses parameterization."""
@@ -378,8 +379,8 @@ class TestQueryParameterization:
         sql, params = expr.to_sql()
 
         # Should be parameterized
-        assert "$1" in sql
-        assert params == ["%@example.com"]
+        expect("$1" in sql).to_be_true()
+        expect(params).to_equal(["%@example.com"])
 
     def test_between_parameterized(self):
         """Test BETWEEN uses parameterization."""
@@ -391,8 +392,8 @@ class TestQueryParameterization:
         sql, params = expr.to_sql()
 
         # Should use $1 and $2
-        assert "BETWEEN $1 AND $2" in sql
-        assert params == [18, 65]
+        expect("BETWEEN $1 AND $2" in sql).to_be_true()
+        expect(params).to_equal([18, 65])
 
 
 class TestInputSanitization:
@@ -408,7 +409,7 @@ class TestInputSanitization:
         expr = User.name == "test\x00value"
 
         sql, params = expr.to_sql()
-        assert params[0] == "test\x00value"
+        expect(params[0]).to_equal("test\x00value")
 
     def test_newline_in_string(self):
         """Test newlines in string values are safe."""
@@ -419,7 +420,7 @@ class TestInputSanitization:
         expr = User.bio == "Line 1\nLine 2"
 
         sql, params = expr.to_sql()
-        assert params[0] == "Line 1\nLine 2"
+        expect(params[0]).to_equal("Line 1\nLine 2")
 
     def test_quote_in_string(self):
         """Test quotes in string values are safe."""
@@ -431,7 +432,7 @@ class TestInputSanitization:
 
         sql, params = expr.to_sql()
         # Parameterization makes this safe
-        assert params[0] == "O'Brien"
+        expect(params[0]).to_equal("O'Brien")
 
     def test_backslash_in_string(self):
         """Test backslashes in string values."""
@@ -442,4 +443,4 @@ class TestInputSanitization:
         expr = User.path == "C:\\Users\\Admin"
 
         sql, params = expr.to_sql()
-        assert params[0] == "C:\\Users\\Admin"
+        expect(params[0]).to_equal("C:\\Users\\Admin")

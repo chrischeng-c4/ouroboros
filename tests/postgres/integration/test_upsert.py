@@ -12,6 +12,7 @@ Tests cover:
 
 import pytest
 from data_bridge.postgres import init, close, execute, upsert_one, upsert_many
+from data_bridge.test import expect
 
 
 @pytest.mark.integration
@@ -44,17 +45,17 @@ class TestUpsertOne:
         )
 
         # Verify insert happened
-        assert result["email"] == "alice@example.com"
-        assert result["name"] == "Alice"
-        assert result["age"] == 30
-        assert result["id"] is not None
+        expect(result["email"]).to_equal("alice@example.com")
+        expect(result["name"]).to_equal("Alice")
+        expect(result["age"]).to_equal(30)
+        expect(result["id"]).not_to_be_none()
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_upsert_users")
-        assert len(rows) == 1
-        assert rows[0]["email"] == "alice@example.com"
-        assert rows[0]["name"] == "Alice"
-        assert rows[0]["age"] == 30
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["email"]).to_equal("alice@example.com")
+        expect(rows[0]["name"]).to_equal("Alice")
+        expect(rows[0]["age"]).to_equal(30)
 
     async def test_upsert_one_update_existing(self):
         """
@@ -94,16 +95,16 @@ class TestUpsertOne:
         )
 
         # Verify update happened
-        assert result["email"] == "bob@example.com"
-        assert result["name"] == "Bob Updated"
-        assert result["age"] == 26
-        assert result["id"] == original_id, "ID should not change on update"
+        expect(result["email"]).to_equal("bob@example.com")
+        expect(result["name"]).to_equal("Bob Updated")
+        expect(result["age"]).to_equal(26)
+        expect(result["id"]).to_equal(original_id)
 
         # Verify only one row exists (update, not insert)
         rows = await execute("SELECT * FROM test_upsert_users")
-        assert len(rows) == 1
-        assert rows[0]["name"] == "Bob Updated"
-        assert rows[0]["age"] == 26
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["name"]).to_equal("Bob Updated")
+        expect(rows[0]["age"]).to_equal(26)
 
     async def test_upsert_one_selective_update(self):
         """
@@ -148,18 +149,18 @@ class TestUpsertOne:
         )
 
         # Verify selective update
-        assert result["email"] == "charlie@example.com"
-        assert result["name"] == "Charlie Updated", "Name should be updated"
-        assert result["age"] == 36, "Age should be updated"
-        assert result["status"] == original_status, "Status should NOT be updated"
-        assert result["id"] == original_id
+        expect(result["email"]).to_equal("charlie@example.com")
+        expect(result["name"]).to_equal("Charlie Updated")
+        expect(result["age"]).to_equal(36)
+        expect(result["status"]).to_equal(original_status)
+        expect(result["id"]).to_equal(original_id)
 
         # Verify in database
         rows = await execute("SELECT * FROM test_upsert_selective WHERE email = $1", ["charlie@example.com"])
-        assert len(rows) == 1
-        assert rows[0]["name"] == "Charlie Updated"
-        assert rows[0]["age"] == 36
-        assert rows[0]["status"] == "premium", "Status should remain unchanged"
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["name"]).to_equal("Charlie Updated")
+        expect(rows[0]["age"]).to_equal(36)
+        expect(rows[0]["status"]).to_equal("premium")
 
     async def test_upsert_one_composite_key(self):
         """
@@ -194,15 +195,15 @@ class TestUpsertOne:
         )
 
         # Verify update happened
-        assert result["tenant_id"] == 1
-        assert result["user_id"] == 100
-        assert result["name"] == "User 100 Updated"
-        assert result["metadata"] == "updated"
+        expect(result["tenant_id"]).to_equal(1)
+        expect(result["user_id"]).to_equal(100)
+        expect(result["name"]).to_equal("User 100 Updated")
+        expect(result["metadata"]).to_equal("updated")
 
         # Verify only one row exists
         rows = await execute("SELECT * FROM test_upsert_composite")
-        assert len(rows) == 1
-        assert rows[0]["name"] == "User 100 Updated"
+        expect(len(rows)).to_equal(1)
+        expect(rows[0]["name"]).to_equal("User 100 Updated")
 
         # Upsert with different composite key (should insert)
         result2 = await upsert_one(
@@ -212,15 +213,15 @@ class TestUpsertOne:
         )
 
         # Verify insert happened
-        assert result2["tenant_id"] == 1
-        assert result2["user_id"] == 101
-        assert result2["name"] == "User 101"
+        expect(result2["tenant_id"]).to_equal(1)
+        expect(result2["user_id"]).to_equal(101)
+        expect(result2["name"]).to_equal("User 101")
 
         # Verify two rows exist now
         rows = await execute("SELECT * FROM test_upsert_composite ORDER BY user_id")
-        assert len(rows) == 2
-        assert rows[0]["user_id"] == 100
-        assert rows[1]["user_id"] == 101
+        expect(len(rows)).to_equal(2)
+        expect(rows[0]["user_id"]).to_equal(100)
+        expect(rows[1]["user_id"]).to_equal(101)
 
 
 @pytest.mark.integration
@@ -259,16 +260,16 @@ class TestUpsertMany:
         )
 
         # Verify all inserts happened
-        assert len(results) == 3
-        assert all(r["id"] is not None for r in results)
-        assert {r["email"] for r in results} == {"alice@example.com", "bob@example.com", "charlie@example.com"}
+        expect(len(results)).to_equal(3)
+        expect(all(r["id"] is not None for r in results)).to_be_true()
+        expect({r["email"] for r in results}).to_equal({"alice@example.com", "bob@example.com", "charlie@example.com"})
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_upsert_users ORDER BY email")
-        assert len(rows) == 3
-        assert rows[0]["email"] == "alice@example.com"
-        assert rows[1]["email"] == "bob@example.com"
-        assert rows[2]["email"] == "charlie@example.com"
+        expect(len(rows)).to_equal(3)
+        expect(rows[0]["email"]).to_equal("alice@example.com")
+        expect(rows[1]["email"]).to_equal("bob@example.com")
+        expect(rows[2]["email"]).to_equal("charlie@example.com")
 
     async def test_upsert_many_update_all_existing(self):
         """
@@ -318,15 +319,15 @@ class TestUpsertMany:
         )
 
         # Verify all updates happened
-        assert len(results) == 3
+        expect(len(results)).to_equal(3)
         for result in results:
-            assert result["name"].endswith("Updated")
-            assert result["id"] == original_ids[result["email"]], "IDs should not change on update"
+            expect(result["name"].endswith("Updated")).to_be_true()
+            expect(result["id"]).to_equal(original_ids[result["email"]])
 
         # Verify still only 3 rows (updates, not inserts)
         rows = await execute("SELECT * FROM test_upsert_users ORDER BY email")
-        assert len(rows) == 3
-        assert all(row["name"].endswith("Updated") for row in rows)
+        expect(len(rows)).to_equal(3)
+        expect(all(row["name"].endswith("Updated") for row in rows)).to_be_true()
 
     async def test_upsert_many_mixed(self):
         """
@@ -366,29 +367,29 @@ class TestUpsertMany:
         )
 
         # Verify all operations succeeded
-        assert len(results) == 4
+        expect(len(results)).to_equal(4)
 
         # Verify data in database
         rows = await execute("SELECT * FROM test_upsert_users ORDER BY email")
-        assert len(rows) == 4
+        expect(len(rows)).to_equal(4)
 
         # Check updated rows
         alice = next(r for r in rows if r["email"] == "alice@example.com")
-        assert alice["name"] == "Alice Updated"
-        assert alice["age"] == 31
+        expect(alice["name"]).to_equal("Alice Updated")
+        expect(alice["age"]).to_equal(31)
 
         bob = next(r for r in rows if r["email"] == "bob@example.com")
-        assert bob["name"] == "Bob Updated"
-        assert bob["age"] == 26
+        expect(bob["name"]).to_equal("Bob Updated")
+        expect(bob["age"]).to_equal(26)
 
         # Check inserted rows
         charlie = next(r for r in rows if r["email"] == "charlie@example.com")
-        assert charlie["name"] == "Charlie New"
-        assert charlie["age"] == 35
+        expect(charlie["name"]).to_equal("Charlie New")
+        expect(charlie["age"]).to_equal(35)
 
         diana = next(r for r in rows if r["email"] == "diana@example.com")
-        assert diana["name"] == "Diana New"
-        assert diana["age"] == 28
+        expect(diana["name"]).to_equal("Diana New")
+        expect(diana["age"]).to_equal(28)
 
     async def test_upsert_many_parallel_threshold(self):
         """
@@ -421,12 +422,12 @@ class TestUpsertMany:
         )
 
         # Verify all inserts happened
-        assert len(results) == 100
-        assert all(r["id"] is not None for r in results)
+        expect(len(results)).to_equal(100)
+        expect(all(r["id"] is not None for r in results)).to_be_true()
 
         # Verify data in database
         rows = await execute("SELECT COUNT(*) as count FROM test_upsert_users")
-        assert rows[0]["count"] == 100
+        expect(rows[0]["count"]).to_equal(100)
 
         # Update half of them (mixed batch with 50 updates + 50 new inserts)
         update_batch = [
@@ -447,17 +448,17 @@ class TestUpsertMany:
         )
 
         # Verify all operations succeeded
-        assert len(results2) == 100
+        expect(len(results2)).to_equal(100)
 
         # Verify total count (100 original + 50 new = 150)
         rows = await execute("SELECT COUNT(*) as count FROM test_upsert_users")
-        assert rows[0]["count"] == 150
+        expect(rows[0]["count"]).to_equal(150)
 
         # Verify updates happened
         updated_rows = await execute(
             "SELECT * FROM test_upsert_users WHERE name LIKE '%Updated%'"
         )
-        assert len(updated_rows) == 50
+        expect(len(updated_rows)).to_equal(50)
 
     async def test_upsert_many_selective_update(self):
         """
@@ -504,16 +505,16 @@ class TestUpsertMany:
         )
 
         # Verify selective updates
-        assert len(results) == 2
+        expect(len(results)).to_equal(2)
         for result in results:
-            assert result["name"].endswith("Updated"), "Name should be updated"
-            assert result["status"] == "premium", "Status should NOT be updated"
+            expect(result["name"].endswith("Updated")).to_be_true()
+            expect(result["status"]).to_equal("premium")
 
         # Verify in database
         rows = await execute("SELECT * FROM test_upsert_many_selective ORDER BY email")
-        assert len(rows) == 2
-        assert all(row["status"] == "premium" for row in rows)
-        assert all(row["name"].endswith("Updated") for row in rows)
+        expect(len(rows)).to_equal(2)
+        expect(all(row["status"] == "premium" for row in rows)).to_be_true()
+        expect(all(row["name"].endswith("Updated") for row in rows)).to_be_true()
 
 
 @pytest.mark.integration
@@ -548,7 +549,7 @@ class TestUpsertErrors:
 
         # Verify error message indicates the problem
         error_msg = str(exc_info.value).lower()
-        assert "column" in error_msg or "constraint" in error_msg or "conflict" in error_msg
+        expect("column" in error_msg or "constraint" in error_msg or "conflict" in error_msg).to_be_true()
 
     async def test_upsert_empty_conflict_target(self):
         """
@@ -576,7 +577,7 @@ class TestUpsertErrors:
             )
 
         # Error should be raised
-        assert exc_info.value is not None
+        expect(exc_info.value).not_to_be_none()
 
     async def test_upsert_many_empty_documents(self):
         """
@@ -602,11 +603,11 @@ class TestUpsertErrors:
         )
 
         # Should return empty list
-        assert results == []
+        expect(results).to_equal([])
 
         # Verify no rows in database
         rows = await execute("SELECT * FROM test_upsert_users")
-        assert len(rows) == 0
+        expect(len(rows)).to_equal(0)
 
     async def test_upsert_table_not_exists(self):
         """
@@ -624,4 +625,4 @@ class TestUpsertErrors:
 
         # Verify error indicates table doesn't exist
         error_msg = str(exc_info.value).lower()
-        assert "table" in error_msg or "relation" in error_msg or "not" in error_msg
+        expect("table" in error_msg or "relation" in error_msg or "not" in error_msg).to_be_true()

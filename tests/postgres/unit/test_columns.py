@@ -4,6 +4,7 @@ Unit tests for Column descriptors and SQL expressions.
 Tests ColumnProxy, SqlExpr, and Column classes.
 """
 import pytest
+from data_bridge.test import expect
 from data_bridge.postgres import Table, Column
 from data_bridge.postgres.columns import ColumnProxy, SqlExpr
 
@@ -15,8 +16,8 @@ class TestColumnProxy:
         """Test ColumnProxy can be created."""
         proxy = ColumnProxy("email")
 
-        assert proxy.name == "email"
-        assert proxy.model is None
+        expect(proxy.name).to_equal("email")
+        expect(proxy.model).to_be_none()
 
     def test_column_proxy_with_model(self):
         """Test ColumnProxy with model reference."""
@@ -26,17 +27,17 @@ class TestColumnProxy:
 
         proxy = User.email
 
-        assert isinstance(proxy, ColumnProxy)
-        assert proxy.name == "email"
-        assert proxy.model == User
+        expect(isinstance(proxy, ColumnProxy)).to_be_true()
+        expect(proxy.name).to_equal("email")
+        expect(proxy.model).to_equal(User)
 
     def test_column_proxy_repr(self):
         """Test ColumnProxy __repr__."""
         proxy = ColumnProxy("email")
         repr_str = repr(proxy)
 
-        assert "ColumnProxy" in repr_str
-        assert "email" in repr_str
+        expect("ColumnProxy" in repr_str).to_be_true()
+        expect("email" in repr_str).to_be_true()
 
     def test_column_proxy_hashable(self):
         """Test ColumnProxy is hashable (can be dict key)."""
@@ -48,7 +49,7 @@ class TestColumnProxy:
 
         # Should be usable as dict key
         d = {proxy: "value"}
-        assert d[proxy] == "value"
+        expect(d[proxy]).to_equal("value")
 
     def test_descriptor_class_access(self):
         """Test descriptor returns self on class access."""
@@ -57,7 +58,7 @@ class TestColumnProxy:
             email: str
 
         # Class access should return ColumnProxy
-        assert isinstance(User.email, ColumnProxy)
+        expect(isinstance(User.email, ColumnProxy)).to_be_true()
 
     def test_descriptor_instance_access(self):
         """Test descriptor returns value on instance access."""
@@ -68,7 +69,7 @@ class TestColumnProxy:
         user = User(email="test@example.com")
 
         # Instance access should return value
-        assert user.email == "test@example.com"
+        expect(user.email).to_equal("test@example.com")
 
     def test_descriptor_set(self):
         """Test descriptor __set__ updates _data."""
@@ -79,7 +80,7 @@ class TestColumnProxy:
         user = User(email="old@example.com")
         user.email = "new@example.com"
 
-        assert user._data["email"] == "new@example.com"
+        expect(user._data["email"]).to_equal("new@example.com")
 
 
 class TestSqlExprCreation:
@@ -93,10 +94,10 @@ class TestSqlExprCreation:
 
         expr = User.age == 25
 
-        assert isinstance(expr, SqlExpr)
-        assert expr.column == "age"
-        assert expr.op == "="
-        assert expr.value == 25
+        expect(isinstance(expr, SqlExpr)).to_be_true()
+        expect(expr.column).to_equal("age")
+        expect(expr.op).to_equal("=")
+        expect(expr.value).to_equal(25)
 
     def test_not_equals(self):
         """Test != creates SqlExpr."""
@@ -106,8 +107,8 @@ class TestSqlExprCreation:
 
         expr = User.status != "deleted"
 
-        assert expr.op == "!="
-        assert expr.value == "deleted"
+        expect(expr.op).to_equal("!=")
+        expect(expr.value).to_equal("deleted")
 
     def test_greater_than(self):
         """Test > creates SqlExpr."""
@@ -117,8 +118,8 @@ class TestSqlExprCreation:
 
         expr = User.age > 18
 
-        assert expr.op == ">"
-        assert expr.value == 18
+        expect(expr.op).to_equal(">")
+        expect(expr.value).to_equal(18)
 
     def test_greater_equal(self):
         """Test >= creates SqlExpr."""
@@ -128,7 +129,7 @@ class TestSqlExprCreation:
 
         expr = User.score >= 100
 
-        assert expr.op == ">="
+        expect(expr.op).to_equal(">=")
 
     def test_less_than(self):
         """Test < creates SqlExpr."""
@@ -138,7 +139,7 @@ class TestSqlExprCreation:
 
         expr = User.age < 65
 
-        assert expr.op == "<"
+        expect(expr.op).to_equal("<")
 
     def test_less_equal(self):
         """Test <= creates SqlExpr."""
@@ -148,7 +149,7 @@ class TestSqlExprCreation:
 
         expr = User.age <= 100
 
-        assert expr.op == "<="
+        expect(expr.op).to_equal("<=")
 
 
 class TestSqlExprMethods:
@@ -162,8 +163,8 @@ class TestSqlExprMethods:
 
         expr = User.city.in_(["NYC", "LA", "SF"])
 
-        assert expr.op == "IN"
-        assert expr.value == ["NYC", "LA", "SF"]
+        expect(expr.op).to_equal("IN")
+        expect(expr.value).to_equal(["NYC", "LA", "SF"])
 
     def test_between_method(self):
         """Test between() method."""
@@ -173,8 +174,8 @@ class TestSqlExprMethods:
 
         expr = User.age.between(18, 65)
 
-        assert expr.op == "BETWEEN"
-        assert expr.value == [18, 65]
+        expect(expr.op).to_equal("BETWEEN")
+        expect(expr.value).to_equal([18, 65])
 
     def test_is_null_method(self):
         """Test is_null() method."""
@@ -184,8 +185,8 @@ class TestSqlExprMethods:
 
         expr = User.middle_name.is_null()
 
-        assert expr.op == "IS NULL"
-        assert expr.value is None
+        expect(expr.op).to_equal("IS NULL")
+        expect(expr.value).to_be_none()
 
     def test_is_not_null_method(self):
         """Test is_not_null() method."""
@@ -195,7 +196,7 @@ class TestSqlExprMethods:
 
         expr = User.email.is_not_null()
 
-        assert expr.op == "IS NOT NULL"
+        expect(expr.op).to_equal("IS NOT NULL")
 
     def test_like_method(self):
         """Test like() method."""
@@ -205,8 +206,8 @@ class TestSqlExprMethods:
 
         expr = User.email.like("%@example.com")
 
-        assert expr.op == "LIKE"
-        assert expr.value == "%@example.com"
+        expect(expr.op).to_equal("LIKE")
+        expect(expr.value).to_equal("%@example.com")
 
     def test_ilike_method(self):
         """Test ilike() case-insensitive method."""
@@ -216,8 +217,8 @@ class TestSqlExprMethods:
 
         expr = User.email.ilike("%@EXAMPLE.COM")
 
-        assert expr.op == "ILIKE"
-        assert expr.value == "%@EXAMPLE.COM"
+        expect(expr.op).to_equal("ILIKE")
+        expect(expr.value).to_equal("%@EXAMPLE.COM")
 
     def test_startswith_method(self):
         """Test startswith() convenience method."""
@@ -227,8 +228,8 @@ class TestSqlExprMethods:
 
         expr = User.name.startswith("A")
 
-        assert expr.op == "LIKE"
-        assert expr.value == "A%"
+        expect(expr.op).to_equal("LIKE")
+        expect(expr.value).to_equal("A%")
 
     def test_contains_method(self):
         """Test contains() convenience method."""
@@ -238,8 +239,8 @@ class TestSqlExprMethods:
 
         expr = User.bio.contains("python")
 
-        assert expr.op == "LIKE"
-        assert expr.value == "%python%"
+        expect(expr.op).to_equal("LIKE")
+        expect(expr.value).to_equal("%python%")
 
 
 class TestSqlExprToSQL:
@@ -250,59 +251,59 @@ class TestSqlExprToSQL:
         expr = SqlExpr("age", "=", 25)
         sql, params = expr.to_sql()
 
-        assert sql == "age = $1"
-        assert params == [25]
+        expect(sql).to_equal("age = $1")
+        expect(params).to_equal([25])
 
     def test_to_sql_greater_than(self):
         """Test to_sql for greater than."""
         expr = SqlExpr("age", ">", 18)
         sql, params = expr.to_sql()
 
-        assert sql == "age > $1"
-        assert params == [18]
+        expect(sql).to_equal("age > $1")
+        expect(params).to_equal([18])
 
     def test_to_sql_in(self):
         """Test to_sql for IN operator."""
         expr = SqlExpr("city", "IN", ["NYC", "LA", "SF"])
         sql, params = expr.to_sql()
 
-        assert "city IN" in sql
-        assert "$1" in sql
-        assert "$2" in sql
-        assert "$3" in sql
-        assert params == ["NYC", "LA", "SF"]
+        expect("city IN" in sql).to_be_true()
+        expect("$1" in sql).to_be_true()
+        expect("$2" in sql).to_be_true()
+        expect("$3" in sql).to_be_true()
+        expect(params).to_equal(["NYC", "LA", "SF"])
 
     def test_to_sql_between(self):
         """Test to_sql for BETWEEN."""
         expr = SqlExpr("age", "BETWEEN", [18, 65])
         sql, params = expr.to_sql()
 
-        assert "age BETWEEN $1 AND $2" in sql
-        assert params == [18, 65]
+        expect("age BETWEEN $1 AND $2" in sql).to_be_true()
+        expect(params).to_equal([18, 65])
 
     def test_to_sql_is_null(self):
         """Test to_sql for IS NULL."""
         expr = SqlExpr("middle_name", "IS NULL", None)
         sql, params = expr.to_sql()
 
-        assert sql == "middle_name IS NULL"
-        assert params == []
+        expect(sql).to_equal("middle_name IS NULL")
+        expect(params).to_equal([])
 
     def test_to_sql_is_not_null(self):
         """Test to_sql for IS NOT NULL."""
         expr = SqlExpr("email", "IS NOT NULL", None)
         sql, params = expr.to_sql()
 
-        assert sql == "email IS NOT NULL"
-        assert params == []
+        expect(sql).to_equal("email IS NOT NULL")
+        expect(params).to_equal([])
 
     def test_to_sql_custom_param_index(self):
         """Test to_sql with custom parameter index."""
         expr = SqlExpr("age", "=", 25)
         sql, params = expr.to_sql(param_index=5)
 
-        assert sql == "age = $5"
-        assert params == [25]
+        expect(sql).to_equal("age = $5")
+        expect(params).to_equal([25])
 
 
 class TestSqlExprCombining:
@@ -315,9 +316,9 @@ class TestSqlExprCombining:
 
         combined = expr1 & expr2
 
-        assert isinstance(combined, SqlExpr)
-        assert combined.op == "AND"
-        assert combined.value == [expr1, expr2]
+        expect(isinstance(combined, SqlExpr)).to_be_true()
+        expect(combined.op).to_equal("AND")
+        expect(combined.value).to_equal([expr1, expr2])
 
     def test_or_operator(self):
         """Test | (OR) operator."""
@@ -326,9 +327,9 @@ class TestSqlExprCombining:
 
         combined = expr1 | expr2
 
-        assert isinstance(combined, SqlExpr)
-        assert combined.op == "OR"
-        assert combined.value == [expr1, expr2]
+        expect(isinstance(combined, SqlExpr)).to_be_true()
+        expect(combined.op).to_equal("OR")
+        expect(combined.value).to_equal([expr1, expr2])
 
     def test_invalid_and_type(self):
         """Test & raises TypeError for invalid type."""
@@ -353,10 +354,10 @@ class TestSqlExprRepr:
         expr = SqlExpr("age", ">", 25)
         repr_str = repr(expr)
 
-        assert "SqlExpr" in repr_str
-        assert "age" in repr_str
-        assert ">" in repr_str
-        assert "25" in repr_str
+        expect("SqlExpr" in repr_str).to_be_true()
+        expect("age" in repr_str).to_be_true()
+        expect(">" in repr_str).to_be_true()
+        expect("25" in repr_str).to_be_true()
 
 
 class TestColumn:
@@ -366,18 +367,18 @@ class TestColumn:
         """Test basic Column creation."""
         col = Column()
 
-        assert col.default is None
-        assert col.default_factory is None
-        assert col.unique is False
-        assert col.index is False
-        assert col.nullable is True
-        assert col.primary_key is False
+        expect(col.default).to_be_none()
+        expect(col.default_factory).to_be_none()
+        expect(col.unique).to_equal(False)
+        expect(col.index).to_equal(False)
+        expect(col.nullable).to_equal(True)
+        expect(col.primary_key).to_equal(False)
 
     def test_column_with_default(self):
         """Test Column with default value."""
         col = Column(default=0)
 
-        assert col.default == 0
+        expect(col.default).to_equal(0)
 
     def test_column_with_default_factory(self):
         """Test Column with default_factory."""
@@ -387,36 +388,36 @@ class TestColumn:
 
         col = Column(default_factory=make_list)
 
-        assert col.default_factory == make_list
+        expect(col.default_factory).to_equal(make_list)
 
     def test_column_with_constraints(self):
         """Test Column with constraints."""
         col = Column(unique=True, index=True, nullable=False)
 
-        assert col.unique is True
-        assert col.index is True
-        assert col.nullable is False
+        expect(col.unique).to_equal(True)
+        expect(col.index).to_equal(True)
+        expect(col.nullable).to_equal(False)
 
     def test_column_primary_key(self):
         """Test Column as primary key."""
         col = Column(primary_key=True)
 
-        assert col.primary_key is True
+        expect(col.primary_key).to_equal(True)
 
     def test_column_with_description(self):
         """Test Column with description."""
         col = Column(description="User's email address")
 
-        assert col.description == "User's email address"
+        expect(col.description).to_equal("User's email address")
 
     def test_column_repr(self):
         """Test Column __repr__."""
         col = Column(default=0, unique=True)
         repr_str = repr(col)
 
-        assert "Column" in repr_str
-        assert "default=0" in repr_str
-        assert "unique=True" in repr_str
+        expect("Column" in repr_str).to_be_true()
+        expect("default=0" in repr_str).to_be_true()
+        expect("unique=True" in repr_str).to_be_true()
 
     def test_column_in_table(self):
         """Test Column used in Table definition."""
@@ -426,10 +427,10 @@ class TestColumn:
             age: int = Column(default=0)
 
         # Column should be captured in defaults
-        assert "email" in User._column_defaults
-        assert "age" in User._column_defaults
-        assert isinstance(User._column_defaults["email"], Column)
-        assert isinstance(User._column_defaults["age"], Column)
+        expect("email" in User._column_defaults).to_be_true()
+        expect("age" in User._column_defaults).to_be_true()
+        expect(isinstance(User._column_defaults["email"], Column)).to_be_true()
+        expect(isinstance(User._column_defaults["age"], Column)).to_be_true()
 
     def test_column_default_applied(self):
         """Test Column default is applied to instance."""
@@ -440,7 +441,7 @@ class TestColumn:
 
         user = User(name="Alice")
 
-        assert user.age == 18
+        expect(user.age).to_equal(18)
 
     def test_column_default_factory_applied(self):
         """Test Column default_factory is applied."""
@@ -454,4 +455,4 @@ class TestColumn:
 
         user = User(name="Alice")
 
-        assert user.tags == ["user"]
+        expect(user.tags).to_equal(["user"])

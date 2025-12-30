@@ -5,6 +5,7 @@ Tests schema introspection functions without requiring a real database.
 """
 import pytest
 from unittest.mock import AsyncMock
+from data_bridge.test import expect
 
 
 class TestSchemaIntrospection:
@@ -22,7 +23,7 @@ class TestSchemaIntrospection:
 
         result = await list_tables("public")
 
-        assert result == ["users", "posts", "comments"]
+        expect(result).to_equal(["users", "posts", "comments"])
         mock_connection_engine.list_tables.assert_called_once_with("public")
 
     @pytest.mark.asyncio
@@ -34,7 +35,7 @@ class TestSchemaIntrospection:
 
         result = await list_tables()
 
-        assert result == ["users"]
+        expect(result).to_equal(["users"])
         mock_connection_engine.list_tables.assert_called_once_with("public")
 
     @pytest.mark.asyncio
@@ -46,7 +47,7 @@ class TestSchemaIntrospection:
 
         result = await table_exists("users", "public")
 
-        assert result is True
+        expect(result).to_be_true()
         mock_connection_engine.table_exists.assert_called_once_with("users", "public")
 
     @pytest.mark.asyncio
@@ -58,7 +59,7 @@ class TestSchemaIntrospection:
 
         result = await table_exists("nonexistent", "public")
 
-        assert result is False
+        expect(result).to_be_false()
         mock_connection_engine.table_exists.assert_called_once_with(
             "nonexistent", "public"
         )
@@ -99,11 +100,11 @@ class TestSchemaIntrospection:
 
         result = await get_columns("users", "public")
 
-        assert len(result) == 3
-        assert result[0]["name"] == "id"
-        assert result[0]["is_primary_key"] is True
-        assert result[1]["name"] == "name"
-        assert result[2]["is_unique"] is True
+        expect(len(result)).to_equal(3)
+        expect(result[0]["name"]).to_equal("id")
+        expect(result[0]["is_primary_key"]).to_be_true()
+        expect(result[1]["name"]).to_equal("name")
+        expect(result[2]["is_unique"]).to_be_true()
         mock_connection_engine.get_columns.assert_called_once_with("users", "public")
 
     @pytest.mark.asyncio
@@ -130,10 +131,10 @@ class TestSchemaIntrospection:
 
         result = await get_indexes("users", "public")
 
-        assert len(result) == 2
-        assert result[0]["name"] == "users_pkey"
-        assert result[0]["is_unique"] is True
-        assert result[1]["name"] == "idx_users_email"
+        expect(len(result)).to_equal(2)
+        expect(result[0]["name"]).to_equal("users_pkey")
+        expect(result[0]["is_unique"]).to_be_true()
+        expect(result[1]["name"]).to_equal("idx_users_email")
         mock_connection_engine.get_indexes.assert_called_once_with("users", "public")
 
     @pytest.mark.asyncio
@@ -169,11 +170,11 @@ class TestSchemaIntrospection:
 
         result = await inspect_table("users", "public")
 
-        assert result["name"] == "users"
-        assert result["schema"] == "public"
-        assert len(result["columns"]) == 1
-        assert len(result["indexes"]) == 1
-        assert len(result["foreign_keys"]) == 0
+        expect(result["name"]).to_equal("users")
+        expect(result["schema"]).to_equal("public")
+        expect(len(result["columns"])).to_equal(1)
+        expect(len(result["indexes"])).to_equal(1)
+        expect(len(result["foreign_keys"])).to_equal(0)
         mock_connection_engine.inspect_table.assert_called_once_with("users", "public")
 
     @pytest.mark.asyncio

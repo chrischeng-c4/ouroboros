@@ -2,6 +2,7 @@
 
 import pytest
 from data_bridge.postgres import connection
+from data_bridge.test import expect
 
 
 @pytest.mark.asyncio
@@ -12,8 +13,8 @@ async def test_transaction_basic_flow():
     # when the engine is available
 
     # Check that begin_transaction is available as a function
-    assert hasattr(connection, 'begin_transaction')
-    assert callable(connection.begin_transaction)
+    expect(hasattr(connection, 'begin_transaction')).to_be_true()
+    expect(callable(connection.begin_transaction)).to_be_true()
 
 
 @pytest.mark.asyncio
@@ -26,7 +27,7 @@ async def test_transaction_isolation_levels():
     expected_levels = ("read_uncommitted", "read_committed", "repeatable_read", "serializable")
     actual_levels = get_args(IsolationLevel)
 
-    assert set(actual_levels) == set(expected_levels)
+    expect(set(actual_levels)).to_equal(set(expected_levels))
 
 
 # Integration tests below require a live PostgreSQL database
@@ -47,8 +48,8 @@ async def test_transaction_commit(test_table):
 
     # Verify data persisted
     result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_commit"])
-    assert len(result) == 1
-    assert result[0]["name"] == "test_commit"
+    expect(len(result)).to_equal(1)
+    expect(result[0]["name"]).to_equal("test_commit")
 
 
 @pytest.mark.integration
@@ -66,7 +67,7 @@ async def test_transaction_rollback(test_table):
 
     # Verify data NOT persisted
     result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_rollback"])
-    assert len(result) == 0
+    expect(len(result)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -87,7 +88,7 @@ async def test_transaction_auto_rollback_on_exception(test_table):
 
     # Verify data NOT persisted due to auto-rollback
     result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_exception"])
-    assert len(result) == 0
+    expect(len(result)).to_equal(0)
 
 
 @pytest.mark.integration
@@ -104,4 +105,4 @@ async def test_transaction_isolation_level_serializable(test_table):
 
     # Verify data persisted
     result = await connection.execute(f"SELECT * FROM {test_table} WHERE name = $1", ["test_serializable"])
-    assert len(result) == 1
+    expect(len(result)).to_equal(1)

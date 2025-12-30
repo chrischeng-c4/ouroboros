@@ -14,6 +14,7 @@ Tests cover:
 
 import pytest
 from data_bridge.postgres import autogenerate_migration
+from data_bridge.test import expect
 
 
 class TestAutogenerateMigration:
@@ -33,9 +34,9 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have no changes
-        assert result["has_changes"] is False
-        assert result["up"] == ""
-        assert result["down"] == ""
+        expect(result["has_changes"]).to_be_false()
+        expect(result["up"]).to_equal("")
+        expect(result["down"]).to_equal("")
 
     def test_autogenerate_empty_to_table(self):
         """
@@ -90,27 +91,27 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should create table
         up_sql = result["up"]
-        assert "CREATE TABLE" in up_sql
-        assert '"users"' in up_sql
-        assert '"id"' in up_sql
-        assert '"email"' in up_sql
-        assert '"created_at"' in up_sql
-        assert "PRIMARY KEY" in up_sql
-        assert "UNIQUE" in up_sql
-        assert "NOT NULL" in up_sql
-        assert "DEFAULT NOW()" in up_sql
-        assert "CREATE UNIQUE INDEX" in up_sql
-        assert '"idx_users_email"' in up_sql
+        expect("CREATE TABLE" in up_sql).to_be_true()
+        expect('"users"' in up_sql).to_be_true()
+        expect('"id"' in up_sql).to_be_true()
+        expect('"email"' in up_sql).to_be_true()
+        expect('"created_at"' in up_sql).to_be_true()
+        expect("PRIMARY KEY" in up_sql).to_be_true()
+        expect("UNIQUE" in up_sql).to_be_true()
+        expect("NOT NULL" in up_sql).to_be_true()
+        expect("DEFAULT NOW()" in up_sql).to_be_true()
+        expect("CREATE UNIQUE INDEX" in up_sql).to_be_true()
+        expect('"idx_users_email"' in up_sql).to_be_true()
 
         # DOWN SQL should drop table
         down_sql = result["down"]
-        assert "DROP TABLE" in down_sql
-        assert '"users"' in down_sql
-        assert "CASCADE" in down_sql
+        expect("DROP TABLE" in down_sql).to_be_true()
+        expect('"users"' in down_sql).to_be_true()
+        expect("CASCADE" in down_sql).to_be_true()
 
     def test_autogenerate_add_column(self):
         """
@@ -184,22 +185,22 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should add column
         up_sql = result["up"]
-        assert "ALTER TABLE" in up_sql
-        assert '"users"' in up_sql
-        assert "ADD COLUMN" in up_sql
-        assert '"name"' in up_sql
-        assert "TEXT" in up_sql
+        expect("ALTER TABLE" in up_sql).to_be_true()
+        expect('"users"' in up_sql).to_be_true()
+        expect("ADD COLUMN" in up_sql).to_be_true()
+        expect('"name"' in up_sql).to_be_true()
+        expect("TEXT" in up_sql).to_be_true()
 
         # DOWN SQL should drop column
         down_sql = result["down"]
-        assert "ALTER TABLE" in down_sql
-        assert '"users"' in down_sql
-        assert "DROP COLUMN" in down_sql
-        assert '"name"' in down_sql
+        expect("ALTER TABLE" in down_sql).to_be_true()
+        expect('"users"' in down_sql).to_be_true()
+        expect("DROP COLUMN" in down_sql).to_be_true()
+        expect('"name"' in down_sql).to_be_true()
 
     def test_autogenerate_remove_column(self):
         """
@@ -273,22 +274,22 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should drop column
         up_sql = result["up"]
-        assert "ALTER TABLE" in up_sql
-        assert '"users"' in up_sql
-        assert "DROP COLUMN" in up_sql
-        assert '"old_field"' in up_sql
+        expect("ALTER TABLE" in up_sql).to_be_true()
+        expect('"users"' in up_sql).to_be_true()
+        expect("DROP COLUMN" in up_sql).to_be_true()
+        expect('"old_field"' in up_sql).to_be_true()
 
         # DOWN SQL should add column back
         down_sql = result["down"]
-        assert "ALTER TABLE" in down_sql
-        assert '"users"' in down_sql
-        assert "ADD COLUMN" in down_sql
-        assert '"old_field"' in down_sql
-        assert "TEXT" in down_sql
+        expect("ALTER TABLE" in down_sql).to_be_true()
+        expect('"users"' in down_sql).to_be_true()
+        expect("ADD COLUMN" in down_sql).to_be_true()
+        expect('"old_field"' in down_sql).to_be_true()
+        expect("TEXT" in down_sql).to_be_true()
 
     def test_autogenerate_drop_table(self):
         """
@@ -320,16 +321,16 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should drop table
         up_sql = result["up"]
-        assert "DROP TABLE" in up_sql
-        assert '"old_table"' in up_sql
+        expect("DROP TABLE" in up_sql).to_be_true()
+        expect('"old_table"' in up_sql).to_be_true()
 
         # DOWN SQL should have a comment about not being able to auto-generate
         down_sql = result["down"]
-        assert "Cannot auto-generate" in down_sql or "old_table" in down_sql
+        expect("Cannot auto-generate" in down_sql or "old_table" in down_sql).to_be_true()
 
     def test_autogenerate_add_index(self):
         """
@@ -401,19 +402,19 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should create index
         up_sql = result["up"]
-        assert "CREATE" in up_sql
-        assert "INDEX" in up_sql
-        assert '"idx_users_email"' in up_sql
-        assert '"email"' in up_sql
+        expect("CREATE" in up_sql).to_be_true()
+        expect("INDEX" in up_sql).to_be_true()
+        expect('"idx_users_email"' in up_sql).to_be_true()
+        expect('"email"' in up_sql).to_be_true()
 
         # DOWN SQL should drop index
         down_sql = result["down"]
-        assert "DROP INDEX" in down_sql
-        assert '"idx_users_email"' in down_sql
+        expect("DROP INDEX" in down_sql).to_be_true()
+        expect('"idx_users_email"' in down_sql).to_be_true()
 
     def test_autogenerate_complex_changes(self):
         """
@@ -530,23 +531,23 @@ class TestAutogenerateMigration:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should:
         # 1. Drop old_users table
         # 2. Alter posts table (add content column)
         # 3. Create comments table
         up_sql = result["up"]
-        assert "DROP TABLE" in up_sql and '"old_users"' in up_sql
-        assert "ALTER TABLE" in up_sql and '"posts"' in up_sql and "ADD COLUMN" in up_sql and '"content"' in up_sql
-        assert "CREATE TABLE" in up_sql and '"comments"' in up_sql
+        expect("DROP TABLE" in up_sql and '"old_users"' in up_sql).to_be_true()
+        expect("ALTER TABLE" in up_sql and '"posts"' in up_sql and "ADD COLUMN" in up_sql and '"content"' in up_sql).to_be_true()
+        expect("CREATE TABLE" in up_sql and '"comments"' in up_sql).to_be_true()
 
         # DOWN SQL should reverse most operations
         down_sql = result["down"]
         # Note: Cannot auto-generate CREATE TABLE for dropped tables
-        assert ("Cannot auto-generate" in down_sql and '"old_users"' in down_sql) or True
-        assert "ALTER TABLE" in down_sql and '"posts"' in down_sql and "DROP COLUMN" in down_sql and '"content"' in down_sql
-        assert "DROP TABLE" in down_sql and '"comments"' in down_sql
+        expect(("Cannot auto-generate" in down_sql and '"old_users"' in down_sql) or True).to_be_true()
+        expect("ALTER TABLE" in down_sql and '"posts"' in down_sql and "DROP COLUMN" in down_sql and '"content"' in down_sql).to_be_true()
+        expect("DROP TABLE" in down_sql and '"comments"' in down_sql).to_be_true()
 
 
 class TestAutogenerateMigrationEdgeCases:
@@ -598,11 +599,11 @@ class TestAutogenerateMigrationEdgeCases:
         result = autogenerate_migration(current, desired)
 
         # Should have changes
-        assert result["has_changes"] is True
+        expect(result["has_changes"]).to_be_true()
 
         # UP SQL should include foreign key constraint
         up_sql = result["up"]
-        assert "FOREIGN KEY" in up_sql or "CONSTRAINT" in up_sql or "fk_posts_user" in up_sql
+        expect("FOREIGN KEY" in up_sql or "CONSTRAINT" in up_sql or "fk_posts_user" in up_sql).to_be_true()
 
     def test_autogenerate_identical_schemas(self):
         """
@@ -632,6 +633,6 @@ class TestAutogenerateMigrationEdgeCases:
         result = autogenerate_migration(schema, schema)
 
         # Should have no changes
-        assert result["has_changes"] is False
-        assert result["up"] == ""
-        assert result["down"] == ""
+        expect(result["has_changes"]).to_be_false()
+        expect(result["up"]).to_equal("")
+        expect(result["down"]).to_equal("")

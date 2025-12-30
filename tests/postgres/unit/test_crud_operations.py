@@ -7,6 +7,7 @@ requiring a real database connection.
 import pytest
 from unittest.mock import AsyncMock, patch
 from data_bridge.postgres import Table, Column
+from data_bridge.test import expect
 
 
 @pytest.fixture
@@ -50,8 +51,8 @@ class TestSaveOperation:
             # Should call insert_one
             mock_engine.insert_one.assert_called_once()
             # Should set the id
-            assert user.id == 1
-            assert result_id == 1
+            expect(user.id).to_equal(1)
+            expect(result_id).to_equal(1)
 
     @pytest.mark.asyncio
     async def test_save_update_existing(self, User):
@@ -64,7 +65,7 @@ class TestSaveOperation:
 
             # Should call update_one
             mock_engine.update_one.assert_called_once()
-            assert result_id == 1
+            expect(result_id).to_equal(1)
 
     @pytest.mark.asyncio
     async def test_save_insert_includes_data(self, User):
@@ -79,9 +80,9 @@ class TestSaveOperation:
             call_args = mock_engine.insert_one.call_args[0]
             data = call_args[1]
 
-            assert data["name"] == "Alice"
-            assert data["email"] == "alice@example.com"
-            assert data["age"] == 30
+            expect(data["name"]).to_equal("Alice")
+            expect(data["email"]).to_equal("alice@example.com")
+            expect(data["age"]).to_equal(30)
 
     @pytest.mark.asyncio
     async def test_save_update_excludes_id_from_data(self, User):
@@ -97,7 +98,7 @@ class TestSaveOperation:
             data = call_args[3]
 
             # id should not be in the update data
-            assert "id" not in data
+            expect("id" not in data).to_be_true()
 
 
 class TestDeleteOperation:
@@ -123,7 +124,7 @@ class TestDeleteOperation:
 
             # Should call delete_one
             mock_engine.delete_one.assert_called_once()
-            assert result is True
+            expect(result).to_be_true()
 
     @pytest.mark.asyncio
     async def test_delete_without_id(self, User):
@@ -134,7 +135,7 @@ class TestDeleteOperation:
 
             # Should not call engine
             mock_engine.delete_one.assert_not_called()
-            assert result is False
+            expect(result).to_be_false()
 
     @pytest.mark.asyncio
     async def test_delete_not_found(self, User):
@@ -145,7 +146,7 @@ class TestDeleteOperation:
             user = User(id=999, name="Alice", email="alice@example.com")
             result = await user.delete()
 
-            assert result is False
+            expect(result).to_be_false()
 
 
 class TestRefreshOperation:
@@ -184,9 +185,9 @@ class TestRefreshOperation:
             await user.refresh()
 
             # Data should be updated
-            assert user.name == "Alice Updated"
-            assert user.email == "alice.new@example.com"
-            assert user.age == 31
+            expect(user.name).to_equal("Alice Updated")
+            expect(user.email).to_equal("alice.new@example.com")
+            expect(user.age).to_equal(31)
 
     @pytest.mark.asyncio
     async def test_refresh_not_found(self, User):
@@ -223,10 +224,10 @@ class TestGetOperation:
 
             user = await User.get(1)
 
-            assert isinstance(user, User)
-            assert user.id == 1
-            assert user.name == "Alice"
-            assert user.email == "alice@example.com"
+            expect(isinstance(user, User)).to_be_true()
+            expect(user.id).to_equal(1)
+            expect(user.name).to_equal("Alice")
+            expect(user.email).to_equal("alice@example.com")
 
     @pytest.mark.asyncio
     async def test_get_not_found(self, User):
@@ -236,7 +237,7 @@ class TestGetOperation:
 
             user = await User.get(999)
 
-            assert user is None
+            expect(user).to_be_none()
 
     @pytest.mark.asyncio
     async def test_get_calls_engine_with_pk(self, User):
@@ -249,9 +250,9 @@ class TestGetOperation:
             # Should call find_one with table name, pk column, and value
             mock_engine.find_one.assert_called_once()
             call_args = mock_engine.find_one.call_args[0]
-            assert "public.users" in call_args[0]
-            assert call_args[1] == "id"
-            assert call_args[2] == 5
+            expect("public.users" in call_args[0]).to_be_true()
+            expect(call_args[1]).to_equal("id")
+            expect(call_args[2]).to_equal(5)
 
 
 class TestInsertMany:
@@ -278,7 +279,7 @@ class TestInsertMany:
 
             ids = await User.insert_many(rows)
 
-            assert ids == [1, 2, 3]
+            expect(ids).to_equal([1, 2, 3])
             mock_engine.insert_many.assert_called_once()
 
     @pytest.mark.asyncio
@@ -294,12 +295,12 @@ class TestInsertMany:
 
             ids = await User.insert_many(rows)
 
-            assert ids == [1, 2]
+            expect(ids).to_equal([1, 2])
             # Should convert instances to dicts
             call_args = mock_engine.insert_many.call_args[0]
             data = call_args[1]
-            assert data[0]["name"] == "Alice"
-            assert data[1]["name"] == "Bob"
+            expect(data[0]["name"]).to_equal("Alice")
+            expect(data[1]["name"]).to_equal("Bob")
 
     @pytest.mark.asyncio
     async def test_insert_many_mixed_types_raises(self, User):
@@ -330,13 +331,13 @@ class TestDeleteMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=5)
             result = await User.delete_many(User.age < 18)
-            assert result == 5
+            expect(result).to_equal(5)
             # Verify delete_many was called with correct arguments
             mock_engine.delete_many.assert_called_once()
             args = mock_engine.delete_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert "age < $1" in args[1]  # WHERE clause
-            assert args[2] == [18]  # parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect("age < $1" in args[1]).to_be_true()  # WHERE clause
+            expect(args[2]).to_equal([18])  # parameters
 
     @pytest.mark.asyncio
     async def test_delete_many_no_filters(self, User):
@@ -344,13 +345,13 @@ class TestDeleteMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=10)
             result = await User.delete_many()
-            assert result == 10
+            expect(result).to_equal(10)
             # Verify delete_many was called with empty WHERE clause
             mock_engine.delete_many.assert_called_once()
             args = mock_engine.delete_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert args[1] == ""  # Empty WHERE clause
-            assert args[2] == []  # No parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect(args[1]).to_equal("")  # Empty WHERE clause
+            expect(args[2]).to_equal([])  # No parameters
 
     @pytest.mark.asyncio
     async def test_delete_many_with_dict_filter(self, User):
@@ -358,13 +359,13 @@ class TestDeleteMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=3)
             result = await User.delete_many({"name": "Alice"})
-            assert result == 3
+            expect(result).to_equal(3)
             # Verify delete_many was called with correct arguments
             mock_engine.delete_many.assert_called_once()
             args = mock_engine.delete_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert "name = $1" in args[1]  # WHERE clause
-            assert args[2] == ["Alice"]  # parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect("name = $1" in args[1]).to_be_true()  # WHERE clause
+            expect(args[2]).to_equal(["Alice"])  # parameters
 
 
 class TestUpdateMany:
@@ -383,14 +384,14 @@ class TestUpdateMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=5)
             result = await User.update_many({"status": "active"}, User.age >= 18)
-            assert result == 5
+            expect(result).to_equal(5)
             # Verify update_many was called with correct arguments
             mock_engine.update_many.assert_called_once()
             args = mock_engine.update_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert args[1] == {"status": "active"}  # updates
-            assert "age >= $1" in args[2]  # WHERE clause
-            assert args[3] == [18]  # parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect(args[1]).to_equal({"status": "active"})  # updates
+            expect("age >= $1" in args[2]).to_be_true()  # WHERE clause
+            expect(args[3]).to_equal([18])  # parameters
 
     @pytest.mark.asyncio
     async def test_update_many_no_filters(self, User):
@@ -398,14 +399,14 @@ class TestUpdateMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=10)
             result = await User.update_many({"status": "inactive"})
-            assert result == 10
+            expect(result).to_equal(10)
             # Verify update_many was called with empty WHERE clause
             mock_engine.update_many.assert_called_once()
             args = mock_engine.update_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert args[1] == {"status": "inactive"}  # updates
-            assert args[2] == ""  # Empty WHERE clause
-            assert args[3] == []  # No parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect(args[1]).to_equal({"status": "inactive"})  # updates
+            expect(args[2]).to_equal("")  # Empty WHERE clause
+            expect(args[3]).to_equal([])  # No parameters
 
     @pytest.mark.asyncio
     async def test_update_many_with_dict_filter(self, User):
@@ -413,14 +414,14 @@ class TestUpdateMany:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=3)
             result = await User.update_many({"age": 31}, {"name": "Alice"})
-            assert result == 3
+            expect(result).to_equal(3)
             # Verify update_many was called with correct arguments
             mock_engine.update_many.assert_called_once()
             args = mock_engine.update_many.call_args[0]
-            assert args[0] == "public.users"  # table name
-            assert args[1] == {"age": 31}  # updates
-            assert "name = $1" in args[2]  # WHERE clause
-            assert args[3] == ["Alice"]  # parameters
+            expect(args[0]).to_equal("public.users")  # table name
+            expect(args[1]).to_equal({"age": 31})  # updates
+            expect("name = $1" in args[2]).to_be_true()  # WHERE clause
+            expect(args[3]).to_equal(["Alice"])  # parameters
 
 
 class TestFindOne:
@@ -437,8 +438,8 @@ class TestFindOne:
             user = await User.find_one(User.email == "alice@example.com")
 
             # Should return an instance
-            assert isinstance(user, User)
-            assert user.email == "alice@example.com"
+            expect(isinstance(user, User)).to_be_true()
+            expect(user.email).to_equal("alice@example.com")
 
     @pytest.mark.asyncio
     async def test_find_one_returns_none(self, User):
@@ -448,7 +449,7 @@ class TestFindOne:
 
             user = await User.find_one(User.email == "notfound@example.com")
 
-            assert user is None
+            expect(user).to_be_none()
 
 
 class TestCount:
@@ -462,7 +463,7 @@ class TestCount:
 
             count = await User.count(User.age > 18)
 
-            assert count == 42
+            expect(count).to_equal(42)
 
     @pytest.mark.asyncio
     async def test_count_all(self, User):
@@ -472,4 +473,4 @@ class TestCount:
 
             count = await User.count()
 
-            assert count == 100
+            expect(count).to_equal(100)

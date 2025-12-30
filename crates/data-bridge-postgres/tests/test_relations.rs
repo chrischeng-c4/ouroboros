@@ -9,10 +9,11 @@
 use data_bridge_postgres::{
     Connection, ExtractedValue, JoinType, PoolConfig, RelationConfig, Row,
 };
+use data_bridge_test::{expect, AssertionError};
 
 #[tokio::test]
 #[ignore] // Only run with --ignored flag when database is available
-async fn test_find_with_relations_basic() {
+async fn test_find_with_relations_basic() -> Result<(), AssertionError> {
     // Setup database connection
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
@@ -94,21 +95,20 @@ async fn test_find_with_relations_basic() {
         .expect("Post should exist");
 
     // Verify main row data
-    assert!(matches!(
+    expect(matches!(
         result.get("title").unwrap(),
         ExtractedValue::String(s) if s == "First Post"
-    ));
+    )).to_be_true()?;
 
     // Verify relation data
     let author_data = result.get("author").unwrap();
     match author_data {
         ExtractedValue::Json(json_val) => {
             let author_obj = json_val.as_object().expect("Author should be object");
-            assert_eq!(
-                author_obj.get("name").unwrap().as_str().unwrap(),
-                "Alice"
-            );
-            assert_eq!(author_obj.get("id").unwrap().as_i64().unwrap(), user_id);
+            expect(author_obj.get("name").unwrap().as_str().unwrap())
+                .to_equal(&"Alice")?;
+            expect(author_obj.get("id").unwrap().as_i64().unwrap())
+                .to_equal(&user_id)?;
         }
         _ => panic!("Expected JSON for author"),
     }
@@ -122,11 +122,13 @@ async fn test_find_with_relations_basic() {
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_find_one_eager_helper() {
+async fn test_find_one_eager_helper() -> Result<(), AssertionError> {
     // Setup database connection
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
@@ -239,20 +241,18 @@ async fn test_find_one_eager_helper() {
     .expect("Comment should exist");
 
     // Verify main row data
-    assert!(matches!(
+    expect(matches!(
         result.get("content").unwrap(),
         ExtractedValue::String(s) if s == "Great post!"
-    ));
+    )).to_be_true()?;
 
     // Verify post relation
     let post_data = result.get("post").unwrap();
     match post_data {
         ExtractedValue::Json(json_val) => {
             let post_obj = json_val.as_object().expect("Post should be object");
-            assert_eq!(
-                post_obj.get("title").unwrap().as_str().unwrap(),
-                "Test Post"
-            );
+            expect(post_obj.get("title").unwrap().as_str().unwrap())
+                .to_equal(&"Test Post")?;
         }
         _ => panic!("Expected JSON for post"),
     }
@@ -262,7 +262,8 @@ async fn test_find_one_eager_helper() {
     match author_data {
         ExtractedValue::Json(json_val) => {
             let author_obj = json_val.as_object().expect("Author should be object");
-            assert_eq!(author_obj.get("name").unwrap().as_str().unwrap(), "Bob");
+            expect(author_obj.get("name").unwrap().as_str().unwrap())
+                .to_equal(&"Bob")?;
         }
         _ => panic!("Expected JSON for author"),
     }
@@ -280,11 +281,13 @@ async fn test_find_one_eager_helper() {
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_find_with_relations_not_found() {
+async fn test_find_with_relations_not_found() -> Result<(), AssertionError> {
     // Setup database connection
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
@@ -339,7 +342,7 @@ async fn test_find_with_relations_not_found() {
         .await
         .unwrap();
 
-    assert!(result.is_none(), "Should return None for non-existent ID");
+    expect(result.is_none()).to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_posts CASCADE")
@@ -350,11 +353,13 @@ async fn test_find_with_relations_not_found() {
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }
 
 #[tokio::test]
 #[ignore]
-async fn test_find_with_relations_null_foreign_key() {
+async fn test_find_with_relations_null_foreign_key() -> Result<(), AssertionError> {
     // Setup database connection
     let uri = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://localhost/test_db".to_string());
@@ -424,13 +429,14 @@ async fn test_find_with_relations_null_foreign_key() {
         .expect("Post should exist");
 
     // Verify main row data
-    assert!(matches!(
+    expect(matches!(
         result.get("title").unwrap(),
         ExtractedValue::String(s) if s == "Anonymous Post"
-    ));
+    )).to_be_true()?;
 
     // Verify author is NULL (LEFT JOIN with NULL foreign key)
-    assert!(matches!(result.get("author_id").unwrap(), ExtractedValue::Null));
+    expect(matches!(result.get("author_id").unwrap(), ExtractedValue::Null))
+        .to_be_true()?;
 
     // Clean up
     sqlx::query("DROP TABLE test_posts CASCADE")
@@ -441,4 +447,6 @@ async fn test_find_with_relations_null_foreign_key() {
         .execute(pool)
         .await
         .unwrap();
+
+    Ok(())
 }

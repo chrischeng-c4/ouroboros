@@ -8,6 +8,7 @@ import pytest
 from typing import Optional
 from unittest.mock import patch, AsyncMock
 from data_bridge.postgres import Table, Column, ColumnProxy
+from data_bridge.test import expect
 
 
 class TestTableMetaclass:
@@ -22,7 +23,7 @@ class TestTableMetaclass:
             class Settings:
                 table_name = "products"
 
-        assert Product._table_name == "products"
+        expect(Product._table_name).to_equal("products")
 
     def test_table_name_default(self):
         """Test table name defaults to lowercase class name."""
@@ -30,7 +31,7 @@ class TestTableMetaclass:
         class OrderItem(Table):
             name: str
 
-        assert OrderItem._table_name == "orderitem"
+        expect(OrderItem._table_name).to_equal("orderitem")
 
     def test_table_name_with_schema(self):
         """Test full table name includes schema."""
@@ -42,8 +43,8 @@ class TestTableMetaclass:
                 table_name = "users"
                 schema = "auth"
 
-        assert User._schema == "auth"
-        assert User.__table_name__() == "auth.users"
+        expect(User._schema).to_equal("auth")
+        expect(User.__table_name__()).to_equal("auth.users")
 
     def test_primary_key_detection(self):
         """Test primary key is correctly identified."""
@@ -54,7 +55,7 @@ class TestTableMetaclass:
             class Settings:
                 primary_key = "product_id"
 
-        assert Product._primary_key == "product_id"
+        expect(Product._primary_key).to_equal("product_id")
 
     def test_primary_key_default(self):
         """Test primary key defaults to 'id'."""
@@ -62,7 +63,7 @@ class TestTableMetaclass:
         class Product(Table):
             name: str
 
-        assert Product._primary_key == "id"
+        expect(Product._primary_key).to_equal("id")
 
     def test_column_definitions(self):
         """Test columns are correctly collected from annotations."""
@@ -72,11 +73,11 @@ class TestTableMetaclass:
             email: str
             age: int
 
-        assert "name" in User._columns
-        assert "email" in User._columns
-        assert "age" in User._columns
-        assert User._columns["name"] == str
-        assert User._columns["age"] == int
+        expect("name" in User._columns).to_be_true()
+        expect("email" in User._columns).to_be_true()
+        expect("age" in User._columns).to_be_true()
+        expect(User._columns["name"]).to_equal(str)
+        expect(User._columns["age"]).to_equal(int)
 
     def test_column_proxy_created(self):
         """Test ColumnProxy is created for each column."""
@@ -86,10 +87,10 @@ class TestTableMetaclass:
             email: str
 
         # Class-level access should return ColumnProxy
-        assert isinstance(User.name, ColumnProxy)
-        assert isinstance(User.email, ColumnProxy)
-        assert User.name.name == "name"
-        assert User.email.name == "email"
+        expect(isinstance(User.name, ColumnProxy)).to_be_true()
+        expect(isinstance(User.email, ColumnProxy)).to_be_true()
+        expect(User.name.name).to_equal("name")
+        expect(User.email.name).to_equal("email")
 
     def test_column_defaults_captured(self):
         """Test default values are captured before ColumnProxy replacement."""
@@ -99,10 +100,10 @@ class TestTableMetaclass:
             age: int = 0
             status: str = "active"
 
-        assert "age" in User._column_defaults
-        assert "status" in User._column_defaults
-        assert User._column_defaults["age"] == 0
-        assert User._column_defaults["status"] == "active"
+        expect("age" in User._column_defaults).to_be_true()
+        expect("status" in User._column_defaults).to_be_true()
+        expect(User._column_defaults["age"]).to_equal(0)
+        expect(User._column_defaults["status"]).to_equal("active")
 
     def test_column_with_column_descriptor(self):
         """Test Column descriptor is properly captured."""
@@ -112,12 +113,12 @@ class TestTableMetaclass:
             age: int = Column(default=0)
 
         # Should have ColumnProxy at class level
-        assert isinstance(User.email, ColumnProxy)
-        assert isinstance(User.age, ColumnProxy)
+        expect(isinstance(User.email, ColumnProxy)).to_be_true()
+        expect(isinstance(User.age, ColumnProxy)).to_be_true()
 
         # Default should be captured
-        assert "email" in User._column_defaults
-        assert isinstance(User._column_defaults["email"], Column)
+        expect("email" in User._column_defaults).to_be_true()
+        expect(isinstance(User._column_defaults["email"], Column)).to_be_true()
 
     def test_skip_private_attributes(self):
         """Test private attributes are not treated as columns."""
@@ -126,8 +127,8 @@ class TestTableMetaclass:
             name: str
             _private: str = "secret"
 
-        assert "name" in User._columns
-        assert "_private" not in User._columns
+        expect("name" in User._columns).to_be_true()
+        expect("_private" in User._columns).to_be_false()
 
     def test_inheritance(self):
         """Test table inheritance works correctly."""
@@ -140,9 +141,9 @@ class TestTableMetaclass:
             email: str
 
         # Should have all columns from parent and child
-        assert "created_at" in User._columns
-        assert "name" in User._columns
-        assert "email" in User._columns
+        expect("created_at" in User._columns).to_be_true()
+        expect("name" in User._columns).to_be_true()
+        expect("email" in User._columns).to_be_true()
 
 
 class TestTableInstanceCreation:
@@ -153,25 +154,25 @@ class TestTableInstanceCreation:
         User = sample_table_class
         user = User(name="Alice", email="alice@example.com")
 
-        assert user.name == "Alice"
-        assert user.email == "alice@example.com"
-        assert user.id is None
+        expect(user.name).to_equal("Alice")
+        expect(user.email).to_equal("alice@example.com")
+        expect(user.id).to_be_none()
 
     def test_instance_creation_with_id(self, sample_table_class):
         """Test instance creation with id."""
         User = sample_table_class
         user = User(id=5, name="Alice", email="alice@example.com")
 
-        assert user.id == 5
-        assert user.name == "Alice"
+        expect(user.id).to_equal(5)
+        expect(user.name).to_equal("Alice")
 
     def test_instance_creation_with_defaults(self, sample_table_class):
         """Test default values are applied."""
         User = sample_table_class
         user = User(name="Alice", email="alice@example.com")
 
-        assert user.age == 0  # Default from annotation
-        assert user.city == "NYC"  # Default from Column
+        expect(user.age).to_equal(0)  # Default from annotation
+        expect(user.city).to_equal("NYC")  # Default from Column
 
     def test_field_assignment(self, sample_table_class):
         """Test field values can be assigned after creation."""
@@ -181,26 +182,26 @@ class TestTableInstanceCreation:
         user.name = "Alice Smith"
         user.age = 30
 
-        assert user.name == "Alice Smith"
-        assert user.age == 30
+        expect(user.name).to_equal("Alice Smith")
+        expect(user.age).to_equal(30)
 
     def test_field_access_via_data(self, sample_table_class):
         """Test fields are stored in _data dict."""
         User = sample_table_class
         user = User(name="Alice", email="alice@example.com", age=25)
 
-        assert "name" in user._data
-        assert "email" in user._data
-        assert user._data["name"] == "Alice"
-        assert user._data["age"] == 25
+        expect("name" in user._data).to_be_true()
+        expect("email" in user._data).to_be_true()
+        expect(user._data["name"]).to_equal("Alice")
+        expect(user._data["age"]).to_equal(25)
 
     def test_id_not_in_data(self, sample_table_class):
         """Test id is stored separately, not in _data."""
         User = sample_table_class
         user = User(id=5, name="Alice", email="alice@example.com")
 
-        assert user.id == 5
-        assert "id" not in user._data
+        expect(user.id).to_equal(5)
+        expect("id" in user._data).to_be_false()
 
     def test_optional_fields(self):
         """Test optional fields work correctly."""
@@ -210,11 +211,11 @@ class TestTableInstanceCreation:
             email: Optional[str] = None
 
         user = User(name="Alice")
-        assert user.name == "Alice"
+        expect(user.name).to_equal("Alice")
         # email should not be set if not provided and no default
 
         user2 = User(name="Bob", email="bob@example.com")
-        assert user2.email == "bob@example.com"
+        expect(user2.email).to_equal("bob@example.com")
 
     def test_column_default_factory(self):
         """Test Column with default_factory."""
@@ -231,8 +232,8 @@ class TestTableInstanceCreation:
 
         # Each instance should get a new list
         user1.tags.append("admin")
-        assert len(user1.tags) == 1
-        assert len(user2.tags) == 0
+        expect(len(user1.tags)).to_equal(1)
+        expect(len(user2.tags)).to_equal(0)
 
 
 class TestTableToDict:
@@ -245,10 +246,10 @@ class TestTableToDict:
 
         data = user.to_dict()
 
-        assert isinstance(data, dict)
-        assert data["name"] == "Alice"
-        assert data["email"] == "alice@example.com"
-        assert data["age"] == 30
+        expect(isinstance(data, dict)).to_be_true()
+        expect(data["name"]).to_equal("Alice")
+        expect(data["email"]).to_equal("alice@example.com")
+        expect(data["age"]).to_equal(30)
 
     def test_to_dict_includes_id(self, sample_table_class):
         """Test to_dict includes id when set."""
@@ -257,8 +258,8 @@ class TestTableToDict:
 
         data = user.to_dict()
 
-        assert "id" in data
-        assert data["id"] == 5
+        expect("id" in data).to_be_true()
+        expect(data["id"]).to_equal(5)
 
     def test_to_dict_excludes_id_when_none(self, sample_table_class):
         """Test to_dict works when id is None."""
@@ -268,7 +269,7 @@ class TestTableToDict:
         data = user.to_dict()
 
         # id=None should not be included
-        assert user.id is None
+        expect(user.id).to_be_none()
 
     def test_to_dict_with_defaults(self, sample_table_class):
         """Test to_dict includes default values."""
@@ -277,8 +278,8 @@ class TestTableToDict:
 
         data = user.to_dict()
 
-        assert data["age"] == 0
-        assert data["city"] == "NYC"
+        expect(data["age"]).to_equal(0)
+        expect(data["city"]).to_equal("NYC")
 
 
 class TestTableRepr:
@@ -293,9 +294,9 @@ class TestTableRepr:
         proxy = User.name
         repr_str = repr(proxy)
 
-        assert "ColumnProxy" in repr_str
-        assert "name" in repr_str
-        assert "User" in repr_str
+        expect("ColumnProxy" in repr_str).to_be_true()
+        expect("name" in repr_str).to_be_true()
+        expect("User" in repr_str).to_be_true()
 
 
 class TestTableAttributeAccess:
@@ -306,8 +307,8 @@ class TestTableAttributeAccess:
         User = sample_table_class
         user = User(name="Alice", email="alice@example.com")
 
-        assert user.name == "Alice"
-        assert user.email == "alice@example.com"
+        expect(user.name).to_equal("Alice")
+        expect(user.email).to_equal("alice@example.com")
 
     def test_getattr_raises_for_missing(self, sample_table_class):
         """Test __getattr__ raises AttributeError for missing fields."""
@@ -324,7 +325,7 @@ class TestTableAttributeAccess:
 
         user.name = "Alice Smith"
 
-        assert user._data["name"] == "Alice Smith"
+        expect(user._data["name"]).to_equal("Alice Smith")
 
     def test_setattr_preserves_private(self, sample_table_class):
         """Test __setattr__ doesn't store private attrs in _data."""
@@ -333,8 +334,8 @@ class TestTableAttributeAccess:
 
         user._custom = "value"
 
-        assert "_custom" not in user._data
-        assert user._custom == "value"
+        expect("_custom" in user._data).to_be_false()
+        expect(user._custom).to_equal("value")
 
     def test_setattr_preserves_id(self, sample_table_class):
         """Test __setattr__ stores id separately."""
@@ -343,7 +344,7 @@ class TestTableAttributeAccess:
 
         user.id = 10
 
-        assert user.id == 10
+        expect(user.id).to_equal(10)
         # Note: Current implementation stores id in _data when set as attribute
         # This is implementation detail and may be acceptable
 
@@ -359,8 +360,8 @@ class TestTableClassMethods:
         User = sample_table_class
         query = User.find()
 
-        assert isinstance(query, QueryBuilder)
-        assert query._model == User
+        expect(isinstance(query, QueryBuilder)).to_be_true()
+        expect(query._model).to_equal(User)
 
     @pytest.mark.asyncio
     async def test_find_with_filters(self, sample_table_class):
@@ -370,8 +371,8 @@ class TestTableClassMethods:
         User = sample_table_class
         query = User.find(User.age > 25)
 
-        assert isinstance(query, QueryBuilder)
-        assert len(query._filters) == 1
+        expect(isinstance(query, QueryBuilder)).to_be_true()
+        expect(len(query._filters)).to_equal(1)
 
     @pytest.mark.asyncio
     async def test_count_delegates_to_find(self, sample_table_class):
@@ -387,7 +388,7 @@ class TestTableClassMethods:
 
             result = await User.count()
 
-            assert result == 42
+            expect(result).to_equal(42)
             mock_engine.count.assert_called_once()
 
 
@@ -400,8 +401,8 @@ class TestTableSettings:
         class Product(Table):
             name: str
 
-        assert Product._schema == "public"
-        assert Product._primary_key == "id"
+        expect(Product._schema).to_equal("public")
+        expect(Product._primary_key).to_equal("id")
 
     def test_settings_custom_values(self):
         """Test custom Settings values are used."""
@@ -414,9 +415,9 @@ class TestTableSettings:
                 schema = "inventory"
                 primary_key = "sku"
 
-        assert Product._table_name == "products"
-        assert Product._schema == "inventory"
-        assert Product._primary_key == "sku"
+        expect(Product._table_name).to_equal("products")
+        expect(Product._schema).to_equal("inventory")
+        expect(Product._primary_key).to_equal("sku")
 
     def test_settings_indexes(self):
         """Test Settings can include index definitions."""
@@ -430,4 +431,4 @@ class TestTableSettings:
                 ]
 
         # Should be accessible
-        assert hasattr(User._settings, "indexes")
+        expect(hasattr(User._settings, "indexes")).to_be_true()

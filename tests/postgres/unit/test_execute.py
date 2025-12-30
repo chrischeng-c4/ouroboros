@@ -5,6 +5,7 @@ Tests the execute() function with various SQL query types and parameter binding.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
+from data_bridge.test import expect
 
 
 class TestExecuteFunction:
@@ -33,9 +34,9 @@ class TestExecuteFunction:
         results = await execute("SELECT * FROM users WHERE age > $1", [20])
 
         mock_connection_engine.execute.assert_called_once()
-        assert len(results) == 2
-        assert results[0]["name"] == "Alice"
-        assert results[1]["name"] == "Bob"
+        expect(len(results)).to_equal(2)
+        expect(results[0]["name"]).to_equal("Alice")
+        expect(results[1]["name"]).to_equal("Bob")
 
     @pytest.mark.asyncio
     async def test_execute_insert_query(self, mock_connection_engine):
@@ -50,7 +51,7 @@ class TestExecuteFunction:
         )
 
         mock_connection_engine.execute.assert_called_once()
-        assert count == 1
+        expect(count).to_equal(1)
 
     @pytest.mark.asyncio
     async def test_execute_update_query(self, mock_connection_engine):
@@ -65,7 +66,7 @@ class TestExecuteFunction:
         )
 
         mock_connection_engine.execute.assert_called_once()
-        assert count == 3
+        expect(count).to_equal(3)
 
     @pytest.mark.asyncio
     async def test_execute_delete_query(self, mock_connection_engine):
@@ -77,7 +78,7 @@ class TestExecuteFunction:
         count = await execute("DELETE FROM users WHERE age < $1", [18])
 
         mock_connection_engine.execute.assert_called_once()
-        assert count == 2
+        expect(count).to_equal(2)
 
     @pytest.mark.asyncio
     async def test_execute_ddl_query(self, mock_connection_engine):
@@ -89,7 +90,7 @@ class TestExecuteFunction:
         result = await execute("CREATE INDEX idx_users_age ON users(age)")
 
         mock_connection_engine.execute.assert_called_once()
-        assert result is None
+        expect(result).to_be_none()
 
     @pytest.mark.asyncio
     async def test_execute_without_params(self, mock_connection_engine):
@@ -101,7 +102,7 @@ class TestExecuteFunction:
         result = await execute("SELECT COUNT(*) as count FROM users")
 
         mock_connection_engine.execute.assert_called_once()
-        assert result[0]["count"] == 10
+        expect(result[0]["count"]).to_equal(10)
 
     @pytest.mark.asyncio
     async def test_execute_with_multiple_params(self, mock_connection_engine):
@@ -120,7 +121,7 @@ class TestExecuteFunction:
         mock_connection_engine.execute.assert_called_once()
         # Check that parameters were passed
         call_args = mock_connection_engine.execute.call_args
-        assert call_args[0][1] == [25, 35, 10]
+        expect(call_args[0][1]).to_equal([25, 35, 10])
 
     @pytest.mark.asyncio
     async def test_execute_with_none_params(self, mock_connection_engine):
@@ -135,7 +136,7 @@ class TestExecuteFunction:
         )
 
         mock_connection_engine.execute.assert_called_once()
-        assert count == 1
+        expect(count).to_equal(1)
 
     @pytest.mark.asyncio
     async def test_execute_with_various_types(self, mock_connection_engine):
@@ -151,7 +152,7 @@ class TestExecuteFunction:
         )
 
         mock_connection_engine.execute.assert_called_once()
-        assert count == 1
+        expect(count).to_equal(1)
 
 
 class TestExecuteSecurity:
@@ -173,7 +174,7 @@ class TestExecuteSecurity:
 
         # The parameter should be passed as-is to the engine
         call_args = mock_connection_engine.execute.call_args
-        assert call_args[0][1][0] == malicious_input
+        expect(call_args[0][1][0]).to_equal(malicious_input)
 
 
 class TestExecuteErrorHandling:
