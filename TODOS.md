@@ -20,19 +20,19 @@ Atomic, testable tasks organized by priority and component.
 
 ### SQL Injection Vulnerabilities
 
-- [ ] P0-SEC-01: Fix SQL Injection in JOIN ON conditions
+- [x] P0-SEC-01: Fix SQL Injection in JOIN ON conditions (2025-12-30)
   - **Location**: `query.rs:303-316`, `row.rs:477-483`
   - **Issue**: `on_condition` parameter inserted directly without validation
   - **Fix**: Validate ON conditions or create structured builder
   - **Test**: Attempt injection with malicious ON clause
 
-- [ ] P0-SEC-02: Fix SQL Injection in Cascade Delete format!
+- [x] P0-SEC-02: Fix SQL Injection in Cascade Delete format! (2025-12-30)
   - **Location**: `row.rs:754-812`
   - **Issue**: `backref.source_table/source_column` in `format!` without validation
   - **Fix**: Pre-validate BackRef fields before SQL generation
   - **Test**: Attempt injection via BackRef struct fields
 
-- [ ] P0-SEC-03: Add RelationConfig field validation
+- [x] P0-SEC-03: Add RelationConfig field validation (2025-12-30)
   - **Location**: `row.rs:454-486`
   - **Issue**: RelationConfig fields bypass validation if constructed externally
   - **Fix**: Validate all fields at construction time
