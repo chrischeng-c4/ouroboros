@@ -44,7 +44,7 @@ Atomic, testable tasks organized by priority and component.
 
 ### Bug Fixes
 
-- [ ] P1-BUG-01: Fix NULL FK column aliasing (6 skipped tests)
+- [x] P1-BUG-01: Fix NULL FK column aliasing (6 skipped tests) (2025-12-30)
   - **Location**: `tests/postgres/integration/test_eager_loading.py`
   - **Issue**: Column aliasing fails for NULL foreign keys in JOINs
   - **Tests**:
