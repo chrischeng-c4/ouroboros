@@ -157,6 +157,43 @@ impl JoinType {
     }
 }
 
+/// Structured JOIN condition to prevent SQL injection
+/// Only allows safe table.column = table.column patterns
+#[derive(Debug, Clone)]
+pub struct JoinCondition {
+    /// Column from the left (main) table
+    pub left_column: String,
+    /// Table/alias on the right side of the join
+    pub right_table: String,
+    /// Column from the right table
+    pub right_column: String,
+}
+
+impl JoinCondition {
+    /// Create a new JOIN condition with validated identifiers
+    pub fn new(left_column: &str, right_table: &str, right_column: &str) -> Result<Self> {
+        QueryBuilder::validate_identifier(left_column)?;
+        QueryBuilder::validate_identifier(right_table)?;
+        QueryBuilder::validate_identifier(right_column)?;
+        Ok(Self {
+            left_column: left_column.to_string(),
+            right_table: right_table.to_string(),
+            right_column: right_column.to_string(),
+        })
+    }
+
+    /// Generate SQL for the ON clause
+    pub fn to_sql(&self, main_table: &str) -> String {
+        format!(
+            "\"{}\".\"{}\" = \"{}\".\"{}\"",
+            main_table,
+            self.left_column,
+            self.right_table,
+            self.right_column
+        )
+    }
+}
+
 /// Represents a JOIN clause
 #[derive(Debug, Clone)]
 pub struct JoinClause {
@@ -167,7 +204,7 @@ pub struct JoinClause {
     /// Optional alias for the joined table
     pub alias: Option<String>,
     /// ON condition for the join
-    pub on_condition: String,
+    pub on_condition: JoinCondition,
 }
 
 /// Type-safe SQL query builder.
@@ -295,12 +332,12 @@ impl QueryBuilder {
     /// * `join_type` - Type of JOIN (INNER, LEFT, RIGHT, FULL)
     /// * `table` - Table to join
     /// * `alias` - Optional alias for the joined table
-    /// * `on_condition` - ON condition for the join
+    /// * `condition` - Structured JOIN condition for security
     ///
     /// # Errors
     ///
     /// Returns error if table or alias name is invalid.
-    pub fn join(mut self, join_type: JoinType, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
+    pub fn join(mut self, join_type: JoinType, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
         Self::validate_identifier(table)?;
         if let Some(a) = alias {
             Self::validate_identifier(a)?;
@@ -310,7 +347,7 @@ impl QueryBuilder {
             join_type,
             table: table.to_string(),
             alias: alias.map(|s| s.to_string()),
-            on_condition: on_condition.to_string(),
+            on_condition: condition,
         });
         Ok(self)
     }
@@ -321,9 +358,9 @@ impl QueryBuilder {
     ///
     /// * `table` - Table to join
     /// * `alias` - Optional alias for the joined table
-    /// * `on_condition` - ON condition for the join
-    pub fn inner_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
-        self.join(JoinType::Inner, table, alias, on_condition)
+    /// * `condition` - Structured JOIN condition for security
+    pub fn inner_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Inner, table, alias, condition)
     }
 
     /// Add a LEFT JOIN.
@@ -332,9 +369,9 @@ impl QueryBuilder {
     ///
     /// * `table` - Table to join
     /// * `alias` - Optional alias for the joined table
-    /// * `on_condition` - ON condition for the join
-    pub fn left_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
-        self.join(JoinType::Left, table, alias, on_condition)
+    /// * `condition` - Structured JOIN condition for security
+    pub fn left_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Left, table, alias, condition)
     }
 
     /// Add a RIGHT JOIN.
@@ -343,9 +380,9 @@ impl QueryBuilder {
     ///
     /// * `table` - Table to join
     /// * `alias` - Optional alias for the joined table
-    /// * `on_condition` - ON condition for the join
-    pub fn right_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
-        self.join(JoinType::Right, table, alias, on_condition)
+    /// * `condition` - Structured JOIN condition for security
+    pub fn right_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Right, table, alias, condition)
     }
 
     /// Add a FULL OUTER JOIN.
@@ -354,9 +391,9 @@ impl QueryBuilder {
     ///
     /// * `table` - Table to join
     /// * `alias` - Optional alias for the joined table
-    /// * `on_condition` - ON condition for the join
-    pub fn full_join(self, table: &str, alias: Option<&str>, on_condition: &str) -> Result<Self> {
-        self.join(JoinType::Full, table, alias, on_condition)
+    /// * `condition` - Structured JOIN condition for security
+    pub fn full_join(self, table: &str, alias: Option<&str>, condition: JoinCondition) -> Result<Self> {
+        self.join(JoinType::Full, table, alias, condition)
     }
 
     /// Builds a SELECT SQL query string with parameter placeholders.
@@ -384,7 +421,12 @@ impl QueryBuilder {
                 Some(alias) => format!("{} AS \"{}\"", Self::quote_identifier(&join.table), alias),
                 None => Self::quote_identifier(&join.table),
             };
-            sql.push_str(&format!(" {} {} ON {}", join.join_type.to_sql(), table_ref, join.on_condition));
+            sql.push_str(&format!(
+                " {} {} ON {}",
+                join.join_type.to_sql(),
+                table_ref,
+                join.on_condition.to_sql(&self.table)
+            ));
         }
 
         // WHERE clause
@@ -1625,63 +1667,70 @@ mod tests {
 
     #[test]
     fn test_inner_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
-            .inner_join("users", None, "posts.author_id = users.id").unwrap();
+            .inner_join("users", None, condition).unwrap();
 
         let (sql, _) = qb.build_select();
-        assert!(sql.contains("INNER JOIN \"users\" ON posts.author_id = users.id"));
-        assert_eq!(sql, "SELECT \"posts\".\"id\", \"posts\".\"title\", \"users\".\"name\" FROM \"posts\" INNER JOIN \"users\" ON posts.author_id = users.id");
+        assert!(sql.contains("INNER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
+        assert_eq!(sql, "SELECT \"posts\".\"id\", \"posts\".\"title\", \"users\".\"name\" FROM \"posts\" INNER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\"");
     }
 
     #[test]
     fn test_left_join_with_alias() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
-            .left_join("users", Some("u"), "p.author_id = u.id").unwrap();
+            .left_join("users", Some("u"), condition).unwrap();
 
         let (sql, _) = qb.build_select();
-        assert!(sql.contains("LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id"));
-        assert_eq!(sql, "SELECT \"p\".\"id\", \"u\".\"name\" FROM \"posts\" LEFT JOIN \"users\" AS \"u\" ON p.author_id = u.id");
+        assert!(sql.contains("LEFT JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\""));
+        assert_eq!(sql, "SELECT \"p\".\"id\", \"u\".\"name\" FROM \"posts\" LEFT JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\"");
     }
 
     #[test]
     fn test_multiple_joins() {
+        let condition1 = JoinCondition::new("author_id", "u", "id").unwrap();
+        let condition2 = JoinCondition::new("category_id", "c", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
-            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
-            .left_join("categories", Some("c"), "posts.category_id = c.id").unwrap();
+            .inner_join("users", Some("u"), condition1).unwrap()
+            .left_join("categories", Some("c"), condition2).unwrap();
 
         let (sql, _) = qb.build_select();
         assert!(sql.contains("INNER JOIN"));
         assert!(sql.contains("LEFT JOIN"));
-        assert_eq!(sql, "SELECT * FROM \"posts\" INNER JOIN \"users\" AS \"u\" ON posts.author_id = u.id LEFT JOIN \"categories\" AS \"c\" ON posts.category_id = c.id");
+        assert_eq!(sql, "SELECT * FROM \"posts\" INNER JOIN \"users\" AS \"u\" ON \"posts\".\"author_id\" = \"u\".\"id\" LEFT JOIN \"categories\" AS \"c\" ON \"posts\".\"category_id\" = \"c\".\"id\"");
     }
 
     #[test]
     fn test_right_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
-            .right_join("users", None, "posts.author_id = users.id").unwrap();
+            .right_join("users", None, condition).unwrap();
 
         let (sql, _) = qb.build_select();
-        assert!(sql.contains("RIGHT JOIN \"users\" ON posts.author_id = users.id"));
+        assert!(sql.contains("RIGHT JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
     }
 
     #[test]
     fn test_full_join() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
-            .full_join("users", None, "posts.author_id = users.id").unwrap();
+            .full_join("users", None, condition).unwrap();
 
         let (sql, _) = qb.build_select();
-        assert!(sql.contains("FULL OUTER JOIN \"users\" ON posts.author_id = users.id"));
+        assert!(sql.contains("FULL OUTER JOIN \"users\" ON \"posts\".\"author_id\" = \"users\".\"id\""));
     }
 
     #[test]
     fn test_join_with_where() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["posts.id".to_string(), "posts.title".to_string(), "users.name".to_string()]).unwrap()
-            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
+            .inner_join("users", Some("u"), condition).unwrap()
             .where_clause("posts.published", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
 
         let (sql, params) = qb.build_select();
@@ -1692,9 +1741,10 @@ mod tests {
 
     #[test]
     fn test_join_with_order_and_limit() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
         let qb = QueryBuilder::new("posts").unwrap()
             .select(vec!["posts.id".to_string(), "users.name".to_string()]).unwrap()
-            .inner_join("users", Some("u"), "posts.author_id = u.id").unwrap()
+            .inner_join("users", Some("u"), condition).unwrap()
             .order_by("posts.created_at", OrderDirection::Desc).unwrap()
             .limit(10);
 
@@ -1708,25 +1758,73 @@ mod tests {
     #[test]
     fn test_join_invalid_table_name() {
         let result = QueryBuilder::new("posts").unwrap()
-            .inner_join("drop", None, "posts.author_id = drop.id");
+            .inner_join("drop", None, JoinCondition::new("author_id", "users", "id").unwrap());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_join_invalid_alias() {
         let result = QueryBuilder::new("posts").unwrap()
-            .inner_join("users", Some("select"), "posts.author_id = select.id");
+            .inner_join("users", Some("select"), JoinCondition::new("author_id", "users", "id").unwrap());
         assert!(result.is_err());
     }
 
     #[test]
     fn test_join_with_schema_qualified_table() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
         let qb = QueryBuilder::new("public.posts").unwrap()
             .select(vec!["p.id".to_string(), "u.name".to_string()]).unwrap()
-            .inner_join("public.users", Some("u"), "p.author_id = u.id").unwrap();
+            .inner_join("public.users", Some("u"), condition).unwrap();
 
         let (sql, _) = qb.build_select();
         assert!(sql.contains("FROM \"public\".\"posts\""));
         assert!(sql.contains("INNER JOIN \"public\".\"users\" AS \"u\""));
+    }
+
+    #[test]
+    fn test_join_condition_valid() {
+        let condition = JoinCondition::new("author_id", "users", "id").unwrap();
+        let sql = condition.to_sql("posts");
+        assert_eq!(sql, "\"posts\".\"author_id\" = \"users\".\"id\"");
+    }
+
+    #[test]
+    fn test_join_condition_with_alias() {
+        let condition = JoinCondition::new("author_id", "u", "id").unwrap();
+        let sql = condition.to_sql("posts");
+        assert_eq!(sql, "\"posts\".\"author_id\" = \"u\".\"id\"");
+    }
+
+    #[test]
+    fn test_join_condition_invalid_left_column() {
+        let result = JoinCondition::new("drop", "users", "id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_invalid_right_table() {
+        let result = JoinCondition::new("author_id", "select", "id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_invalid_right_column() {
+        let result = JoinCondition::new("author_id", "users", "delete");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_join_condition_sql_injection_attempt() {
+        // Attempt SQL injection in column name
+        let result = JoinCondition::new("author_id; DROP TABLE users--", "users", "id");
+        assert!(result.is_err());
+
+        // Attempt SQL injection in table name
+        let result = JoinCondition::new("author_id", "users; DROP TABLE posts--", "id");
+        assert!(result.is_err());
+
+        // Attempt SQL injection in right column
+        let result = JoinCondition::new("author_id", "users", "id OR 1=1--");
+        assert!(result.is_err());
     }
 }

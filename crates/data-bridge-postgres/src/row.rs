@@ -9,7 +9,7 @@ use sqlx::Row as SqlxRow;
 use std::collections::HashMap;
 
 use crate::{DataBridgeError, ExtractedValue, QueryBuilder, Result, row_to_extracted};
-use crate::query::{JoinType, Operator, OrderDirection};
+use crate::query::{JoinType, JoinCondition, Operator, OrderDirection};
 
 /// Relation configuration for eager loading
 #[derive(Debug, Clone)]
@@ -487,13 +487,13 @@ impl Row {
 
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);
-            let on_condition = format!(
-                "{} = \"{}\".\"id\"",
-                format!("{}.\"{}\"", quoted_main_table, rel.foreign_key),
-                alias
-            );
+            let join_condition = JoinCondition::new(
+                &rel.foreign_key,
+                &alias,
+                &rel.reference_column
+            )?;
 
-            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), &on_condition)?;
+            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), join_condition)?;
         }
 
         let qualified_id_col = format!("{}.id", table);
@@ -624,13 +624,13 @@ impl Row {
 
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);
-            let on_condition = format!(
-                "{} = \"{}\".\"id\"",
-                format!("{}.\"{}\"", quoted_main_table, rel.foreign_key),
-                alias
-            );
+            let join_condition = JoinCondition::new(
+                &rel.foreign_key,
+                &alias,
+                &rel.reference_column
+            )?;
 
-            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), &on_condition)?;
+            qb = qb.join(rel.join_type.clone(), &rel.table, Some(&alias), join_condition)?;
         }
 
         if let Some((col, op, val)) = where_clause {
