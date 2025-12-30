@@ -228,7 +228,6 @@ class TestFetchOneWithRelations:
         # With INNER JOIN, this might return None or empty depending on implementation
         # The key is that the company relation is not satisfied
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_with_custom_reference_column(self):
         """Test custom reference column (not just 'id')."""
         await execute("""
@@ -351,7 +350,6 @@ class TestFetchManyWithRelations:
         expect(results[0]["total"]).to_equal(100)
         expect(results[0]["store_id"]).to_equal(1)
 
-    @pytest.mark.skip(reason="TODO: Fix column aliasing for NULL foreign keys")
     async def test_fetch_many_with_limit_offset(self):
         """Test pagination with limit and offset."""
         await execute("""

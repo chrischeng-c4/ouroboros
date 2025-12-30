@@ -5,6 +5,7 @@
 
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
+use tracing::{info, instrument};
 
 use crate::{DataBridgeError, Result};
 
@@ -52,6 +53,10 @@ impl Connection {
     /// # Errors
     ///
     /// Returns error if connection fails or URI is invalid.
+    #[instrument(skip(uri), fields(
+        min_connections = config.min_connections,
+        max_connections = config.max_connections
+    ))]
     pub async fn new(uri: &str, config: PoolConfig) -> Result<Self> {
         // Validate URI format (basic check)
         if uri.is_empty() {
@@ -59,6 +64,8 @@ impl Connection {
                 "Connection URI cannot be empty".to_string(),
             ));
         }
+
+        info!("Initializing connection pool");
 
         // Build pool options with configuration
         let mut pool_options = PgPoolOptions::new()
@@ -84,6 +91,7 @@ impl Connection {
             .await
             .map_err(|e| DataBridgeError::Connection(format!("Failed to verify connection: {}", e)))?;
 
+        info!("Connection pool initialized successfully");
         Ok(Self { pool })
     }
 

@@ -39,6 +39,9 @@ tracing = { workspace = true }
 # Hashing for migration checksums
 sha2 = "0.10"
 
+# Unicode normalization for security
+unicode-normalization = "0.1"
+
 [dev-dependencies]
 tokio-test = "0.4"
 data-bridge-test = { path = "../data-bridge-test" }

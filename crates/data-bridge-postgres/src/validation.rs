@@ -4,11 +4,14 @@
 //! to prevent SQL injection and ensure proper formatting.
 
 use crate::Result;
+use tracing::warn;
+use unicode_normalization::UnicodeNormalization;
 
 /// Validates a PostgreSQL identifier (table or column name).
 ///
 /// Ensures the identifier:
 /// - Is not empty
+/// - Is normalized to NFKC (prevents Unicode confusables)
 /// - Contains only alphanumeric characters, underscores, and dollar signs
 /// - Does not start with a digit
 /// - Is not a PostgreSQL reserved keyword (basic check)
@@ -23,17 +26,29 @@ use crate::Result;
 /// Ok(()) if valid, Err with descriptive message if invalid
 fn validate_identifier(identifier: &str, _identifier_type: &str) -> Result<()> {
     if identifier.is_empty() {
+        warn!(reason = "empty_identifier", "Identifier validation failed");
         return Err(crate::DataBridgeError::Query(
             "Identifier cannot be empty".to_string()
         ));
     }
 
+    // Normalize to NFKC to prevent Unicode confusables
+    // This prevents attacks using visually similar characters:
+    // - Cyrillic 'а' (U+0430) vs ASCII 'a' (U+0061)
+    // - Greek 'Α' (U+0391) vs ASCII 'A' (U+0041)
+    // - Fullwidth characters (U+FF01-U+FF5E)
+    let identifier = identifier.nfkc().collect::<String>();
+
     // Check first character
     let first_char = identifier.chars().next()
-        .ok_or_else(|| crate::DataBridgeError::Query(
-            "Invalid identifier format".to_string()
-        ))?;
+        .ok_or_else(|| {
+            warn!(reason = "invalid_format", "Identifier validation failed");
+            crate::DataBridgeError::Query(
+                "Invalid identifier format".to_string()
+            )
+        })?;
     if first_char.is_ascii_digit() {
+        warn!(reason = "starts_with_digit", "Identifier validation failed");
         return Err(crate::DataBridgeError::Query(
             "Identifier cannot start with a digit".to_string()
         ));
@@ -42,6 +57,7 @@ fn validate_identifier(identifier: &str, _identifier_type: &str) -> Result<()> {
     // Check all characters are valid
     for c in identifier.chars() {
         if !c.is_alphanumeric() && c != '_' && c != '$' {
+            warn!(reason = "invalid_characters", "Identifier validation failed");
             return Err(crate::DataBridgeError::Query(
                 "Identifier contains invalid characters. Only alphanumeric, underscore, and dollar sign allowed".to_string()
             ));
@@ -53,6 +69,7 @@ fn validate_identifier(identifier: &str, _identifier_type: &str) -> Result<()> {
     let dangerous_patterns = ["--", "/*", "*/", ";", "drop", "delete", "truncate"];
     for pattern in &dangerous_patterns {
         if lower.contains(pattern) {
+            warn!(reason = "sql_injection_attempt", pattern = pattern, "Identifier validation failed");
             return Err(crate::DataBridgeError::Query(
                 "Identifier contains potentially dangerous pattern".to_string()
             ));

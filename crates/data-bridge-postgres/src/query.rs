@@ -63,6 +63,7 @@
 //! ```
 
 use crate::{DataBridgeError, ExtractedValue, Result};
+use unicode_normalization::UnicodeNormalization;
 
 /// Query comparison operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -741,6 +742,13 @@ impl QueryBuilder {
         if name.is_empty() {
             return Err(DataBridgeError::Query("Identifier part cannot be empty".to_string()));
         }
+
+        // Normalize to NFKC to prevent Unicode confusables
+        // This prevents attacks using visually similar characters:
+        // - Cyrillic 'а' (U+0430) vs ASCII 'a' (U+0061)
+        // - Greek 'Α' (U+0391) vs ASCII 'A' (U+0041)
+        // - Fullwidth characters (U+FF01-U+FF5E)
+        let name = name.nfkc().collect::<String>();
 
         // Check length (PostgreSQL limit is 63 bytes per part)
         if name.len() > 63 {

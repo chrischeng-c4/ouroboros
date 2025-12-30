@@ -1,5 +1,5 @@
 //! PostgreSQL row representation.
-//! 
+//!
 //! This module provides a row abstraction for query results,
 //! similar to data-bridge-mongodb's document handling.
 
@@ -7,6 +7,7 @@ use serde_json::Value as JsonValue;
 use sqlx::postgres::{PgArguments, PgPool};
 use sqlx::Row as SqlxRow;
 use std::collections::HashMap;
+use tracing::{info, warn, debug, instrument};
 
 use crate::{DataBridgeError, ExtractedValue, QueryBuilder, Result, row_to_extracted};
 use crate::query::{JoinType, JoinCondition, Operator, OrderDirection};
@@ -78,6 +79,7 @@ impl Row {
     }
 
     /// Insert row into database, return generated ID.
+    #[instrument(skip(executor, values), fields(table = %table, value_count = values.len()))]
     pub async fn insert<'a, E>(
         executor: E,
         table: &str,
@@ -90,6 +92,7 @@ impl Row {
             return Err(DataBridgeError::Query("Cannot insert with no values".to_string()));
         }
 
+        info!("Inserting row");
         let query_builder = QueryBuilder::new(table)?;
         let (sql, params) = query_builder.build_insert(values)?;
 
@@ -103,10 +106,13 @@ impl Row {
             .await
             .map_err(|_| DataBridgeError::Query("Insert operation failed".to_string()))?;
 
-        Self::from_sqlx(&row)
+        let result = Self::from_sqlx(&row)?;
+        info!("Insert complete");
+        Ok(result)
     }
 
     /// Insert multiple rows with a single batch INSERT statement.
+    #[instrument(skip(executor, rows), fields(table = %table, row_count = rows.len()))]
     pub async fn insert_many<'a, E>(
         executor: E,
         table: &str,
@@ -119,6 +125,7 @@ impl Row {
             return Ok(vec![]);
         }
 
+        info!("Inserting rows");
         let first_row = &rows[0];
         let mut column_names: Vec<&String> = first_row.keys().collect();
         column_names.sort();
@@ -171,9 +178,12 @@ impl Row {
             .await
             .map_err(|_| DataBridgeError::Query("Batch insert operation failed".to_string()))?;
 
-        pg_rows.iter()
+        let results = pg_rows.iter()
             .map(Self::from_sqlx)
-            .collect()
+            .collect::<Result<Vec<_>>>()?;
+
+        info!(affected = results.len(), "Insert complete");
+        Ok(results)
     }
 
     /// Upsert a single row (INSERT ON CONFLICT UPDATE).
@@ -357,6 +367,7 @@ impl Row {
     }
 
     /// Update row in database.
+    #[instrument(skip(pool, values), fields(table = %table, id = %id, value_count = values.len()))]
     pub async fn update(
         pool: &PgPool,
         table: &str,
@@ -367,6 +378,7 @@ impl Row {
             return Err(DataBridgeError::Query("Cannot update with no values".to_string()));
         }
 
+        info!("Updating row");
         let mut qb = QueryBuilder::new(table)?;
         qb = qb.where_clause("id", Operator::Eq, ExtractedValue::BigInt(id))?;
         let (sql, params) = qb.build_update(values)?;
@@ -381,11 +393,15 @@ impl Row {
             .await
             .map_err(|_| DataBridgeError::Query("Update operation failed".to_string()))?;
 
-        Ok(result.rows_affected() > 0)
+        let affected = result.rows_affected();
+        info!(affected, "Update complete");
+        Ok(affected > 0)
     }
 
     /// Delete row from database.
+    #[instrument(skip(pool), fields(table = %table, id = %id))]
     pub async fn delete(pool: &PgPool, table: &str, id: i64) -> Result<bool> {
+        info!("Deleting row");
         let mut qb = QueryBuilder::new(table)?;
         qb = qb.where_clause("id", Operator::Eq, ExtractedValue::BigInt(id))?;
         let (sql, params) = qb.build_delete();
@@ -400,7 +416,9 @@ impl Row {
             .await
             .map_err(|_| DataBridgeError::Query("Delete operation failed".to_string()))?;
 
-        Ok(result.rows_affected() > 0)
+        let affected = result.rows_affected();
+        info!(affected, "Delete complete");
+        Ok(affected > 0)
     }
 
     /// Count rows matching query.
@@ -475,6 +493,7 @@ impl Row {
                 Some(cols) => {
                     for col in cols {
                         let quoted_col = QueryBuilder::quote_identifier(col);
+                        // quoted_col already contains quotes (e.g., "column_name"), so use it directly
                         select_cols.push(format!("\"{}\".{} AS \"{}__{}\"", alias, quoted_col, rel.name, col));
                     }
                 }
@@ -611,6 +630,7 @@ impl Row {
                 Some(cols) => {
                     for col in cols {
                         let quoted_col = QueryBuilder::quote_identifier(col);
+                        // quoted_col already contains quotes (e.g., "column_name"), so use it directly
                         select_cols.push(format!("\"{}\".{} AS \"{}__{}\"", alias, quoted_col, rel.name, col));
                     }
                 }
@@ -759,6 +779,7 @@ impl Row {
     }
 
     /// Delete a row with cascade handling based on foreign key rules.
+    #[instrument(skip(pool), fields(table = %table, id = %id, id_column = %id_column))]
     pub async fn delete_with_cascade(
         pool: &PgPool,
         table: &str,
@@ -767,6 +788,7 @@ impl Row {
     ) -> Result<u64> {
         use crate::schema::CascadeRule;
 
+        info!("Starting cascade delete");
         QueryBuilder::validate_identifier(table)?;
         QueryBuilder::validate_identifier(id_column)?;
 
@@ -780,6 +802,7 @@ impl Row {
         }
 
         let mut total_deleted = 0u64;
+        let mut cascaded_tables = Vec::new();
 
         for backref in &backrefs {
             match backref.on_delete {
@@ -795,6 +818,7 @@ impl Row {
                         .map_err(|e| DataBridgeError::Database(e.to_string()))?;
 
                     if row.0 {
+                        warn!(source_table = %backref.source_table, "Cascade delete blocked by RESTRICT constraint");
                         tx.rollback().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
                         return Err(DataBridgeError::Validation(
                             "Cannot delete record: foreign key constraint violation. Use cascade delete or remove referencing records first.".to_string()
@@ -811,7 +835,12 @@ impl Row {
                         .execute(&mut *tx)
                         .await
                         .map_err(|e| DataBridgeError::Database(e.to_string()))?;
-                    total_deleted += result.rows_affected();
+                    let deleted = result.rows_affected();
+                    if deleted > 0 {
+                        debug!(target_table = %backref.source_table, deleted, "Cascaded delete to related table");
+                        cascaded_tables.push(backref.source_table.clone());
+                    }
+                    total_deleted += deleted;
                 }
                 CascadeRule::SetNull => {
                     let update_query = format!(
@@ -823,6 +852,7 @@ impl Row {
                         .execute(&mut *tx)
                         .await
                         .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                    debug!(target_table = %backref.source_table, "Set foreign key to NULL");
                 }
                 CascadeRule::SetDefault => {
                     let update_query = format!(
@@ -834,6 +864,7 @@ impl Row {
                         .execute(&mut *tx)
                         .await
                         .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+                    debug!(target_table = %backref.source_table, "Set foreign key to DEFAULT");
                 }
             }
         }
@@ -851,6 +882,11 @@ impl Row {
 
         tx.commit().await.map_err(|e| DataBridgeError::Database(e.to_string()))?;
 
+        info!(
+            total_deleted,
+            cascaded_to = ?cascaded_tables,
+            "Cascade delete complete"
+        );
         Ok(total_deleted)
     }
 
