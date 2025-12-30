@@ -276,6 +276,8 @@ class Column:
         primary_key: bool = False,
         description: Optional[str] = None,
         foreign_key: Optional[str] = None,
+        on_delete: Optional[str] = None,
+        on_update: Optional[str] = None,
     ) -> None:
         """
         Initialize column with constraints.
@@ -289,6 +291,10 @@ class Column:
             primary_key: Whether this is a primary key column
             description: Documentation for this column
             foreign_key: Foreign key reference ("table" or "table.column")
+            on_delete: Foreign key ON DELETE action. Valid values:
+                "CASCADE", "RESTRICT", "SET NULL", "SET DEFAULT", "NO ACTION"
+            on_update: Foreign key ON UPDATE action. Valid values:
+                "CASCADE", "RESTRICT", "SET NULL", "SET DEFAULT", "NO ACTION"
         """
         self.default = default
         self.default_factory = default_factory
@@ -298,6 +304,8 @@ class Column:
         self.primary_key = primary_key
         self.description = description
         self.foreign_key = foreign_key
+        self.on_delete = on_delete
+        self.on_update = on_update
 
     def __repr__(self) -> str:
         attrs = []
@@ -315,6 +323,10 @@ class Column:
             attrs.append("primary_key=True")
         if self.foreign_key:
             attrs.append(f"foreign_key={self.foreign_key!r}")
+        if self.on_delete:
+            attrs.append(f"on_delete={self.on_delete!r}")
+        if self.on_update:
+            attrs.append(f"on_update={self.on_update!r}")
         return f"Column({', '.join(attrs)})"
 
 
@@ -430,3 +442,251 @@ class ForeignKeyProxy:
         if self._is_fetched:
             return f"ForeignKeyProxy({self.target_table}.{self.foreign_key_column}={self._foreign_key_value}, fetched)"
         return f"ForeignKeyProxy({self.target_table}.{self.foreign_key_column}={self._foreign_key_value}, not fetched)"
+
+
+class BackReferenceQuery:
+    """
+    Helper class for back-reference queries.
+
+    This class provides methods to query related rows via reverse foreign key relationships.
+    It's returned when accessing a BackReference descriptor on an instance.
+
+    Example:
+        >>> # Get all posts for a user
+        >>> posts = await user.posts.fetch_all()
+        >>> # Get first post
+        >>> first_post = await user.posts.fetch_one()
+        >>> # Count posts
+        >>> post_count = await user.posts.count()
+    """
+
+    def __init__(
+        self,
+        source_table: str,
+        source_column: str,
+        target_column: str,
+        ref_value: Any
+    ):
+        """
+        Initialize back-reference query helper.
+
+        Args:
+            source_table: The table that has the FK pointing to this table
+            source_column: The FK column name in the source table
+            target_column: The column in this table being referenced
+            ref_value: The value to match (e.g., user.id)
+        """
+        self.source_table = source_table
+        self.source_column = source_column
+        self.target_column = target_column
+        self._ref_value = ref_value
+
+    @property
+    def ref_value(self) -> Any:
+        """
+        Get the reference value (e.g., user.id).
+
+        Returns:
+            The value being referenced
+        """
+        return self._ref_value
+
+    async def fetch_all(self) -> List[dict]:
+        """
+        Fetch all related rows.
+
+        Returns:
+            List of dictionaries with row data
+
+        Example:
+            >>> # Get all posts for a user
+            >>> posts = await user.posts.fetch_all()
+            >>> for post in posts:
+            ...     print(post["title"])
+        """
+        # Import here to avoid circular dependency
+        try:
+            from data_bridge.data_bridge import postgres as _engine
+        except ImportError:
+            raise RuntimeError(
+                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+            )
+
+        if self._ref_value is None:
+            return []
+
+        # Build WHERE clause for the back-reference
+        where_clause = f"{self.source_column} = $1"
+        params = [self._ref_value]
+
+        # Use find_many from the Rust engine (use keyword args for clarity)
+        rows = await _engine.find_many(
+            table=self.source_table,
+            where_clause=where_clause,
+            params=params
+        )
+
+        return rows
+
+    async def fetch_one(self) -> Optional[dict]:
+        """
+        Fetch the first related row.
+
+        Returns:
+            Dictionary with row data, or None if not found
+
+        Example:
+            >>> # Get first post for a user
+            >>> first_post = await user.posts.fetch_one()
+            >>> if first_post:
+            ...     print(first_post["title"])
+        """
+        # Import here to avoid circular dependency
+        try:
+            from data_bridge.data_bridge import postgres as _engine
+        except ImportError:
+            raise RuntimeError(
+                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+            )
+
+        if self._ref_value is None:
+            return None
+
+        # Build WHERE clause for the back-reference
+        where_clause = f"{self.source_column} = $1"
+        params = [self._ref_value]
+
+        # Use find_many with limit 1 (use keyword args for clarity)
+        rows = await _engine.find_many(
+            table=self.source_table,
+            where_clause=where_clause,
+            params=params,
+            limit=1
+        )
+
+        return rows[0] if rows else None
+
+    async def count(self) -> int:
+        """
+        Count related rows.
+
+        Returns:
+            Number of related rows
+
+        Example:
+            >>> # Count posts for a user
+            >>> post_count = await user.posts.count()
+            >>> print(f"User has {post_count} posts")
+        """
+        # Import here to avoid circular dependency
+        try:
+            from data_bridge.data_bridge import postgres as _engine
+        except ImportError:
+            raise RuntimeError(
+                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
+            )
+
+        if self._ref_value is None:
+            return 0
+
+        # Build WHERE clause for the back-reference
+        where_clause = f"{self.source_column} = $1"
+        params = [self._ref_value]
+
+        # Use count from the Rust engine
+        return await _engine.count(self.source_table, where_clause, params)
+
+    def __repr__(self) -> str:
+        return f"BackReferenceQuery({self.source_table}.{self.source_column} -> {self.target_column}={self._ref_value})"
+
+
+class BackReference:
+    """
+    Descriptor for reverse relationship access.
+
+    This enables accessing related rows that have a foreign key pointing to this table.
+    It's the inverse of a ForeignKeyProxy - instead of following a FK from this table
+    to another, it finds all rows in another table that point back to this one.
+
+    Example:
+        >>> from data_bridge.postgres import Table, Column, BackReference
+        >>>
+        >>> class User(Table):
+        ...     id = Column(primary_key=True)
+        ...     name = Column()
+        ...     # Reverse relationship - posts that reference this user
+        ...     posts = BackReference("posts", "user_id")
+        ...
+        >>> # Usage
+        >>> user = await User.fetch_one(User.id == 1)
+        >>> user_posts = await user.posts.fetch_all()  # Get all posts where user_id = user.id
+        >>> post_count = await user.posts.count()      # Count posts for this user
+        >>> first_post = await user.posts.fetch_one()  # Get first post
+    """
+
+    def __init__(
+        self,
+        source_table: str,
+        source_column: str,
+        target_column: str = "id"
+    ):
+        """
+        Initialize back-reference descriptor.
+
+        Args:
+            source_table: The table that has the FK pointing to this table
+            source_column: The FK column name in the source table
+            target_column: The column in this table being referenced (default: "id")
+
+        Example:
+            >>> # Posts table has user_id FK to users.id
+            >>> class User(Table):
+            ...     id = Column(primary_key=True)
+            ...     posts = BackReference("posts", "user_id", "id")
+        """
+        self.source_table = source_table
+        self.source_column = source_column
+        self.target_column = target_column
+        self._name = None
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        """
+        Capture the attribute name when descriptor is assigned to class.
+
+        Args:
+            owner: The class this descriptor is assigned to
+            name: The attribute name
+        """
+        self._name = name
+
+    def __get__(self, obj: Any, objtype: Optional[type] = None) -> Any:
+        """
+        Descriptor protocol: return BackReferenceQuery on instance access, self on class access.
+
+        Args:
+            obj: Instance or None for class access
+            objtype: Owner class
+
+        Returns:
+            self for class access, BackReferenceQuery for instance access
+        """
+        if obj is None:
+            # Class access: User.posts -> BackReference
+            return self
+
+        # Instance access: user.posts -> BackReferenceQuery
+        # Get the reference value from the instance
+        if hasattr(obj, "_data") and self.target_column in obj._data:
+            ref_value = obj._data[self.target_column]
+        else:
+            ref_value = getattr(obj, self.target_column, None)
+
+        return BackReferenceQuery(
+            self.source_table,
+            self.source_column,
+            self.target_column,
+            ref_value
+        )
+
+    def __repr__(self) -> str:
+        return f"BackReference({self.source_table}.{self.source_column} -> {self.target_column})"

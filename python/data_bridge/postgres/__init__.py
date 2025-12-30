@@ -1,7 +1,7 @@
 """PostgreSQL ORM for data-bridge."""
 
 from .table import Table
-from .columns import Column, ColumnProxy, ForeignKeyProxy
+from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery
 from .query import QueryBuilder
 from .connection import (
     init, close, is_connected, execute,
@@ -25,6 +25,8 @@ __all__ = [
     "Column",
     "ColumnProxy",
     "ForeignKeyProxy",
+    "BackReference",
+    "BackReferenceQuery",
     # Query
     "QueryBuilder",
     # Connection

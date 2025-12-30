@@ -1707,6 +1707,51 @@ impl PyTransaction {
         })
     }
 
+    /// Create a savepoint within this transaction
+    fn savepoint<'py>(&mut self, py: Python<'py>, name: String) -> PyResult<Bound<'py, PyAny>> {
+        let tx_mutex = self.tx.clone();
+
+        future_into_py(py, async move {
+            let mut tx_lock = tx_mutex.lock().await;
+            let tx = tx_lock.as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
+
+            tx.savepoint(&name).await
+                .map_err(|e| PyRuntimeError::new_err(format!("Savepoint creation failed: {}", e)))?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+
+    /// Rollback to a savepoint within this transaction
+    fn rollback_to_savepoint<'py>(&mut self, py: Python<'py>, name: String) -> PyResult<Bound<'py, PyAny>> {
+        let tx_mutex = self.tx.clone();
+
+        future_into_py(py, async move {
+            let mut tx_lock = tx_mutex.lock().await;
+            let tx = tx_lock.as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
+
+            tx.rollback_to(&name).await
+                .map_err(|e| PyRuntimeError::new_err(format!("Rollback to savepoint failed: {}", e)))?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+
+    /// Release a savepoint within this transaction
+    fn release_savepoint<'py>(&mut self, py: Python<'py>, name: String) -> PyResult<Bound<'py, PyAny>> {
+        let tx_mutex = self.tx.clone();
+
+        future_into_py(py, async move {
+            let mut tx_lock = tx_mutex.lock().await;
+            let tx = tx_lock.as_mut()
+                .ok_or_else(|| PyRuntimeError::new_err("Transaction already completed"))?;
+
+            tx.release_savepoint(&name).await
+                .map_err(|e| PyRuntimeError::new_err(format!("Release savepoint failed: {}", e)))?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+
     /// Insert a single row within this transaction
     fn insert_one<'py>(&mut self, py: Python<'py>, table: String, data: &Bound<'_, PyDict>) -> PyResult<Bound<'py, PyAny>> {
         let values = py_dict_to_extracted_values(py, data)?;

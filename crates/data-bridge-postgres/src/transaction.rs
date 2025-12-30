@@ -94,11 +94,21 @@ impl Transaction {
     ///
     /// * `name` - Savepoint name
     ///
-    /// # Future Work
+    /// # Errors
     ///
-    /// This method is not yet implemented. Savepoints will be added in a future release.
-    pub async fn savepoint(&mut self, _name: &str) -> Result<()> {
-        todo!("Savepoint support will be added in a future release")
+    /// Returns error if savepoint name is invalid or creation fails.
+    pub async fn savepoint(&mut self, name: &str) -> Result<()> {
+        use crate::QueryBuilder;
+
+        // Validate savepoint name to prevent SQL injection
+        QueryBuilder::validate_identifier(name)?;
+
+        // Execute SAVEPOINT statement
+        let sql = format!("SAVEPOINT {}", name);
+        sqlx::query(&sql).execute(&mut *self.tx).await?;
+
+        tracing::debug!(savepoint = name, "Created savepoint");
+        Ok(())
     }
 
     /// Rolls back to a savepoint.
@@ -107,11 +117,21 @@ impl Transaction {
     ///
     /// * `name` - Savepoint name
     ///
-    /// # Future Work
+    /// # Errors
     ///
-    /// This method is not yet implemented. Savepoints will be added in a future release.
-    pub async fn rollback_to(&mut self, _name: &str) -> Result<()> {
-        todo!("Savepoint support will be added in a future release")
+    /// Returns error if savepoint name is invalid or rollback fails.
+    pub async fn rollback_to(&mut self, name: &str) -> Result<()> {
+        use crate::QueryBuilder;
+
+        // Validate savepoint name to prevent SQL injection
+        QueryBuilder::validate_identifier(name)?;
+
+        // Execute ROLLBACK TO SAVEPOINT statement
+        let sql = format!("ROLLBACK TO SAVEPOINT {}", name);
+        sqlx::query(&sql).execute(&mut *self.tx).await?;
+
+        tracing::debug!(savepoint = name, "Rolled back to savepoint");
+        Ok(())
     }
 
     /// Releases a savepoint.
@@ -120,11 +140,21 @@ impl Transaction {
     ///
     /// * `name` - Savepoint name
     ///
-    /// # Future Work
+    /// # Errors
     ///
-    /// This method is not yet implemented. Savepoints will be added in a future release.
-    pub async fn release_savepoint(&mut self, _name: &str) -> Result<()> {
-        todo!("Savepoint support will be added in a future release")
+    /// Returns error if savepoint name is invalid or release fails.
+    pub async fn release_savepoint(&mut self, name: &str) -> Result<()> {
+        use crate::QueryBuilder;
+
+        // Validate savepoint name to prevent SQL injection
+        QueryBuilder::validate_identifier(name)?;
+
+        // Execute RELEASE SAVEPOINT statement
+        let sql = format!("RELEASE SAVEPOINT {}", name);
+        sqlx::query(&sql).execute(&mut *self.tx).await?;
+
+        tracing::debug!(savepoint = name, "Released savepoint");
+        Ok(())
     }
 }
 
