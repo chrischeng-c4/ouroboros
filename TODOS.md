@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-12-30 (P3 items completed)
+**Last Updated**: 2025-01-05 (P4-QUERY complete)
 **Branch**: `main`
 
 ---
@@ -261,7 +261,7 @@ Atomic, testable tasks organized by priority and component.
 - [x] P4-QUERY-08: Implement DISTINCT ON (2025-01-04)
 - [x] P4-QUERY-09: Implement JSONB operators (2025-01-04)
 - [x] P4-QUERY-10: Support RETURNING clause in Updates/Deletes (2025-01-04)
-- [ ] P4-QUERY-11: Add integration tests (25+ tests)
+- [x] P4-QUERY-11: Add integration tests (100+ tests) (2025-01-05)
 
 ### P4-M2M: Many-to-Many Relationships
 
