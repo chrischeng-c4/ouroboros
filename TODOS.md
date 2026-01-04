@@ -2,8 +2,8 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-01-05 (P5 SQLAlchemy parity roadmap added)
-**Branch**: `main`
+**Last Updated**: 2026-01-04 (data-bridge-api Phases 1-4 completed, P5 SQLAlchemy parity complete)
+**Branch**: `feature/data-bridge-api`
 
 **P5 SQLAlchemy Parity Status**: 43/43 complete (2025-01-05)
 - P5-ORM: Session & Unit of Work (5/5) ✅
@@ -180,6 +180,70 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
+## 🚀 data-bridge-api: Rust-Based API Framework
+
+### Completed Phases
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Foundation (crate, router, request/response, PyO3) | ✅ DONE |
+| Phase 2 | Type Extraction (Path, Query, Body, complex types) | ✅ DONE |
+| Phase 3 | Dependency Injection (Kahn's algorithm, scoping) | ✅ DONE |
+| Phase 4 | OpenAPI (3.1 spec, Swagger UI, ReDoc) | ✅ DONE |
+
+**Total Tests**: 72+ (11 Rust + 40 Python unit + 21 integration)
+
+### P2-API: API Models & HTTP Client Integration (Next)
+
+**Goal**: Pydantic-style API models + HTTP client integration
+
+#### 5.1 Pydantic-Style API Models
+
+- [ ] P2-API-01: Create `BaseModel` class with `__init_subclass__`
+  - **File**: `python/data_bridge/api/models.py`
+  - **Test**: Schema extracted at class definition time
+
+- [ ] P2-API-02: Create `Field` class with constraints
+  - **Constraints**: ge, le, min_length, max_length, pattern
+  - **Test**: `Field(min_length=1, max_length=100)` works
+
+- [ ] P2-API-03: Implement `model_dump()` method
+  - **Test**: Returns dict representation
+
+- [ ] P2-API-04: Implement `model_validate()` class method
+  - **Test**: Validates dict through Rust, returns instance
+
+- [ ] P2-API-05: Add Rust `validate_model()` function
+  - **File**: `crates/data-bridge-api/src/models.rs`
+  - **Test**: Reuses existing TypeDescriptor validation
+
+- [ ] P2-API-06: Add nested model support
+  - **Test**: `class Address(BaseModel)` inside `User` works
+
+#### 5.2 HTTP Client Integration
+
+- [ ] P2-API-07: Add `configure_http_client()` to App
+  - **File**: `python/data_bridge/api/app.py`
+  - **Test**: `app.configure_http_client(base_url="...")` works
+
+- [ ] P2-API-08: Register HttpClient as singleton dependency
+  - **Test**: Auto-resolved when type hint is `HttpClient`
+
+- [ ] P2-API-09: Add `http` property to RequestContext
+  - **File**: `python/data_bridge/api/context.py`
+  - **Test**: `ctx.http.get("/external")` works
+
+- [ ] P2-API-10: Add typed response parsing
+  - **Test**: `UserResponse.model_validate(response.json())` works
+
+#### 5.3 Tests
+
+- [ ] P2-API-11: Unit tests for BaseModel (~15 tests)
+- [ ] P2-API-12: Unit tests for HTTP client injection (~10 tests)
+- [ ] P2-API-13: Integration tests with mock HTTP server (~5 tests)
+
+---
+
 ## P3 - Lower Priority (Next Month)
 
 ### P3-CASCADE: BackReference and Cascade Operations
@@ -286,10 +350,51 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
-## P5 - Performance Roadmap (Long-term, Low Priority)
+## P5 - Long-term Roadmap (Low Priority)
 
-> **Note**: 目前性能已達可用標準，這些是長期優化目標
-> (Current performance meets production standards; these are long-term optimization goals)
+> **Note**: 這些是長期目標，待核心功能穩定後再實作
+> (Long-term goals to implement after core features stabilize)
+
+### P5-ORM: API Framework ORM Integration
+
+> **Status**: Deferred - 現有 MongoDB/PostgreSQL ORM 尚未完善
+> 待 ORM 成熟後再整合
+
+- [ ] P5-ORM-01: Generic `Repository[T, PK]` interface
+  - **Goal**: Abstract CRUD operations for any ORM backend
+  - **Test**: Same code works for MongoDB and PostgreSQL
+
+- [ ] P5-ORM-02: MongoDB adapter (`MongoRepository`)
+  - **Depends**: data-bridge-mongodb maturity
+  - **Test**: `@app.resource("/users")` generates CRUD endpoints
+
+- [ ] P5-ORM-03: PostgreSQL adapter (`PostgresRepository`)
+  - **Depends**: data-bridge-postgres maturity
+  - **Test**: Same `@resource` decorator works
+
+- [ ] P5-ORM-04: Auto CRUD endpoint generation
+  - **Features**: Pagination, filtering, sorting
+  - **Test**: GET /users?page=1&limit=10&sort=-created_at
+
+- [ ] P5-ORM-05: Relation serialization
+  - **Test**: Nested objects in JSON response
+
+### P5-API-ADVANCED: API Framework Advanced Features
+
+- [ ] P5-API-01: Middleware system
+  - **Test**: Request/response middleware chain
+
+- [ ] P5-API-02: WebSocket support
+  - **Test**: Real-time bidirectional communication
+
+- [ ] P5-API-03: Background tasks
+  - **Test**: `background_tasks.add_task(send_email, ...)`
+
+- [ ] P5-API-04: Rate limiting
+  - **Test**: 429 response after limit exceeded
+
+- [ ] P5-API-05: CORS configuration
+  - **Test**: Cross-origin requests allowed
 
 ### P5-HTTP: HTTP Client Optimization
 
