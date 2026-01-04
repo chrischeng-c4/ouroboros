@@ -28,6 +28,7 @@
 use std::collections::HashMap;
 use crate::request::SerializableValue;
 use crate::error::ApiError;
+use data_bridge_common::http::HttpResponseLike;
 
 // ============================================================================
 // Core Types
@@ -146,6 +147,31 @@ impl SerializableResponse {
     /// Get content type header
     pub fn content_type(&self) -> Option<&str> {
         self.headers.get("content-type").map(|s| s.as_str())
+    }
+}
+
+impl HttpResponseLike for SerializableResponse {
+    fn status_code(&self) -> u16 {
+        self.status_code
+    }
+
+    fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    fn body_bytes(&self) -> &[u8] {
+        // For SerializableResponse, we can only return a reference for Bytes and Text variants
+        // JSON and Empty variants don't have stored bytes
+        match &self.body {
+            ResponseBody::Empty => &[],
+            ResponseBody::Bytes(b) => b.as_slice(),
+            ResponseBody::Text(s) => s.as_bytes(),
+            ResponseBody::Json(_) => {
+                // JSON needs serialization, but we can't return owned data
+                // Callers should use the body_bytes() method instead for JSON
+                &[]
+            }
+        }
     }
 }
 

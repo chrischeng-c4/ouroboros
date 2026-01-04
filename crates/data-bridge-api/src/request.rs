@@ -27,53 +27,12 @@
 
 use std::collections::HashMap;
 
+// Re-export HttpMethod from data-bridge-common
+pub use data_bridge_common::http::HttpMethod;
+
 // ============================================================================
 // Core Types
 // ============================================================================
-
-/// HTTP method enum
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HttpMethod {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Head,
-    Options,
-}
-
-impl HttpMethod {
-    /// Convert HTTP method to string
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Get => "GET",
-            Self::Post => "POST",
-            Self::Put => "PUT",
-            Self::Patch => "PATCH",
-            Self::Delete => "DELETE",
-            Self::Head => "HEAD",
-            Self::Options => "OPTIONS",
-        }
-    }
-}
-
-impl std::str::FromStr for HttpMethod {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
-            "GET" => Ok(Self::Get),
-            "POST" => Ok(Self::Post),
-            "PUT" => Ok(Self::Put),
-            "PATCH" => Ok(Self::Patch),
-            "DELETE" => Ok(Self::Delete),
-            "HEAD" => Ok(Self::Head),
-            "OPTIONS" => Ok(Self::Options),
-            _ => Err(format!("Invalid HTTP method: {}", s)),
-        }
-    }
-}
 
 /// Intermediate representation for request values
 ///

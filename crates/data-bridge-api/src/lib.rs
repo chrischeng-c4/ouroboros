@@ -25,3 +25,6 @@ pub use handler::{Handler, HandlerMeta};
 pub use request::Request;
 pub use response::Response;
 pub use error::{ApiError, ApiResult};
+
+// Re-export shared HTTP types from data-bridge-common
+pub use data_bridge_common::http::{HttpMethod, HttpStatus, HttpResponseLike, HttpRequestLike};

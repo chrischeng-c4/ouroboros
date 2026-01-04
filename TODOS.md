@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2026-01-04 (data-bridge-api Phases 1-4 completed, P5 SQLAlchemy parity complete)
+**Last Updated**: 2026-01-04 (data-bridge-api Phases 1-6 completed, P5 SQLAlchemy parity complete)
 **Branch**: `feature/data-bridge-api`
 
 **P5 SQLAlchemy Parity Status**: 43/43 complete (2025-01-05)
@@ -191,8 +191,9 @@ Atomic, testable tasks organized by priority and component.
 | Phase 3 | Dependency Injection (Kahn's algorithm, scoping) | ✅ DONE |
 | Phase 4 | OpenAPI (3.1 spec, Swagger UI, ReDoc) | ✅ DONE |
 | Phase 5 | API Models & HTTP Client Integration | ✅ DONE (2026-01-04) |
+| Phase 6 | Type Consolidation (data-bridge-api ↔ data-bridge-http) | ✅ DONE (2026-01-04) |
 
-**Total Tests**: 262 (71 Rust + 142 Python unit + 49 API)
+**Total Tests**: 276 (71 Rust + 142 Python unit + 63 API)
 
 ### P2-API: API Models & HTTP Client Integration ✅ COMPLETED
 
@@ -231,6 +232,41 @@ Atomic, testable tasks organized by priority and component.
 - [x] P2-API-11: Unit tests for BaseModel (36 tests) (2026-01-04)
 - [x] P2-API-12: Unit tests for HTTP client injection (13 tests) (2026-01-04)
 - [x] P2-API-13: Integration tests (7 tests) (2026-01-04)
+
+### P2-API-TYPE: Type Consolidation ✅ COMPLETED
+
+**Goal**: Unify types between data-bridge-api and data-bridge-http for better integration
+
+#### 6.1 Shared Type Definitions
+
+- [x] P2-API-TYPE-01: Move HttpMethod enum to data-bridge-common (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Impact**: Single source of truth for HTTP methods
+
+- [x] P2-API-TYPE-02: Create HttpResponseLike trait (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Methods**: status(), headers(), body(), json()
+
+- [x] P2-API-TYPE-03: Create HttpRequestLike trait (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Methods**: method(), url(), headers(), body()
+
+#### 6.2 Python Base Classes
+
+- [x] P2-API-TYPE-04: Create BaseResponse class (2026-01-04)
+  - **File**: `python/data_bridge/http/__init__.py`
+  - **Purpose**: Common interface for all response types
+
+- [x] P2-API-TYPE-05: Create BaseRequest class (2026-01-04)
+  - **File**: `python/data_bridge/http/__init__.py`
+  - **Purpose**: Common interface for all request types
+
+- [x] P2-API-TYPE-06: Update Response to inherit from BaseResponse (2026-01-04)
+
+#### 6.3 Tests
+
+- [x] P2-API-TYPE-07: Add trait implementation tests (14 tests) (2026-01-04)
+- [x] P2-API-TYPE-08: Add base class inheritance tests (in existing test suite) (2026-01-04)
 
 ---
 
@@ -292,12 +328,12 @@ Atomic, testable tasks organized by priority and component.
 
 ### P3-SEC: Security Documentation
 
-- [ ] P3-SEC-01: Add TLS configuration documentation
+- [x] P3-SEC-01: Add TLS configuration documentation (2026-01-04)
   - **Location**: `connection.rs`
   - **Topics**: sslmode, certificate verification, client certificates
   - **Test**: Example TLS connection works
 
-- [ ] P3-SEC-02: Remove sensitive data from error logs
+- [x] P3-SEC-02: Remove sensitive data from error logs (2026-01-04)
   - **Issue**: Error messages may leak query parameters
   - **Fix**: Redact parameter values in error messages
   - **Test**: Verify no sensitive data in logged errors
@@ -308,10 +344,15 @@ Atomic, testable tasks organized by priority and component.
 
 ### P4-PERF: Performance Improvements
 
-- [ ] P4-PERF-01: Server-side cursors for large results
+- [x] P4-PERF-01: Server-side cursors for large results (2026-01-04)
   - **Issue**: Memory exhaustion on large result sets
   - **Fix**: Implement streaming with server-side cursors
   - **Test**: Fetch 1M+ rows without OOM
+  - **Implementation**:
+    - Added `fetch_batch` in Rust for paginated fetching
+    - Created `Cursor` class with async iterator protocol
+    - Added `QueryBuilder.cursor()` method
+    - 7 unit tests added (`tests/postgres/unit/test_cursor.py`)
 
 ### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
