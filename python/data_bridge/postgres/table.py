@@ -27,7 +27,7 @@ Example:
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar
+from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, Union
 
 from .columns import ColumnProxy, SqlExpr
 from .query import QueryBuilder
@@ -553,19 +553,31 @@ class Table(metaclass=TableMeta):
         return (where_clause, params)
 
     @classmethod
-    async def delete_many(cls: Type[T], *filters: SqlExpr | dict) -> int:
+    async def delete_many(
+        cls: Type[T],
+        *filters: SqlExpr | dict,
+        returning: Optional[List[str]] = None,
+    ) -> Union[int, List[Dict[str, Any]]]:
         """
         Delete multiple rows matching filters.
 
         Args:
             *filters: Query expressions or filter dictionaries
+            returning: Optional list of column names to return (default: None)
 
         Returns:
-            Number of deleted rows
+            If returning is None: Number of deleted rows (int)
+            If returning is Some: List of dicts with returned column values
 
         Example:
             >>> deleted = await User.delete_many(User.age < 18)
             >>> print(f"Deleted {deleted} users")
+            >>>
+            >>> # With RETURNING clause
+            >>> results = await User.delete_many(
+            ...     User.age < 18,
+            ...     returning=["id", "name", "age"]
+            ... )
         """
         if _engine is None:
             raise RuntimeError(
@@ -577,23 +589,26 @@ class Table(metaclass=TableMeta):
         # Convert filters to SQL using the same logic as QueryBuilder
         where_clause, params = cls._build_where_clause(filters)
 
-        return await _engine.delete_many(table_name, where_clause, params)
+        return await _engine.delete_many(table_name, where_clause, params, returning)
 
     @classmethod
     async def update_many(
         cls: Type[T],
         updates: Dict[str, Any],
         *filters: SqlExpr | dict,
-    ) -> int:
+        returning: Optional[List[str]] = None,
+    ) -> Union[int, List[Dict[str, Any]]]:
         """
         Update multiple rows matching filters.
 
         Args:
             updates: Dictionary of column values to set
             *filters: Query expressions or filter dictionaries
+            returning: Optional list of column names to return (default: None)
 
         Returns:
-            Number of updated rows
+            If returning is None: Number of updated rows (int)
+            If returning is Some: List of dicts with returned column values
 
         Example:
             >>> updated = await User.update_many(
@@ -601,6 +616,13 @@ class Table(metaclass=TableMeta):
             ...     User.email.like("%@example.com")
             ... )
             >>> print(f"Updated {updated} users")
+            >>>
+            >>> # With RETURNING clause
+            >>> results = await User.update_many(
+            ...     {"status": "active"},
+            ...     User.email.like("%@example.com"),
+            ...     returning=["id", "name", "status"]
+            ... )
         """
         if _engine is None:
             raise RuntimeError(
@@ -612,4 +634,4 @@ class Table(metaclass=TableMeta):
         # Convert filters to SQL using the same logic as QueryBuilder
         where_clause, params = cls._build_where_clause(filters)
 
-        return await _engine.update_many(table_name, updates, where_clause, params)
+        return await _engine.update_many(table_name, updates, where_clause, params, returning)

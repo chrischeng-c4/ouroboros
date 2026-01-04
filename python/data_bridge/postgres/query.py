@@ -155,6 +155,8 @@ class QueryBuilder(Generic[T]):
         _ctes: Optional[List[tuple]] = None,
         _subqueries: Optional[List[tuple]] = None,
         _windows: Optional[List[tuple]] = None,
+        _set_operations: Optional[List[tuple]] = None,
+        _returning: Optional[List[str]] = None,
     ) -> None:
         """
         Initialize query builder.
@@ -174,6 +176,8 @@ class QueryBuilder(Generic[T]):
             _ctes: Common Table Expressions [(name, sql, params), ...]
             _subqueries: Subquery conditions [(type, field, sql, params), ...]
             _windows: Window functions [(func_type, column, offset, default, partition_by, order_by, alias), ...]
+            _set_operations: Set operations [(op_type, sql, params), ...]
+            _returning: Columns to return from UPDATE/DELETE operations
         """
         self._model = model
         self._filters = filters
@@ -189,10 +193,13 @@ class QueryBuilder(Generic[T]):
         self._ctes: list[tuple[str, str, list[Any]]] = _ctes or []  # (name, sql, params)
         self._subqueries: list[tuple[str, str | None, str, list[Any]]] = _subqueries or []  # (type, field, sql, params)
         self._windows: list[tuple[str, str | None, int | None, Any, list[str], list[tuple[str, str]], str]] = _windows or []  # (func_type, column, offset, default, partition_by, order_by, alias)
+        self._set_operations: list[tuple[str, str, list[Any]]] = _set_operations or []  # (op_type, sql, params)
+        self._returning: list[str] = _returning or []  # Columns to return from UPDATE/DELETE
+        self._json_conditions: list[tuple[str, str, Any]] = []  # (operator_type, column, value)
 
     def _clone(self, **kwargs: Any) -> "QueryBuilder[T]":
         """Create a copy of this builder with updated values."""
-        return QueryBuilder(
+        cloned = QueryBuilder(
             model=kwargs.get("model", self._model),
             filters=kwargs.get("filters", self._filters),
             _order_by=kwargs.get("_order_by", self._order_by_spec.copy()),
@@ -207,7 +214,11 @@ class QueryBuilder(Generic[T]):
             _ctes=kwargs.get("_ctes", self._ctes.copy()),
             _subqueries=kwargs.get("_subqueries", self._subqueries.copy()),
             _windows=kwargs.get("_windows", self._windows.copy()),
+            _set_operations=kwargs.get("_set_operations", self._set_operations.copy()),
+            _returning=kwargs.get("_returning", self._returning.copy()),
         )
+        cloned._json_conditions = kwargs.get("_json_conditions", self._json_conditions.copy())
+        return cloned
 
     def order_by(self, *fields: Union[ColumnProxy, str]) -> "QueryBuilder[T]":
         """
@@ -1048,6 +1059,300 @@ class QueryBuilder(Generic[T]):
 
         return new_qb
 
+    def union(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Combine with another query using UNION (removes duplicates).
+
+        Args:
+            other: Another QueryBuilder to combine with
+
+        Returns:
+            New QueryBuilder with UNION operation
+
+        Example:
+            >>> # Find active and archived users
+            >>> active = User.find(User.status == "active")
+            >>> archived = User.find(User.status == "archived")
+            >>> all_users = await active.union(archived).aggregate()
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("union", sql, params))
+        return new_qb
+
+    def union_all(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Combine with UNION ALL (keeps duplicates).
+
+        Args:
+            other: Another QueryBuilder to combine with
+
+        Returns:
+            New QueryBuilder with UNION ALL operation
+
+        Example:
+            >>> active = User.find(User.status == "active")
+            >>> pending = User.find(User.status == "pending")
+            >>> all_users = await active.union_all(pending).aggregate()
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("union_all", sql, params))
+        return new_qb
+
+    def intersect(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Return only rows present in both queries (removes duplicates).
+
+        Args:
+            other: Another QueryBuilder to intersect with
+
+        Returns:
+            New QueryBuilder with INTERSECT operation
+
+        Example:
+            >>> # Find users who are both admins and active
+            >>> admins = User.find(User.role == "admin")
+            >>> active = User.find(User.status == "active")
+            >>> active_admins = await admins.intersect(active).aggregate()
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("intersect", sql, params))
+        return new_qb
+
+    def intersect_all(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Return only rows present in both queries (keeps duplicates).
+
+        Args:
+            other: Another QueryBuilder to intersect with
+
+        Returns:
+            New QueryBuilder with INTERSECT ALL operation
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("intersect_all", sql, params))
+        return new_qb
+
+    def except_(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Return rows in this query but not in the other (removes duplicates).
+
+        Note: Named except_ to avoid conflict with Python's except keyword.
+
+        Args:
+            other: Another QueryBuilder to subtract
+
+        Returns:
+            New QueryBuilder with EXCEPT operation
+
+        Example:
+            >>> # Find users who are admins but not suspended
+            >>> admins = User.find(User.role == "admin")
+            >>> suspended = User.find(User.status == "suspended")
+            >>> active_admins = await admins.except_(suspended).aggregate()
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("except", sql, params))
+        return new_qb
+
+    def except_all(self, other: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """
+        Return rows in this query but not in the other (keeps duplicates).
+
+        Args:
+            other: Another QueryBuilder to subtract
+
+        Returns:
+            New QueryBuilder with EXCEPT ALL operation
+        """
+        new_qb = self._clone()
+        sql, params = other._build_sql()
+        new_qb._set_operations.append(("except_all", sql, params))
+        return new_qb
+
+    def where_json_contains(
+        self,
+        column: Union[str, "ColumnProxy"],
+        json_value: Union[str, dict],
+    ) -> "QueryBuilder[T]":
+        """Filter where JSONB column contains the given JSON.
+
+        Args:
+            column: The JSONB column to check.
+            json_value: JSON string or dict to check for containment.
+
+        Returns:
+            New QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_json_contains(User.metadata, {"role": "admin"}) \\
+            ...     .to_list()
+        """
+        import json
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        json_str = json.dumps(json_value) if isinstance(json_value, dict) else json_value
+        new_qb._json_conditions.append(("json_contains", col_name, json_str))
+        return new_qb
+
+    def where_json_contained_by(
+        self,
+        column: Union[str, "ColumnProxy"],
+        json_value: Union[str, dict],
+    ) -> "QueryBuilder[T]":
+        """Filter where JSONB column is contained by the given JSON.
+
+        Args:
+            column: The JSONB column to check.
+            json_value: JSON string or dict to check containment.
+
+        Returns:
+            New QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_json_contained_by(User.metadata, {"premium": True}) \\
+            ...     .to_list()
+        """
+        import json
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        json_str = json.dumps(json_value) if isinstance(json_value, dict) else json_value
+        new_qb._json_conditions.append(("json_contained_by", col_name, json_str))
+        return new_qb
+
+    def where_json_key_exists(
+        self,
+        column: Union[str, "ColumnProxy"],
+        key: str,
+    ) -> "QueryBuilder[T]":
+        """Filter where JSONB column has the specified key.
+
+        Args:
+            column: The JSONB column to check.
+            key: The key to check for existence.
+
+        Returns:
+            New QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_json_key_exists(User.metadata, "email") \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        new_qb._json_conditions.append(("json_key_exists", col_name, key))
+        return new_qb
+
+    def where_json_any_key_exists(
+        self,
+        column: Union[str, "ColumnProxy"],
+        keys: list[str],
+    ) -> "QueryBuilder[T]":
+        """Filter where JSONB column has any of the specified keys.
+
+        Args:
+            column: The JSONB column to check.
+            keys: List of keys to check (matches if ANY exist).
+
+        Returns:
+            New QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_json_any_key_exists(User.metadata, ["email", "phone"]) \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        new_qb._json_conditions.append(("json_any_key_exists", col_name, keys))
+        return new_qb
+
+    def where_json_all_keys_exist(
+        self,
+        column: Union[str, "ColumnProxy"],
+        keys: list[str],
+    ) -> "QueryBuilder[T]":
+        """Filter where JSONB column has all of the specified keys.
+
+        Args:
+            column: The JSONB column to check.
+            keys: List of keys to check (matches only if ALL exist).
+
+        Returns:
+            New QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_json_all_keys_exist(User.metadata, ["name", "email"]) \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        new_qb._json_conditions.append(("json_all_keys_exist", col_name, keys))
+        return new_qb
+
+    def returning(self, *columns: Union[str, "ColumnProxy"]) -> "QueryBuilder[T]":
+        """Specify columns to return from UPDATE/DELETE operations.
+
+        Note: This is reserved for future use when UPDATE/DELETE methods
+        are added to QueryBuilder. Currently, use Table.update_many() and
+        Table.delete_many() with the returning parameter instead.
+
+        Args:
+            *columns: Column names or ColumnProxy objects to return.
+
+        Returns:
+            A new QueryBuilder with RETURNING clause specification.
+
+        Example:
+            >>> # Use with Table.update_many() / Table.delete_many()
+            >>> results = await User.update_many(
+            ...     {"status": "inactive"},
+            ...     User.id == 1,
+            ...     returning=["id", "name", "status"]
+            ... )
+        """
+        new_qb = self._clone()
+        for col in columns:
+            col_name = col.name if hasattr(col, 'name') else col
+            new_qb._returning.append(col_name)
+        return new_qb
+
+    def returning_all(self) -> "QueryBuilder[T]":
+        """Return all columns from UPDATE/DELETE operations.
+
+        Note: This is reserved for future use when UPDATE/DELETE methods
+        are added to QueryBuilder. Currently, use Table.update_many() and
+        Table.delete_many() with the returning parameter instead.
+
+        Example:
+            >>> # Use with Table.delete_many()
+            >>> results = await User.delete_many(
+            ...     User.id == 1,
+            ...     returning=["*"]
+            ... )
+        """
+        new_qb = self._clone()
+        new_qb._returning.append("*")
+        return new_qb
+
     def _build_sql(self) -> tuple[str, List[Any]]:
         """
         Build SQL and params from current QueryBuilder state (for CTE usage).
@@ -1153,6 +1458,10 @@ class QueryBuilder(Generic[T]):
                     for key, value in filter_item.items():
                         where_conditions.append((key, "eq", value))
 
+        # Add JSON conditions to where_conditions
+        for op_type, column, value in self._json_conditions:
+            where_conditions.append((column, op_type, value))
+
         # Execute aggregate query
         return await _engine.query_aggregate(
             table=table_name,
@@ -1167,6 +1476,7 @@ class QueryBuilder(Generic[T]):
             ctes=self._ctes if self._ctes else None,
             subqueries=self._subqueries if self._subqueries else None,
             windows=self._windows if self._windows else None,
+            set_operations=self._set_operations if self._set_operations else None,
         )
 
     async def to_list(self) -> List[T]:
@@ -1271,12 +1581,12 @@ class QueryBuilder(Generic[T]):
 
     def _build_where_clause(self) -> tuple[str, list[Any]]:
         """
-        Build WHERE clause from filters.
+        Build WHERE clause from filters and JSON conditions.
 
         Returns:
             Tuple of (where_clause, parameters)
         """
-        if not self._filters:
+        if not self._filters and not self._json_conditions:
             return ("", [])
 
         # Convert filters to SQL
@@ -1298,6 +1608,29 @@ class QueryBuilder(Generic[T]):
                     param_index += 1
             else:
                 raise TypeError(f"Invalid filter type: {type(filter_item)}")
+
+        # Add JSON conditions
+        for op_type, column, value in self._json_conditions:
+            if op_type == "json_contains":
+                conditions.append(f'"{column}" @> ${param_index}::jsonb')
+                params.append(value)
+                param_index += 1
+            elif op_type == "json_contained_by":
+                conditions.append(f'"{column}" <@ ${param_index}::jsonb')
+                params.append(value)
+                param_index += 1
+            elif op_type == "json_key_exists":
+                conditions.append(f'"{column}" ? ${param_index}')
+                params.append(value)
+                param_index += 1
+            elif op_type == "json_any_key_exists":
+                conditions.append(f'"{column}" ?| ${param_index}')
+                params.append(value)
+                param_index += 1
+            elif op_type == "json_all_keys_exist":
+                conditions.append(f'"{column}" ?& ${param_index}')
+                params.append(value)
+                param_index += 1
 
         where_clause = " AND ".join(conditions) if conditions else ""
         return (where_clause, params)

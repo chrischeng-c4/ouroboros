@@ -120,6 +120,16 @@ pub enum Operator {
     Exists,
     /// Subquery returns no rows
     NotExists,
+    /// JSONB contains @>
+    JsonContains,
+    /// JSONB contained by <@
+    JsonContainedBy,
+    /// JSONB key exists ?
+    JsonKeyExists,
+    /// JSONB any key exists ?|
+    JsonAnyKeyExists,
+    /// JSONB all keys exist ?&
+    JsonAllKeysExist,
 }
 
 impl Operator {
@@ -142,6 +152,11 @@ impl Operator {
             Operator::NotInSubquery => "NOT IN",
             Operator::Exists => "EXISTS",
             Operator::NotExists => "NOT EXISTS",
+            Operator::JsonContains => "@>",
+            Operator::JsonContainedBy => "<@",
+            Operator::JsonKeyExists => "?",
+            Operator::JsonAnyKeyExists => "?|",
+            Operator::JsonAllKeysExist => "?&",
         }
     }
 }
@@ -218,6 +233,48 @@ impl JoinType {
             JoinType::Full => "FULL OUTER JOIN",
         }
     }
+}
+
+/// Set operation types for combining query results
+#[derive(Debug, Clone, PartialEq)]
+pub enum SetOperation {
+    /// UNION - combines results, removes duplicates
+    Union,
+    /// UNION ALL - combines results, keeps duplicates
+    UnionAll,
+    /// INTERSECT - returns only rows in both queries
+    Intersect,
+    /// INTERSECT ALL - keeps duplicates
+    IntersectAll,
+    /// EXCEPT - returns rows in first query but not second
+    Except,
+    /// EXCEPT ALL - keeps duplicates
+    ExceptAll,
+}
+
+impl SetOperation {
+    /// Returns the SQL set operation string.
+    fn to_sql(&self) -> &'static str {
+        match self {
+            SetOperation::Union => " UNION ",
+            SetOperation::UnionAll => " UNION ALL ",
+            SetOperation::Intersect => " INTERSECT ",
+            SetOperation::IntersectAll => " INTERSECT ALL ",
+            SetOperation::Except => " EXCEPT ",
+            SetOperation::ExceptAll => " EXCEPT ALL ",
+        }
+    }
+}
+
+/// A combined query with set operation
+#[derive(Debug, Clone)]
+pub struct SetQuery {
+    /// The operation to perform
+    pub operation: SetOperation,
+    /// The SQL of the other query
+    pub sql: String,
+    /// Parameters for the other query
+    pub params: Vec<ExtractedValue>,
 }
 
 /// Structured JOIN condition to prevent SQL injection
@@ -372,6 +429,10 @@ pub struct QueryBuilder {
     ctes: Vec<CommonTableExpression>,
     /// Window function expressions
     windows: Vec<WindowExpression>,
+    /// Set operations (UNION, INTERSECT, EXCEPT)
+    set_operations: Vec<SetQuery>,
+    /// Columns to return from UPDATE/DELETE (RETURNING clause)
+    returning: Vec<String>,
 }
 
 /// Represents a WHERE condition.
@@ -410,6 +471,8 @@ impl QueryBuilder {
             distinct_on_columns: Vec::new(),
             ctes: Vec::new(),
             windows: Vec::new(),
+            set_operations: Vec::new(),
+            returning: Vec::new(),
         })
     }
 
@@ -636,6 +699,104 @@ impl QueryBuilder {
             operator: Operator::NotExists,
             value: None,
             subquery: Some(Subquery { sql: sql.to_string(), params }),
+        });
+        Ok(self)
+    }
+
+    /// Filter where JSONB column contains the given JSON
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WHERE metadata @> '{"role": "admin"}'
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_json_contains("metadata", r#"{"role": "admin"}"#)?;
+    /// ```
+    pub fn where_json_contains(mut self, field: &str, json: &str) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::JsonContains,
+            value: Some(ExtractedValue::String(json.to_string())),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Filter where column is contained by the given JSON
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WHERE metadata <@ '{"premium": true}'
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_json_contained_by("metadata", r#"{"premium": true}"#)?;
+    /// ```
+    pub fn where_json_contained_by(mut self, field: &str, json: &str) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::JsonContainedBy,
+            value: Some(ExtractedValue::String(json.to_string())),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Filter where JSONB column has the specified key
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WHERE metadata ? 'email'
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_json_key_exists("metadata", "email")?;
+    /// ```
+    pub fn where_json_key_exists(mut self, field: &str, key: &str) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::JsonKeyExists,
+            value: Some(ExtractedValue::String(key.to_string())),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Filter where JSONB column has any of the specified keys
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WHERE metadata ?| ARRAY['email', 'phone']
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_json_any_key_exists("metadata", &["email", "phone"])?;
+    /// ```
+    pub fn where_json_any_key_exists(mut self, field: &str, keys: &[&str]) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        // Store as JSON array string for the query
+        let keys_array = format!("ARRAY[{}]", keys.iter().map(|k| format!("'{}'", k)).collect::<Vec<_>>().join(", "));
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::JsonAnyKeyExists,
+            value: Some(ExtractedValue::String(keys_array)),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Filter where JSONB column has all of the specified keys
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WHERE metadata ?& ARRAY['email', 'name']
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_json_all_keys_exist("metadata", &["email", "name"])?;
+    /// ```
+    pub fn where_json_all_keys_exist(mut self, field: &str, keys: &[&str]) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        let keys_array = format!("ARRAY[{}]", keys.iter().map(|k| format!("'{}'", k)).collect::<Vec<_>>().join(", "));
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::JsonAllKeysExist,
+            value: Some(ExtractedValue::String(keys_array)),
+            subquery: None,
         });
         Ok(self)
     }
@@ -999,6 +1160,176 @@ impl QueryBuilder {
         self
     }
 
+    /// Combine this query with another using UNION
+    ///
+    /// # Arguments
+    ///
+    /// * `other` - The query to combine with
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use data_bridge_postgres::QueryBuilder;
+    /// let q1 = QueryBuilder::new("active_users").unwrap();
+    /// let q2 = QueryBuilder::new("archived_users").unwrap();
+    /// let combined = q1.union(q2);
+    /// ```
+    pub fn union(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Union,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with UNION ALL (keeps duplicates)
+    pub fn union_all(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::UnionAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with INTERSECT
+    pub fn intersect(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Intersect,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with INTERSECT ALL
+    pub fn intersect_all(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::IntersectAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with EXCEPT
+    pub fn except(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Except,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with EXCEPT ALL
+    pub fn except_all(mut self, other: QueryBuilder) -> Self {
+        let (sql, params) = other.build_select();
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::ExceptAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with UNION using raw SQL
+    pub fn union_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Union,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with UNION ALL using raw SQL
+    pub fn union_all_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::UnionAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with INTERSECT using raw SQL
+    pub fn intersect_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Intersect,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with INTERSECT ALL using raw SQL
+    pub fn intersect_all_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::IntersectAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with EXCEPT using raw SQL
+    pub fn except_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::Except,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Combine with EXCEPT ALL using raw SQL
+    pub fn except_all_raw(mut self, sql: String, params: Vec<ExtractedValue>) -> Self {
+        self.set_operations.push(SetQuery {
+            operation: SetOperation::ExceptAll,
+            sql,
+            params,
+        });
+        self
+    }
+
+    /// Add columns to the RETURNING clause for UPDATE/DELETE queries
+    ///
+    /// # Example
+    /// ```ignore
+    /// // UPDATE users SET status = 'inactive' WHERE id = 1 RETURNING id, name
+    /// let qb = QueryBuilder::new("users")?
+    ///     .where_clause("id", Operator::Eq, ExtractedValue::Int(1))?
+    ///     .returning(&["id", "name"])?;
+    /// ```
+    pub fn returning(mut self, columns: &[&str]) -> Result<Self> {
+        for col in columns {
+            if *col != "*" {
+                Self::validate_identifier(col)?;
+            }
+            self.returning.push(col.to_string());
+        }
+        Ok(self)
+    }
+
+    /// Return all columns from UPDATE/DELETE
+    pub fn returning_all(mut self) -> Self {
+        self.returning.push("*".to_string());
+        self
+    }
+
+    /// Clear RETURNING clause
+    pub fn clear_returning(mut self) -> Self {
+        self.returning.clear();
+        self
+    }
+
     /// Builds a SELECT SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders.
@@ -1154,6 +1485,40 @@ impl QueryBuilder {
                             format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
                         }
                     }
+                    Operator::JsonContains | Operator::JsonContainedBy => {
+                        // JSONB contains uses the JSON value directly (cast to jsonb)
+                        if let Some(ExtractedValue::String(json)) = &cond.value {
+                            format!("{} {} '{}'::jsonb",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                json.replace("'", "''")  // Escape single quotes
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonKeyExists => {
+                        // Use parameterized query for key
+                        let quoted_field = Self::quote_identifier(&cond.field);
+                        if let Some(ref value) = cond.value {
+                            params.push(value.clone());
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
+                        } else {
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonAnyKeyExists | Operator::JsonAllKeysExist => {
+                        // Array operators use literal array
+                        if let Some(ExtractedValue::String(arr)) = &cond.value {
+                            format!("{} {} {}",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                arr
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
                     _ => {
                         let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
@@ -1212,6 +1577,16 @@ impl QueryBuilder {
         if let Some(offset) = self.offset_value {
             params.push(ExtractedValue::BigInt(offset));
             sql.push_str(&format!(" OFFSET ${}", params.len()));
+        }
+
+        // Add set operations (UNION, INTERSECT, EXCEPT)
+        for set_op in &self.set_operations {
+            sql.push_str(set_op.operation.to_sql());
+
+            // Adjust parameter indices in the set query
+            let adjusted_sql = Self::adjust_param_indices(&set_op.sql, params.len());
+            sql.push_str(&adjusted_sql);
+            params.extend(set_op.params.clone());
         }
 
         (sql, params)
@@ -1323,6 +1698,40 @@ impl QueryBuilder {
                             format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
                         }
                     }
+                    Operator::JsonContains | Operator::JsonContainedBy => {
+                        // JSONB contains uses the JSON value directly (cast to jsonb)
+                        if let Some(ExtractedValue::String(json)) = &cond.value {
+                            format!("{} {} '{}'::jsonb",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                json.replace("'", "''")  // Escape single quotes
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonKeyExists => {
+                        // Use parameterized query for key
+                        let quoted_field = Self::quote_identifier(&cond.field);
+                        if let Some(ref value) = cond.value {
+                            params.push(value.clone());
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
+                        } else {
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonAnyKeyExists | Operator::JsonAllKeysExist => {
+                        // Array operators use literal array
+                        if let Some(ExtractedValue::String(arr)) = &cond.value {
+                            format!("{} {} {}",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                arr
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
                     _ => {
                         let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
@@ -1337,6 +1746,19 @@ impl QueryBuilder {
             }
 
             sql.push_str(&where_parts.join(" AND "));
+        }
+
+        // RETURNING clause
+        if !self.returning.is_empty() {
+            sql.push_str(" RETURNING ");
+            if self.returning.contains(&"*".to_string()) {
+                sql.push('*');
+            } else {
+                let cols: Vec<String> = self.returning.iter()
+                    .map(|c| Self::quote_identifier(c))
+                    .collect();
+                sql.push_str(&cols.join(", "));
+            }
         }
 
         Ok((sql, params))
@@ -1505,6 +1927,40 @@ impl QueryBuilder {
                             format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
                         }
                     }
+                    Operator::JsonContains | Operator::JsonContainedBy => {
+                        // JSONB contains uses the JSON value directly (cast to jsonb)
+                        if let Some(ExtractedValue::String(json)) = &cond.value {
+                            format!("{} {} '{}'::jsonb",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                json.replace("'", "''")  // Escape single quotes
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonKeyExists => {
+                        // Use parameterized query for key
+                        let quoted_field = Self::quote_identifier(&cond.field);
+                        if let Some(ref value) = cond.value {
+                            params.push(value.clone());
+                            format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
+                        } else {
+                            format!("{} {} NULL", quoted_field, cond.operator.to_sql())
+                        }
+                    }
+                    Operator::JsonAnyKeyExists | Operator::JsonAllKeysExist => {
+                        // Array operators use literal array
+                        if let Some(ExtractedValue::String(arr)) = &cond.value {
+                            format!("{} {} {}",
+                                Self::quote_identifier(&cond.field),
+                                cond.operator.to_sql(),
+                                arr
+                            )
+                        } else {
+                            format!("{} {} NULL", Self::quote_identifier(&cond.field), cond.operator.to_sql())
+                        }
+                    }
                     _ => {
                         let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
@@ -1519,6 +1975,19 @@ impl QueryBuilder {
             }
 
             sql.push_str(&where_parts.join(" AND "));
+        }
+
+        // RETURNING clause
+        if !self.returning.is_empty() {
+            sql.push_str(" RETURNING ");
+            if self.returning.contains(&"*".to_string()) {
+                sql.push('*');
+            } else {
+                let cols: Vec<String> = self.returning.iter()
+                    .map(|c| Self::quote_identifier(c))
+                    .collect();
+                sql.push_str(&cols.join(", "));
+            }
         }
 
         (sql, params)
@@ -3614,4 +4083,341 @@ fn debug_window_sql() {
     assert!(sql.contains("SELECT \"id\", \"user_id\", \"amount\""));
     assert!(sql.contains("ROW_NUMBER() OVER (ORDER BY \"amount\" DESC) AS \"rank\""));
     assert!(sql.contains("SUM(\"amount\") OVER (PARTITION BY \"user_id\" ORDER BY \"created_at\" ASC) AS \"running_total\""));
+}
+
+#[test]
+fn test_union_basic() {
+    let q1 = QueryBuilder::new("active_users").unwrap()
+        .select(vec!["id".to_string(), "name".to_string()]).unwrap();
+    let q2 = QueryBuilder::new("archived_users").unwrap()
+        .select(vec!["id".to_string(), "name".to_string()]).unwrap();
+
+    let combined = q1.union(q2);
+    let (sql, _) = combined.build_select();
+    assert!(sql.contains(" UNION "));
+    assert!(sql.contains("\"active_users\""));
+    assert!(sql.contains("\"archived_users\""));
+}
+
+#[test]
+fn test_union_all() {
+    let q1 = QueryBuilder::new("orders").unwrap();
+    let q2 = QueryBuilder::new("returns").unwrap();
+
+    let combined = q1.union_all(q2);
+    let (sql, _) = combined.build_select();
+    assert!(sql.contains(" UNION ALL "));
+}
+
+#[test]
+fn test_intersect() {
+    let q1 = QueryBuilder::new("all_orders").unwrap()
+        .select(vec!["id".to_string()]).unwrap();
+    let q2 = QueryBuilder::new("paid_orders").unwrap()
+        .select(vec!["id".to_string()]).unwrap();
+
+    let combined = q1.intersect(q2);
+    let (sql, _) = combined.build_select();
+    assert!(sql.contains(" INTERSECT "));
+}
+
+#[test]
+fn test_except() {
+    let q1 = QueryBuilder::new("all_products").unwrap();
+    let q2 = QueryBuilder::new("discontinued").unwrap();
+
+    let combined = q1.except(q2);
+    let (sql, _) = combined.build_select();
+    assert!(sql.contains(" EXCEPT "));
+}
+
+#[test]
+fn test_union_with_params() {
+    let q1 = QueryBuilder::new("users").unwrap()
+        .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+    let q2 = QueryBuilder::new("admins").unwrap()
+        .where_clause("user_role", Operator::Eq, ExtractedValue::String("admin".to_string())).unwrap();
+
+    let combined = q1.union(q2);
+    let (sql, params) = combined.build_select();
+    assert_eq!(params.len(), 2);
+    // Check that parameter indices are adjusted
+    assert!(sql.contains("$1"));
+    assert!(sql.contains("$2"));
+}
+
+#[test]
+fn test_multiple_unions() {
+    let q1 = QueryBuilder::new("table1").unwrap();
+    let q2 = QueryBuilder::new("table2").unwrap();
+    let q3 = QueryBuilder::new("table3").unwrap();
+
+    let combined = q1.union(q2).union(q3);
+    let (sql, _) = combined.build_select();
+    // Should have two UNION keywords
+    assert_eq!(sql.matches(" UNION ").count(), 2);
+}
+
+#[test]
+fn test_set_operations_comprehensive() {
+    // Test SQL generation for all set operations
+    let q1 = QueryBuilder::new("active_users").unwrap()
+        .select(vec!["id".to_string(), "name".to_string()]).unwrap();
+    let q2 = QueryBuilder::new("archived_users").unwrap()
+        .select(vec!["id".to_string(), "name".to_string()]).unwrap();
+
+    let combined = q1.union(q2);
+    let (sql, _) = combined.build_select();
+    eprintln!("UNION SQL:\n{}", sql);
+    assert_eq!(
+        sql,
+        "SELECT \"id\", \"name\" FROM \"active_users\" UNION SELECT \"id\", \"name\" FROM \"archived_users\""
+    );
+
+    // Test INTERSECT ALL
+    let q1 = QueryBuilder::new("orders").unwrap();
+    let q2 = QueryBuilder::new("paid_orders").unwrap();
+    let combined = q1.intersect_all(q2);
+    let (sql, _) = combined.build_select();
+    eprintln!("INTERSECT ALL SQL:\n{}", sql);
+    assert!(sql.contains(" INTERSECT ALL "));
+
+    // Test EXCEPT ALL
+    let q1 = QueryBuilder::new("products").unwrap();
+    let q2 = QueryBuilder::new("discontinued").unwrap();
+    let combined = q1.except_all(q2);
+    let (sql, _) = combined.build_select();
+    eprintln!("EXCEPT ALL SQL:\n{}", sql);
+    assert!(sql.contains(" EXCEPT ALL "));
+}
+
+#[test]
+fn test_json_contains() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contains("metadata", r#"{"role": "admin"}"#).unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("@>"), "SQL should contain @> operator");
+    assert!(sql.contains("::jsonb"), "SQL should cast to jsonb");
+    assert!(sql.contains(r#"'{"role": "admin"}'"#), "SQL should contain JSON value");
+}
+
+#[test]
+fn test_json_contained_by() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contained_by("metadata", r#"{"premium": true}"#).unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("<@"), "SQL should contain <@ operator");
+    assert!(sql.contains("::jsonb"), "SQL should cast to jsonb");
+}
+
+#[test]
+fn test_json_key_exists() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_key_exists("metadata", "email").unwrap();
+    let (sql, params) = qb.build_select();
+    assert!(sql.contains("?"), "SQL should contain ? operator");
+    assert_eq!(params.len(), 1, "Should have one parameter");
+    if let ExtractedValue::String(s) = &params[0] {
+        assert_eq!(s, "email");
+    } else {
+        panic!("Expected String parameter");
+    }
+}
+
+#[test]
+fn test_json_any_key_exists() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_any_key_exists("metadata", &["email", "phone"]).unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("?|"), "SQL should contain ?| operator");
+    assert!(sql.contains("ARRAY["), "SQL should contain ARRAY");
+    assert!(sql.contains("'email'"), "SQL should contain email key");
+    assert!(sql.contains("'phone'"), "SQL should contain phone key");
+}
+
+#[test]
+fn test_json_all_keys_exist() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_all_keys_exist("metadata", &["email", "name"]).unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("?&"), "SQL should contain ?& operator");
+    assert!(sql.contains("ARRAY["), "SQL should contain ARRAY");
+    assert!(sql.contains("'email'"), "SQL should contain email key");
+    assert!(sql.contains("'name'"), "SQL should contain name key");
+}
+
+#[test]
+fn test_json_contains_with_quote_escaping() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contains("metadata", r#"{"name": "O'Brien"}"#).unwrap();
+    let (sql, _) = qb.build_select();
+    // Single quotes should be escaped
+    assert!(sql.contains("O''Brien"), "Single quotes should be escaped");
+}
+
+#[test]
+fn test_multiple_json_conditions() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contains("metadata", r#"{"role": "admin"}"#).unwrap()
+        .where_json_key_exists("metadata", "email").unwrap();
+    let (sql, params) = qb.build_select();
+    assert!(sql.contains("@>"), "SQL should contain @> operator");
+    assert!(sql.contains("?"), "SQL should contain ? operator");
+    assert!(sql.contains("AND"), "SQL should have AND between conditions");
+    assert_eq!(params.len(), 1, "Should have one parameter for key exists");
+}
+
+#[test]
+fn debug_json_sql() {
+    // This test demonstrates the generated SQL for JSONB operations
+    eprintln!("\n=== JSONB Operator SQL Generation ===\n");
+
+    // Test 1: JSON contains
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contains("metadata", r#"{"role": "admin"}"#).unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("1. JSON Contains (@>):");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    // Test 2: JSON contained by
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contained_by("settings", r#"{"theme": "dark"}"#).unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("2. JSON Contained By (<@):");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    // Test 3: JSON key exists
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_key_exists("metadata", "email").unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("3. JSON Key Exists (?):");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    // Test 4: JSON any key exists
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_any_key_exists("metadata", &["email", "phone"]).unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("4. JSON Any Key Exists (?|):");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    // Test 5: JSON all keys exist
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_all_keys_exist("metadata", &["email", "name", "age"]).unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("5. JSON All Keys Exist (?&):");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    // Test 6: Multiple conditions
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_json_contains("metadata", r#"{"role": "admin"}"#).unwrap()
+        .where_json_key_exists("metadata", "verified").unwrap()
+        .where_json_all_keys_exist("profile", &["name", "email"]).unwrap();
+    let (sql, params) = qb.build_select();
+    eprintln!("6. Multiple JSONB Conditions:");
+    eprintln!("   SQL: {}", sql);
+    eprintln!("   Params: {:?}\n", params);
+
+    eprintln!("=== End of JSONB SQL Examples ===\n");
+}
+
+#[test]
+fn test_update_returning_specific_columns() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap()
+        .returning(&["id", "name", "updated_at"]).unwrap();
+
+    let (sql, _) = qb.build_update(&[("status".to_string(), ExtractedValue::String("inactive".to_string()))]).unwrap();
+    assert!(sql.contains("RETURNING"));
+    assert!(sql.contains("\"id\""));
+    assert!(sql.contains("\"name\""));
+    assert!(sql.contains("\"updated_at\""));
+    assert_eq!(sql, "UPDATE \"users\" SET \"status\" = $1 WHERE \"id\" = $2 RETURNING \"id\", \"name\", \"updated_at\"");
+}
+
+#[test]
+fn test_update_returning_all() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap()
+        .returning_all();
+
+    let (sql, _) = qb.build_update(&[("status".to_string(), ExtractedValue::String("inactive".to_string()))]).unwrap();
+    assert!(sql.contains("RETURNING *"));
+    assert_eq!(sql, "UPDATE \"users\" SET \"status\" = $1 WHERE \"id\" = $2 RETURNING *");
+}
+
+#[test]
+fn test_delete_returning() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap()
+        .returning(&["id", "email"]).unwrap();
+
+    let (sql, _) = qb.build_delete();
+    assert!(sql.contains("DELETE FROM"));
+    assert!(sql.contains("RETURNING"));
+    assert!(sql.contains("\"id\""));
+    assert!(sql.contains("\"email\""));
+    assert_eq!(sql, "DELETE FROM \"users\" WHERE \"id\" = $1 RETURNING \"id\", \"email\"");
+}
+
+#[test]
+fn test_delete_returning_all() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap()
+        .returning_all();
+
+    let (sql, _) = qb.build_delete();
+    assert!(sql.contains("RETURNING *"));
+    assert_eq!(sql, "DELETE FROM \"users\" WHERE \"id\" = $1 RETURNING *");
+}
+
+#[test]
+fn test_returning_validates_identifiers() {
+    let result = QueryBuilder::new("users").unwrap()
+        .returning(&["id; DROP TABLE users"]);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_returning_allows_asterisk() {
+    let result = QueryBuilder::new("users").unwrap()
+        .returning(&["*"]);
+    assert!(result.is_ok());
+    let qb = result.unwrap();
+    let (sql, _) = qb.build_delete();
+    assert!(sql.contains("RETURNING *"));
+}
+
+#[test]
+fn test_clear_returning() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap()
+        .returning(&["id", "name"]).unwrap()
+        .clear_returning();
+
+    let (sql, _) = qb.build_update(&[("status".to_string(), ExtractedValue::String("inactive".to_string()))]).unwrap();
+    assert!(!sql.contains("RETURNING"));
+    assert_eq!(sql, "UPDATE \"users\" SET \"status\" = $1 WHERE \"id\" = $2");
+}
+
+#[test]
+fn test_update_without_returning() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
+
+    let (sql, _) = qb.build_update(&[("status".to_string(), ExtractedValue::String("inactive".to_string()))]).unwrap();
+    assert!(!sql.contains("RETURNING"));
+}
+
+#[test]
+fn test_delete_without_returning() {
+    let qb = QueryBuilder::new("users").unwrap()
+        .where_clause("id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
+
+    let (sql, _) = qb.build_delete();
+    assert!(!sql.contains("RETURNING"));
 }

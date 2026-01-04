@@ -1248,20 +1248,24 @@ fn delete_one<'py>(
 ///     updates: Dictionary of column values to update
 ///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
 ///     params: List of parameter values for WHERE clause
+///     returning: Optional list of column names to return (default: None)
 ///
 /// Returns:
-///     Number of rows updated
+///     If returning is None: Number of rows updated (int)
+///     If returning is Some: List of dicts with returned column values
 ///
 /// Example:
 ///     updated = await update_many("users", {"status": "active"}, "age > $1", [25])
+///     results = await update_many("users", {"status": "active"}, "age > $1", [25], ["id", "name"])
 #[pyfunction]
-#[pyo3(signature = (table, updates, where_clause, params))]
+#[pyo3(signature = (table, updates, where_clause, params, returning=None))]
 fn update_many<'py>(
     py: Python<'py>,
     table: String,
     updates: &Bound<'_, PyDict>,
     where_clause: String,
     params: Vec<Bound<'py, PyAny>>,
+    returning: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -1293,6 +1297,21 @@ fn update_many<'py>(
             sql.push_str(&format!(" WHERE {}", adjusted_where));
         }
 
+        // Add RETURNING clause if specified
+        if let Some(ref cols) = returning {
+            if !cols.is_empty() {
+                let returning_clause = if cols.len() == 1 && cols[0] == "*" {
+                    "*".to_string()
+                } else {
+                    cols.iter()
+                        .map(|c| format!("\"{}\"", c))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                sql.push_str(&format!(" RETURNING {}", returning_clause));
+            }
+        }
+
         // Bind parameters (updates first, then where params)
         let mut args = sqlx::postgres::PgArguments::default();
         for (_, value) in &update_values {
@@ -1305,13 +1324,45 @@ fn update_many<'py>(
         }
 
         // Execute query
-        let result = sqlx::query_with(&sql, args)
-            .execute(conn.pool())
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
+        if returning.is_some() {
+            // With RETURNING clause, fetch rows
+            let rows = sqlx::query_with(&sql, args)
+                .fetch_all(conn.pool())
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
 
-        // Phase 3: Return result (GIL acquired inside future_into_py)
-        Ok(result.rows_affected() as i64)
+            // Convert rows to Python dicts
+            Python::with_gil(|py| {
+                let py_list = PyList::empty(py);
+                for row in rows {
+                    // Convert row to ExtractedValue map
+                    let columns = data_bridge_postgres::row_to_extracted(&row)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to extract row: {}", e)))?;
+
+                    // Create Python dict
+                    let py_dict = PyDict::new(py);
+                    for (column_name, value) in columns {
+                        let py_value = extracted_to_py_value(py, &value)?;
+                        py_dict.set_item(column_name, py_value)?;
+                    }
+
+                    py_list.append(py_dict)?;
+                }
+
+                Ok(py_list.to_object(py))
+            })
+        } else {
+            // Without RETURNING, return row count
+            let result = sqlx::query_with(&sql, args)
+                .execute(conn.pool())
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Update failed: {}", e)))?;
+
+            // Phase 3: Return result (GIL acquired inside future_into_py)
+            Python::with_gil(|py| {
+                Ok((result.rows_affected() as i64).to_object(py))
+            })
+        }
     })
 }
 
@@ -1321,19 +1372,23 @@ fn update_many<'py>(
 ///     table: Table name
 ///     where_clause: SQL WHERE clause string (without "WHERE" keyword)
 ///     params: List of parameter values
+///     returning: Optional list of column names to return (default: None)
 ///
 /// Returns:
-///     Number of rows deleted
+///     If returning is None: Number of rows deleted (int)
+///     If returning is Some: List of dicts with returned column values
 ///
 /// Example:
 ///     deleted = await delete_many("users", "age < $1", [18])
+///     results = await delete_many("users", "age < $1", [18], ["id", "name"])
 #[pyfunction]
-#[pyo3(signature = (table, where_clause, params))]
+#[pyo3(signature = (table, where_clause, params, returning=None))]
 fn delete_many<'py>(
     py: Python<'py>,
     table: String,
     where_clause: String,
     params: Vec<Bound<'py, PyAny>>,
+    returning: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -1353,6 +1408,21 @@ fn delete_many<'py>(
             sql.push_str(&format!(" WHERE {}", where_clause));
         }
 
+        // Add RETURNING clause if specified
+        if let Some(ref cols) = returning {
+            if !cols.is_empty() {
+                let returning_clause = if cols.len() == 1 && cols[0] == "*" {
+                    "*".to_string()
+                } else {
+                    cols.iter()
+                        .map(|c| format!("\"{}\"", c))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                sql.push_str(&format!(" RETURNING {}", returning_clause));
+            }
+        }
+
         // Bind parameters
         let mut args = sqlx::postgres::PgArguments::default();
         for param in &extracted_params {
@@ -1361,13 +1431,45 @@ fn delete_many<'py>(
         }
 
         // Execute query
-        let result = sqlx::query_with(&sql, args)
-            .execute(conn.pool())
-            .await
-            .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
+        if returning.is_some() {
+            // With RETURNING clause, fetch rows
+            let rows = sqlx::query_with(&sql, args)
+                .fetch_all(conn.pool())
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
 
-        // Phase 3: Return result (GIL acquired inside future_into_py)
-        Ok(result.rows_affected() as i64)
+            // Convert rows to Python dicts
+            Python::with_gil(|py| {
+                let py_list = PyList::empty(py);
+                for row in rows {
+                    // Convert row to ExtractedValue map
+                    let columns = data_bridge_postgres::row_to_extracted(&row)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Failed to extract row: {}", e)))?;
+
+                    // Create Python dict
+                    let py_dict = PyDict::new(py);
+                    for (column_name, value) in columns {
+                        let py_value = extracted_to_py_value(py, &value)?;
+                        py_dict.set_item(column_name, py_value)?;
+                    }
+
+                    py_list.append(py_dict)?;
+                }
+
+                Ok(py_list.to_object(py))
+            })
+        } else {
+            // Without RETURNING, return row count
+            let result = sqlx::query_with(&sql, args)
+                .execute(conn.pool())
+                .await
+                .map_err(|e| PyRuntimeError::new_err(format!("Delete failed: {}", e)))?;
+
+            // Phase 3: Return result (GIL acquired inside future_into_py)
+            Python::with_gil(|py| {
+                Ok((result.rows_affected() as i64).to_object(py))
+            })
+        }
     })
 }
 
@@ -2908,7 +3010,7 @@ fn autogenerate_migration<'py>(
 ///         distinct=True
 ///     )
 #[pyfunction]
-#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None, subqueries=None, windows=None))]
+#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None, subqueries=None, windows=None, set_operations=None))]
 fn query_aggregate<'py>(
     py: Python<'py>,
     table: String,
@@ -2923,6 +3025,7 @@ fn query_aggregate<'py>(
     ctes: Option<Vec<(String, String, Vec<Bound<'py, PyAny>>)>>,
     subqueries: Option<Vec<(String, Option<String>, String, Vec<Bound<'py, PyAny>>)>>,  // (type, field, sql, params)
     windows: Option<Vec<(String, Option<String>, Option<i32>, Option<Bound<'py, PyAny>>, Vec<String>, Vec<(String, String)>, String)>>,  // (func_type, column, offset, default, partition_by, order_by, alias)
+    set_operations: Option<Vec<(String, String, Vec<Bound<'py, PyAny>>)>>,  // (op_type, sql, params)
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -3182,6 +3285,21 @@ fn query_aggregate<'py>(
         Vec::new()
     };
 
+    // Extract set operation parameters
+    let set_op_params: Vec<(String, String, Vec<data_bridge_postgres::ExtractedValue>)> = if let Some(ops) = set_operations {
+        ops.into_iter()
+            .map(|(op_type, sql, params)| {
+                let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+                    .iter()
+                    .map(|p| py_value_to_extracted(py, p))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((op_type, sql, extracted_params))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
     // Phase 2: Build and execute query (GIL released via future_into_py)
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
@@ -3294,6 +3412,22 @@ fn query_aggregate<'py>(
         // Add LIMIT
         if let Some(l) = limit {
             query = query.limit(l);
+        }
+
+        // Apply set operations
+        for (op_type, sql, params) in set_op_params {
+            query = match op_type.to_lowercase().as_str() {
+                "union" => query.union_raw(sql, params),
+                "union_all" => query.union_all_raw(sql, params),
+                "intersect" => query.intersect_raw(sql, params),
+                "intersect_all" => query.intersect_all_raw(sql, params),
+                "except" => query.except_raw(sql, params),
+                "except_all" => query.except_all_raw(sql, params),
+                _ => return Err(PyValueError::new_err(format!(
+                    "Unknown set operation: {}. Expected 'union', 'union_all', 'intersect', 'intersect_all', 'except', or 'except_all'",
+                    op_type
+                ))),
+            };
         }
 
         // Build SQL and parameters
@@ -3515,6 +3649,11 @@ fn parse_operator(op_str: &str) -> PyResult<Operator> {
         "in" => Ok(Operator::In),
         "is_null" => Ok(Operator::IsNull),
         "is_not_null" => Ok(Operator::IsNotNull),
+        "json_contains" => Ok(Operator::JsonContains),
+        "json_contained_by" => Ok(Operator::JsonContainedBy),
+        "json_key_exists" => Ok(Operator::JsonKeyExists),
+        "json_any_key_exists" => Ok(Operator::JsonAnyKeyExists),
+        "json_all_keys_exist" => Ok(Operator::JsonAllKeysExist),
         _ => Err(PyValueError::new_err(format!("Unknown operator: {}", op_str))),
     }
 }

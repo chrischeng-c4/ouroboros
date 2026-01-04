@@ -257,10 +257,10 @@ Atomic, testable tasks organized by priority and component.
 - [x] P4-QUERY-04: Implement HAVING clause (2025-01-04)
 - [x] P4-QUERY-05: Implement window functions (ROW_NUMBER, RANK) (2025-01-04)
 - [x] P4-QUERY-06: Implement CTE (WITH ... AS ...) (2025-01-04)
-- [ ] P4-QUERY-07: Implement UNION/INTERSECT/EXCEPT
+- [x] P4-QUERY-07: Implement UNION/INTERSECT/EXCEPT (2025-01-04)
 - [x] P4-QUERY-08: Implement DISTINCT ON (2025-01-04)
-- [ ] P4-QUERY-09: Implement JSONB operators
-- [ ] P4-QUERY-10: Support RETURNING clause in Updates/Deletes
+- [x] P4-QUERY-09: Implement JSONB operators (2025-01-04)
+- [x] P4-QUERY-10: Support RETURNING clause in Updates/Deletes (2025-01-04)
 - [ ] P4-QUERY-11: Add integration tests (25+ tests)
 
 ### P4-M2M: Many-to-Many Relationships
