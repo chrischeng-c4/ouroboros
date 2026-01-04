@@ -16,9 +16,10 @@ from .exceptions import HTTPException
 from .type_extraction import extract_handler_meta
 from .dependencies import (
     DependencyContainer, RequestContext,
-    extract_dependencies, build_dependency_graph
+    extract_dependencies, build_dependency_graph, Scope
 )
 from .openapi import generate_openapi, get_swagger_ui_html, get_redoc_html
+from .http_integration import HttpClientProvider
 
 # Import Rust bindings
 try:
@@ -76,6 +77,7 @@ class App:
         self._compiled = False
         self._global_deps: Dict[int, str] = {}  # Track factory id -> registered name
         self._docs_setup = False
+        self._http_provider = HttpClientProvider()
 
         # Initialize Rust app if available
         if _api is not None:
@@ -417,3 +419,66 @@ class App:
                 result[param_name] = resolved[dep_name]
 
         return result
+
+    def configure_http_client(
+        self,
+        base_url: Optional[str] = None,
+        timeout: float = 30.0,
+        connect_timeout: float = 10.0,
+        **kwargs
+    ):
+        """Configure the HTTP client for making external requests.
+
+        This makes HttpClient available as a dependency in route handlers.
+
+        Args:
+            base_url: Base URL for all requests
+            timeout: Request timeout in seconds (default: 30.0)
+            connect_timeout: Connection timeout in seconds (default: 10.0)
+            **kwargs: Additional HttpClient configuration (pool_max_idle_per_host,
+                     follow_redirects, max_redirects, user_agent, etc.)
+
+        Example:
+            app = App()
+            app.configure_http_client(
+                base_url="https://api.example.com",
+                timeout=30.0
+            )
+
+            @app.get("/data")
+            async def get_data(http: HttpClient = Depends()):
+                response = await http.get("/users")
+                return response.json()
+        """
+        from ..http import HttpClient
+
+        # Configure the provider
+        self._http_provider.configure(
+            base_url=base_url,
+            timeout=timeout,
+            connect_timeout=connect_timeout,
+            **kwargs
+        )
+
+        # Register HttpClient as singleton dependency
+        self._dependency_container.register(
+            "HttpClient",
+            self._http_provider,
+            scope=Scope.SINGLETON
+        )
+
+    @property
+    def http_client(self):
+        """Get the configured HTTP client.
+
+        Returns:
+            Configured HttpClient instance
+
+        Raises:
+            RuntimeError: If HTTP client not configured yet
+
+        Example:
+            app.configure_http_client(base_url="https://api.example.com")
+            response = await app.http_client.get("/data")
+        """
+        return self._http_provider.get_client()

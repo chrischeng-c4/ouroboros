@@ -348,6 +348,14 @@ def extract_type_schema(type_hint: Type) -> Dict[str, Any]:
             "values": list(args),
         }
 
+    # Handle our custom BaseModel (from .models)
+    # Check by looking for __schema__ attribute which our BaseModel has
+    if isinstance(type_hint, type) and hasattr(type_hint, '__schema__') and hasattr(type_hint, '__fields__'):
+        # This is our custom BaseModel
+        from . import models as api_models
+        if hasattr(api_models, 'BaseModel') and issubclass(type_hint, api_models.BaseModel):
+            return extract_api_basemodel_schema(type_hint)
+
     # Handle Pydantic models
     if HAS_PYDANTIC and isinstance(type_hint, type) and issubclass(type_hint, BaseModel):
         return extract_pydantic_schema(type_hint)
@@ -412,6 +420,50 @@ def extract_type_schema(type_hint: Type) -> Dict[str, Any]:
 
     # Default: treat as object
     return {"type": "any", "python_type": type_name}
+
+
+def extract_api_basemodel_schema(model: Type) -> Dict[str, Any]:
+    """Extract schema from our custom data_bridge.api.models.BaseModel.
+
+    Args:
+        model: BaseModel subclass from data_bridge.api.models
+
+    Returns:
+        Dictionary with object schema
+    """
+    # Our BaseModel already has __schema__ computed
+    # We can extract fields information from it
+    fields_info = []
+
+    for field_name, field in model.__fields__.items():
+        # Get type hint for this field
+        field_type = model.__annotations__.get(field_name)
+        if field_type:
+            field_schema = extract_type_schema(field_type)
+        else:
+            field_schema = {"type": "any"}
+
+        field_info = {
+            "name": field_name,
+            "type": field_schema,
+            "required": field.default is ... and field.default_factory is None,
+        }
+
+        # Add default if present
+        if field.default is not ... and field.default is not None:
+            field_info["default"] = field.default
+
+        # Add description if present
+        if field.description:
+            field_info["description"] = field.description
+
+        fields_info.append(field_info)
+
+    return {
+        "type": "object",
+        "class_name": model.__name__,
+        "fields": fields_info,
+    }
 
 
 def extract_pydantic_schema(model: Type["BaseModel"]) -> Dict[str, Any]:

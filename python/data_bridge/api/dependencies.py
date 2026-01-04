@@ -310,7 +310,11 @@ class DependencyContainer:
 
 
 def extract_dependencies(func: Callable) -> Dict[str, Depends]:
-    """Extract dependencies from a function's type hints."""
+    """Extract dependencies from a function's type hints.
+
+    Supports both explicit Depends() annotations and auto-resolution
+    for special types like HttpClient.
+    """
     dependencies: Dict[str, Depends] = {}
 
     try:
@@ -335,6 +339,19 @@ def extract_dependencies(func: Callable) -> Dict[str, Depends]:
                 if isinstance(arg, Depends):
                     dependencies[param_name] = arg
                     break
+        else:
+            # Check for auto-resolvable types (HttpClient)
+            # Import here to avoid circular dependency
+            try:
+                from ..http import HttpClient
+                if hint is HttpClient:
+                    # Auto-create Depends() for HttpClient
+                    dependencies[param_name] = Depends(
+                        dependency=lambda: None,  # Placeholder, will be resolved by name
+                        scope=Scope.SINGLETON
+                    )
+            except ImportError:
+                pass
 
     return dependencies
 
@@ -361,6 +378,19 @@ def build_dependency_graph(
     registered: List[str] = []
 
     for param_name, depends in dependencies.items():
+        # Special case: HttpClient auto-resolution
+        # Check if this is an HttpClient type hint (dependency will be a lambda placeholder)
+        try:
+            hints = get_type_hints(func, include_extras=True)
+            from ..http import HttpClient
+            if hints.get(param_name) is HttpClient:
+                # Use the global "HttpClient" registration
+                # It should already be registered by App.configure_http_client()
+                registered.append("HttpClient")
+                continue
+        except (ImportError, Exception):
+            pass
+
         if depends.dependency is None:
             continue
 

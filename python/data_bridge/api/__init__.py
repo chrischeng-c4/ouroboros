@@ -18,6 +18,9 @@ from .types import Path, Query, Body, Header, Depends
 from .dependencies import Scope
 from .response import Response, JSONResponse, HTMLResponse, PlainTextResponse
 from .exceptions import HTTPException
+from .models import BaseModel, Field
+from .context import RequestContext
+from .http_integration import HttpClientProvider, create_http_client
 
 __all__ = [
     # Core
@@ -29,6 +32,9 @@ __all__ = [
     "Header",
     "Depends",
     "Scope",
+    # Models
+    "BaseModel",
+    "Field",
     # Response
     "Response",
     "JSONResponse",
@@ -36,4 +42,9 @@ __all__ = [
     "PlainTextResponse",
     # Exceptions
     "HTTPException",
+    # Context
+    "RequestContext",
+    # HTTP Integration
+    "HttpClientProvider",
+    "create_http_client",
 ]
