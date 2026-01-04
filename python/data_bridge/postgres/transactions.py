@@ -40,14 +40,14 @@ class Transaction:
         ...     # Rolls back on exception
     """
 
-    def __init__(self, tx_id: Any):
+    def __init__(self, tx: Any):
         """
         Initialize transaction context.
 
         Args:
-            tx_id: Transaction identifier from Rust backend
+            tx: Transaction object from Rust backend
         """
-        self._tx_id = tx_id
+        self._tx = tx
         self._committed = False
         self._rolled_back = False
 
@@ -64,17 +64,12 @@ class Transaction:
         on successful exit from the context manager.
 
         Raises:
-            RuntimeError: If transaction is not active or engine not available
+            RuntimeError: If transaction is not active
         """
-        if _engine is None:
-            raise RuntimeError(
-                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
-            )
-
         if not self.is_active:
             raise RuntimeError("Transaction is not active")
 
-        await _engine.commit_transaction(self._tx_id)
+        await self._tx.commit()
         self._committed = True
 
     async def rollback(self) -> None:
@@ -85,17 +80,12 @@ class Transaction:
         on exception.
 
         Raises:
-            RuntimeError: If transaction is not active or engine not available
+            RuntimeError: If transaction is not active
         """
-        if _engine is None:
-            raise RuntimeError(
-                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
-            )
-
         if not self.is_active:
             raise RuntimeError("Transaction is not active")
 
-        await _engine.rollback_transaction(self._tx_id)
+        await self._tx.rollback()
         self._rolled_back = True
 
     async def savepoint(self, name: str) -> "Savepoint":
@@ -118,16 +108,11 @@ class Transaction:
             ...         await order2.save()
             ...         # Can rollback to savepoint if needed
         """
-        if _engine is None:
-            raise RuntimeError(
-                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
-            )
-
         if not self.is_active:
             raise RuntimeError("Transaction is not active")
 
-        savepoint_id = await _engine.create_savepoint(self._tx_id, name)
-        return Savepoint(self._tx_id, savepoint_id, name)
+        await self._tx.savepoint(name)
+        return Savepoint(self._tx, name)
 
 
 class Savepoint:
@@ -146,17 +131,15 @@ class Savepoint:
         ...             await sp.rollback()
     """
 
-    def __init__(self, tx_id: Any, savepoint_id: Any, name: str):
+    def __init__(self, tx: Any, name: str):
         """
         Initialize savepoint.
 
         Args:
-            tx_id: Transaction identifier
-            savepoint_id: Savepoint identifier from Rust backend
+            tx: Transaction object from Rust backend
             name: Savepoint name
         """
-        self._tx_id = tx_id
-        self._savepoint_id = savepoint_id
+        self._tx = tx
         self._name = name
         self._released = False
 
@@ -167,17 +150,12 @@ class Savepoint:
         This undoes all changes made after the savepoint was created.
 
         Raises:
-            RuntimeError: If savepoint already released or engine not available
+            RuntimeError: If savepoint already released
         """
-        if _engine is None:
-            raise RuntimeError(
-                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
-            )
-
         if self._released:
             raise RuntimeError("Savepoint has been released")
 
-        await _engine.rollback_to_savepoint(self._tx_id, self._savepoint_id)
+        await self._tx.rollback_to_savepoint(self._name)
 
     async def release(self) -> None:
         """
@@ -186,17 +164,12 @@ class Savepoint:
         This destroys the savepoint but keeps the changes.
 
         Raises:
-            RuntimeError: If savepoint already released or engine not available
+            RuntimeError: If savepoint already released
         """
-        if _engine is None:
-            raise RuntimeError(
-                "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
-            )
-
         if self._released:
             raise RuntimeError("Savepoint already released")
 
-        await _engine.release_savepoint(self._tx_id, self._savepoint_id)
+        await self._tx.release_savepoint(self._name)
         self._released = True
 
     async def __aenter__(self) -> "Savepoint":
@@ -267,14 +240,13 @@ async def pg_transaction(
             "PostgreSQL engine not available. Ensure data-bridge was built with PostgreSQL support."
         )
 
-    # Start transaction
-    tx_id = await _engine.begin_transaction(
+    # Start transaction - returns PyTransaction object
+    # TODO: Add read_only and deferrable support to Rust backend
+    py_tx = await _engine.begin_transaction(
         isolation_level=isolation_level,
-        read_only=read_only,
-        deferrable=deferrable,
     )
 
-    tx = Transaction(tx_id)
+    tx = Transaction(py_tx)
 
     try:
         yield tx

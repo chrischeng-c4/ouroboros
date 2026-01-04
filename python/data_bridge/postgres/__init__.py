@@ -1,10 +1,10 @@
 """PostgreSQL ORM for data-bridge."""
 
 from .table import Table
-from .columns import Column, ColumnProxy, ForeignKeyProxy
+from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery
 from .query import QueryBuilder
 from .connection import (
-    init, close, is_connected, execute,
+    init, close, is_connected, execute, query_aggregate, query_with_cte,
     insert_one, insert_many,
     upsert_one, upsert_many,
     list_tables, table_exists, get_columns, get_indexes, get_foreign_keys, inspect_table,
@@ -25,6 +25,8 @@ __all__ = [
     "Column",
     "ColumnProxy",
     "ForeignKeyProxy",
+    "BackReference",
+    "BackReferenceQuery",
     # Query
     "QueryBuilder",
     # Connection
@@ -32,6 +34,8 @@ __all__ = [
     "close",
     "is_connected",
     "execute",
+    "query_aggregate",
+    "query_with_cte",
     # CRUD Operations
     "insert_one",
     "insert_many",

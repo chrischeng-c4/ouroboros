@@ -166,6 +166,142 @@ async def execute(
     return await _engine.execute(sql, params)
 
 
+async def query_aggregate(
+    table: str,
+    aggregates: List[tuple],
+    group_by: Optional[List[str]] = None,
+    having: Optional[List[tuple]] = None,
+    where_conditions: Optional[List[tuple]] = None,
+    order_by: Optional[List[tuple]] = None,
+    limit: Optional[int] = None,
+    distinct: Optional[bool] = None,
+    distinct_on: Optional[List[str]] = None,
+    ctes: Optional[List[tuple]] = None,
+    subqueries: Optional[List[tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Execute an aggregate query with GROUP BY and HAVING support.
+
+    Args:
+        table: Table name
+        aggregates: List of (func_type, column, alias) tuples
+                   func_type: "count", "count_column", "count_distinct", "sum", "avg", "min", "max"
+                   column: Column name (optional for "count")
+                   alias: Optional alias for the aggregate result
+        group_by: List of column names to group by
+        having: List of (func_type, column, operator, value) tuples for HAVING clause
+        where_conditions: List of (field, operator, value) tuples for WHERE clause
+        order_by: List of (column, direction) tuples - direction: "asc" or "desc"
+        limit: Optional row limit
+        distinct: Optional boolean to select distinct rows
+        distinct_on: Optional list of columns for DISTINCT ON (PostgreSQL-specific)
+        ctes: Optional list of (name, sql, params) tuples for CTEs
+        subqueries: Optional list of (type, field, sql, params) tuples for subquery conditions
+                   type: "in", "not_in", "exists", "not_exists"
+                   field: Column name for IN/NOT IN (None for EXISTS/NOT EXISTS)
+                   sql: Subquery SQL
+                   params: List of parameter values for subquery
+
+    Returns:
+        List of dictionaries with aggregate results
+
+    Example:
+        >>> # Group by user_id with HAVING clause
+        >>> results = await query_aggregate(
+        ...     "orders",
+        ...     [("sum", "amount", "total"), ("count", None, "count")],
+        ...     group_by=["user_id"],
+        ...     having=[("sum", "amount", "gt", 1000)],
+        ...     where_conditions=[("status", "eq", "completed")],
+        ...     order_by=[("total", "desc")],
+        ...     limit=10
+        ... )
+        >>>
+        >>> # With subquery
+        >>> results = await query_aggregate(
+        ...     "users",
+        ...     [("count", None, "total")],
+        ...     subqueries=[("in", "id", "SELECT user_id FROM orders", [])]
+        ... )
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    return await _engine.query_aggregate(
+        table,
+        aggregates,
+        group_by,
+        having,
+        where_conditions,
+        order_by,
+        limit,
+        distinct,
+        distinct_on,
+        ctes,
+        subqueries
+    )
+
+
+async def query_with_cte(
+    main_table: str,
+    ctes: List[tuple],
+    select_columns: Optional[List[str]] = None,
+    where_conditions: Optional[List[tuple]] = None,
+    order_by: Optional[List[tuple]] = None,
+    limit: Optional[int] = None,
+    subqueries: Optional[List[tuple]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Execute a query with Common Table Expressions (CTEs).
+
+    Args:
+        main_table: The table or CTE name to query from in the main SELECT
+        ctes: List of (name, sql, params) tuples defining CTEs
+        select_columns: Optional list of columns to select (defaults to *)
+        where_conditions: List of (field, operator, value) tuples for WHERE clause
+        order_by: List of (column, direction) tuples - direction: "asc" or "desc"
+        limit: Optional row limit
+        subqueries: Optional list of (type, field, sql, params) tuples for subquery conditions
+                   type: "in", "not_in", "exists", "not_exists"
+                   field: Column name for IN/NOT IN (None for EXISTS/NOT EXISTS)
+                   sql: Subquery SQL
+                   params: List of parameter values for subquery
+
+    Returns:
+        List of dictionaries with query results
+
+    Example:
+        >>> # Query with CTE
+        >>> results = await query_with_cte(
+        ...     "high_value_orders",
+        ...     [("high_value_orders", "SELECT * FROM orders WHERE total > $1", [1000])],
+        ...     select_columns=["order_id", "total"],
+        ...     where_conditions=[("status", "eq", "completed")],
+        ...     order_by=[("total", "desc")],
+        ...     limit=10
+        ... )
+        >>>
+        >>> # Query with CTE and subquery
+        >>> results = await query_with_cte(
+        ...     "users",
+        ...     [("active_orders", "SELECT user_id FROM orders WHERE status = $1", ["active"])],
+        ...     subqueries=[("in", "id", "SELECT user_id FROM active_orders", [])]
+        ... )
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    return await _engine.query_with_cte(
+        main_table,
+        ctes,
+        select_columns,
+        where_conditions,
+        order_by,
+        limit,
+        subqueries
+    )
+
+
 async def insert_one(
     table: str,
     document: Dict[str, Any],

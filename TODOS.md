@@ -2,8 +2,8 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-12-30
-**Branch**: `feature/postgres-improve`
+**Last Updated**: 2025-12-30 (P3 items completed)
+**Branch**: `main`
 
 ---
 
@@ -178,13 +178,13 @@ Atomic, testable tasks organized by priority and component.
 
 #### Python API
 
-- [ ] P3-CASCADE-08: Add `BackReference[T]` descriptor class
+- [x] P3-CASCADE-08: Add `BackReference[T]` descriptor class (2025-12-30)
   - **Test**: `user.posts` returns query for related posts
 
-- [ ] P3-CASCADE-09: Add `on_delete` parameter to `Column(foreign_key=...)`
+- [x] P3-CASCADE-09: Add `on_delete` parameter to `Column(foreign_key=...)` (2025-12-30)
   - **Test**: `Column(foreign_key="users.id", on_delete="CASCADE")` works
 
-- [ ] P3-CASCADE-10: Add `on_update` parameter to `Column(foreign_key=...)`
+- [x] P3-CASCADE-10: Add `on_update` parameter to `Column(foreign_key=...)` (2025-12-30)
   - **Test**: `Column(foreign_key="users.id", on_update="CASCADE")` works
 
 ---
@@ -193,32 +193,32 @@ Atomic, testable tasks organized by priority and component.
 
 **Goal**: Document ForeignKeyProxy and relationship features
 
-- [ ] P3-DOCS-01: Write quick start example for ForeignKey usage
+- [x] P3-DOCS-01: Write quick start example for ForeignKey usage (2025-12-30)
   - **Test**: Example code runs successfully
 
-- [ ] P3-DOCS-02: Document lazy loading (`.fetch()` vs `.ref` vs `.id`)
+- [x] P3-DOCS-02: Document lazy loading (`.fetch()` vs `.ref` vs `.id`) (2025-12-30)
   - **Test**: All three patterns explained with examples
 
-- [ ] P3-DOCS-03: Document N+1 problem and how to avoid
+- [x] P3-DOCS-03: Document N+1 problem and how to avoid (2025-12-30)
   - **Test**: Performance comparison shown
 
-- [ ] P3-DOCS-04: Document nullable foreign keys
+- [x] P3-DOCS-04: Document nullable foreign keys (2025-12-30)
   - **Test**: Example with Optional[ForeignKey] works
 
-- [ ] P3-DOCS-05: Document circular relationships
+- [x] P3-DOCS-05: Document circular relationships (2025-12-30)
   - **Test**: Self-referential example provided
 
-- [ ] P3-DOCS-06: Add troubleshooting section
+- [x] P3-DOCS-06: Add troubleshooting section (2025-12-30)
   - **Test**: Common errors and solutions listed
 
-- [ ] P3-DOCS-07: Create `docs/postgres/relationships.md`
+- [x] P3-DOCS-07: Create `docs/postgres/relationships.md` (2025-12-30)
   - **Test**: File exists with all sections
 
 ---
 
 ### P3-FUNC: Additional Features
 
-- [ ] P3-FUNC-01: Implement Savepoint support
+- [x] P3-FUNC-01: Implement Savepoint support (2025-12-30)
   - **Location**: `transaction.rs:100-126`
   - **Features**:
     - Create savepoint
@@ -251,14 +251,14 @@ Atomic, testable tasks organized by priority and component.
 
 ### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
-- [ ] P4-QUERY-01: Implement subqueries (WHERE id IN (SELECT ...))
-- [ ] P4-QUERY-02: Implement COUNT/SUM/AVG/MIN/MAX aggregations
-- [ ] P4-QUERY-03: Implement GROUP BY clause
-- [ ] P4-QUERY-04: Implement HAVING clause
-- [ ] P4-QUERY-05: Implement window functions (ROW_NUMBER, RANK)
-- [ ] P4-QUERY-06: Implement CTE (WITH ... AS ...)
+- [x] P4-QUERY-01: Implement subqueries (WHERE id IN (SELECT ...)) (2025-01-04)
+- [x] P4-QUERY-02: Implement COUNT/SUM/AVG/MIN/MAX aggregations (2025-01-04)
+- [x] P4-QUERY-03: Implement GROUP BY clause (2025-01-04)
+- [x] P4-QUERY-04: Implement HAVING clause (2025-01-04)
+- [x] P4-QUERY-05: Implement window functions (ROW_NUMBER, RANK) (2025-01-04)
+- [x] P4-QUERY-06: Implement CTE (WITH ... AS ...) (2025-01-04)
 - [ ] P4-QUERY-07: Implement UNION/INTERSECT/EXCEPT
-- [ ] P4-QUERY-08: Implement DISTINCT ON
+- [x] P4-QUERY-08: Implement DISTINCT ON (2025-01-04)
 - [ ] P4-QUERY-09: Implement JSONB operators
 - [ ] P4-QUERY-10: Support RETURNING clause in Updates/Deletes
 - [ ] P4-QUERY-11: Add integration tests (25+ tests)
