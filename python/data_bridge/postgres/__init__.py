@@ -17,6 +17,7 @@ from .connection import (
 )
 from .transactions import pg_transaction, Transaction
 from .migrations import Migration, run_migrations, get_migration_status, autogenerate_migration
+from .session import Session, IdentityMap, DirtyTracker, UnitOfWork, get_session
 
 __all__ = [
     # Base class
@@ -74,4 +75,10 @@ __all__ = [
     "run_migrations",
     "get_migration_status",
     "autogenerate_migration",
+    # Session Management
+    "Session",
+    "IdentityMap",
+    "DirtyTracker",
+    "UnitOfWork",
+    "get_session",
 ]

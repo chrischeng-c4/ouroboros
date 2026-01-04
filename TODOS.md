@@ -329,13 +329,11 @@ Atomic, testable tasks organized by priority and component.
 
 ### P5-ORM: Session & Unit of Work
 
-| ID | Feature | Description |
-|----|---------|-------------|
-| P5-ORM-01 | Identity Map | Cache objects by primary key, single instance per PK |
-| P5-ORM-02 | Dirty Tracking | Track which fields changed since load |
-| P5-ORM-03 | Auto-flush | Flush pending changes before query |
-| P5-ORM-04 | Unit of Work | Accumulate INSERT/UPDATE/DELETE, execute on commit |
-| P5-ORM-05 | Session context | `async with Session() as session:` pattern |
+- [x] P5-ORM-01: Identity Map - Cache objects by primary key, single instance per PK (2025-01-05)
+- [x] P5-ORM-02: Dirty Tracking - Track which fields changed since load (2025-01-05)
+- [x] P5-ORM-03: Auto-flush - Flush pending changes before query (2025-01-05)
+- [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
+- [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
 ### P5-LOAD: Loading Strategies
 
