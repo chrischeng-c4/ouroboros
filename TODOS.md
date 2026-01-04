@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-01-05 (P4-QUERY complete)
+**Last Updated**: 2025-01-05 (P5 SQLAlchemy parity roadmap added)
 **Branch**: `main`
 
 ---
@@ -320,6 +320,95 @@ Atomic, testable tasks organized by priority and component.
   - **Current**: Python-based schema diffing
   - **Goal**: Rust-based parallel schema analysis
   - **Benchmark**: Large schema (100+ tables)
+
+---
+
+## P5 - SQLAlchemy Parity (Future)
+
+> **Goal**: Achieve feature parity with SQLAlchemy ORM for Python-level usage
+
+### P5-ORM: Session & Unit of Work
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-ORM-01 | Identity Map | Cache objects by primary key, single instance per PK |
+| P5-ORM-02 | Dirty Tracking | Track which fields changed since load |
+| P5-ORM-03 | Auto-flush | Flush pending changes before query |
+| P5-ORM-04 | Unit of Work | Accumulate INSERT/UPDATE/DELETE, execute on commit |
+| P5-ORM-05 | Session context | `async with Session() as session:` pattern |
+
+### P5-LOAD: Loading Strategies
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-LOAD-01 | Lazy loading | Load relationships on access (default) |
+| P5-LOAD-02 | Eager (joined) | Load via JOIN (DONE - already implemented) |
+| P5-LOAD-03 | Subquery eager | Load via separate subquery |
+| P5-LOAD-04 | noload | Never load relationship |
+| P5-LOAD-05 | raise/raise_on_sql | Raise error if lazy load triggered |
+| P5-LOAD-06 | selectinload | Batch load with IN clause |
+| P5-LOAD-07 | defer()/undefer() | Defer loading of large columns |
+
+### P5-EVENT: Event System
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-EVENT-01 | before_insert | Hook before INSERT |
+| P5-EVENT-02 | after_insert | Hook after INSERT |
+| P5-EVENT-03 | before_update | Hook before UPDATE |
+| P5-EVENT-04 | after_update | Hook after UPDATE |
+| P5-EVENT-05 | before_delete | Hook before DELETE |
+| P5-EVENT-06 | after_delete | Hook after DELETE |
+| P5-EVENT-07 | before_flush | Hook before session flush |
+| P5-EVENT-08 | after_commit | Hook after transaction commit |
+| P5-EVENT-09 | on_attribute_change | Hook on field modification |
+| P5-EVENT-10 | @listens_for() | Decorator API for event registration |
+
+### P5-INHERIT: Inheritance Patterns
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-INHERIT-01 | Single Table | All classes share one table + discriminator |
+| P5-INHERIT-02 | Joined Table | Each class has own table with FK to parent |
+| P5-INHERIT-03 | Concrete Table | Each class has complete own table |
+| P5-INHERIT-04 | Polymorphic loading | Load mixed types from one query |
+| P5-INHERIT-05 | Discriminator column | `type` column for class discrimination |
+
+### P5-COMPUTED: Computed Attributes
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-COMPUTED-01 | @hybrid_property | Works in Python AND SQL expressions |
+| P5-COMPUTED-02 | column_property() | SQL expression as read-only column |
+| P5-COMPUTED-03 | GENERATED AS | PostgreSQL computed column support |
+| P5-COMPUTED-04 | Default factories | `default=lambda: datetime.now()` |
+
+### P5-QUERY: Query Builder Enhancements
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-QUERY-01 | filter_by() | Keyword argument filtering syntax |
+| P5-QUERY-02 | and_()/or_() | Explicit boolean combinators |
+| P5-QUERY-03 | any()/has() | Relationship existence operators |
+| P5-QUERY-04 | Query subclassing | Extend QueryBuilder per-model |
+| P5-QUERY-05 | Query composition | Reusable query fragments |
+| P5-QUERY-06 | aliased() | For self-joins and multiple refs |
+
+### P5-VALID: ORM-Level Validation
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-VALID-01 | @validates() | Field validator decorator |
+| P5-VALID-02 | Custom types | User-defined type classes |
+| P5-VALID-03 | Auto-coercion | Auto-convert on assignment |
+
+### P5-ASYNC: Async Enhancements
+
+| ID | Feature | Description |
+|----|---------|-------------|
+| P5-ASYNC-01 | AsyncSession | Full async session support |
+| P5-ASYNC-02 | Async relationships | Lazy load in async context |
+| P5-ASYNC-03 | run_sync() | Escape hatch to sync code |
 
 ---
 
