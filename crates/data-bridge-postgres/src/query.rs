@@ -65,6 +65,17 @@
 use crate::{DataBridgeError, ExtractedValue, Result};
 use unicode_normalization::UnicodeNormalization;
 
+/// Represents a Common Table Expression (CTE) for WITH clause
+#[derive(Debug, Clone)]
+pub struct CommonTableExpression {
+    /// The name of the CTE (used to reference it in the main query)
+    pub name: String,
+    /// The SQL query for this CTE (will be built from a QueryBuilder)
+    pub sql: String,
+    /// Parameters for this CTE's query
+    pub params: Vec<ExtractedValue>,
+}
+
 /// Query comparison operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
@@ -112,6 +123,36 @@ impl Operator {
             Operator::IsNotNull => "IS NOT NULL",
         }
     }
+}
+
+/// SQL aggregate functions.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AggregateFunction {
+    /// COUNT(*) - count all rows
+    Count,
+    /// COUNT(column) - count non-null values in column
+    CountColumn(String),
+    /// COUNT(DISTINCT column) - count distinct values
+    CountDistinct(String),
+    /// SUM(column) - sum of values
+    Sum(String),
+    /// AVG(column) - average of values
+    Avg(String),
+    /// MIN(column) - minimum value
+    Min(String),
+    /// MAX(column) - maximum value
+    Max(String),
+}
+
+/// Represents a HAVING clause condition for aggregate queries
+#[derive(Debug, Clone)]
+pub struct HavingCondition {
+    /// The aggregate expression (e.g., "COUNT(*)", "SUM(amount)")
+    pub aggregate: AggregateFunction,
+    /// The comparison operator
+    pub operator: Operator,
+    /// The value to compare against
+    pub value: ExtractedValue,
 }
 
 /// Sort order direction.
@@ -227,6 +268,18 @@ pub struct QueryBuilder {
     limit_value: Option<i64>,
     /// OFFSET clause
     offset_value: Option<i64>,
+    /// Aggregate functions with optional aliases
+    aggregates: Vec<(AggregateFunction, Option<String>)>,
+    /// GROUP BY columns
+    group_by_columns: Vec<String>,
+    /// HAVING conditions for filtering aggregate results
+    having_conditions: Vec<HavingCondition>,
+    /// Whether to use DISTINCT
+    distinct: bool,
+    /// Columns for DISTINCT ON (PostgreSQL-specific)
+    distinct_on_columns: Vec<String>,
+    /// Common Table Expressions (WITH clause)
+    ctes: Vec<CommonTableExpression>,
 }
 
 /// Represents a WHERE condition.
@@ -257,6 +310,12 @@ impl QueryBuilder {
             order_by_clauses: Vec::new(),
             limit_value: None,
             offset_value: None,
+            aggregates: Vec::new(),
+            group_by_columns: Vec::new(),
+            having_conditions: Vec::new(),
+            distinct: false,
+            distinct_on_columns: Vec::new(),
+            ctes: Vec::new(),
         })
     }
 
@@ -323,6 +382,125 @@ impl QueryBuilder {
     /// Sets OFFSET.
     pub fn offset(mut self, offset: i64) -> Self {
         self.offset_value = Some(offset);
+        self
+    }
+
+    /// Enable DISTINCT to remove duplicate rows.
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_postgres::QueryBuilder;
+    /// # use data_bridge_postgres::Result;
+    /// # fn main() -> Result<()> {
+    /// // SELECT DISTINCT email FROM users
+    /// let qb = QueryBuilder::new("users")?
+    ///     .select(vec!["email".to_string()])?
+    ///     .distinct();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn distinct(mut self) -> Self {
+        self.distinct = true;
+        self
+    }
+
+    /// Use DISTINCT ON to get first row for each unique combination (PostgreSQL-specific).
+    ///
+    /// Note: When using DISTINCT ON, ORDER BY should typically start with the DISTINCT ON columns.
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_postgres::{QueryBuilder, OrderDirection};
+    /// # use data_bridge_postgres::Result;
+    /// # fn main() -> Result<()> {
+    /// // SELECT DISTINCT ON (user_id) * FROM orders ORDER BY user_id, created_at DESC
+    /// let qb = QueryBuilder::new("orders")?
+    ///     .distinct_on(&["user_id"])?
+    ///     .order_by("user_id", OrderDirection::Asc)?
+    ///     .order_by("created_at", OrderDirection::Desc)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn distinct_on(mut self, columns: &[&str]) -> Result<Self> {
+        for col in columns {
+            Self::validate_identifier(col)?;
+            self.distinct_on_columns.push(col.to_string());
+        }
+        Ok(self)
+    }
+
+    /// Clear DISTINCT settings.
+    pub fn clear_distinct(mut self) -> Self {
+        self.distinct = false;
+        self.distinct_on_columns.clear();
+        self
+    }
+
+    /// Add a Common Table Expression (CTE) to the query
+    ///
+    /// CTEs are defined in the WITH clause and can be referenced in the main query.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to use for this CTE
+    /// * `query` - A QueryBuilder that defines the CTE's query
+    ///
+    /// # Example
+    /// ```ignore
+    /// // WITH high_value AS (SELECT user_id, SUM(amount) as total FROM orders GROUP BY user_id)
+    /// // SELECT * FROM high_value WHERE total > 1000
+    /// let cte_query = QueryBuilder::new("orders")?
+    ///     .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total"))?
+    ///     .group_by(&["user_id"])?;
+    ///
+    /// let main_query = QueryBuilder::new("high_value")?  // Reference the CTE name
+    ///     .with_cte("high_value", cte_query)?
+    ///     .where_clause("total", Operator::Gt, ExtractedValue::Float(1000.0))?;
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the CTE name is invalid.
+    pub fn with_cte(mut self, name: &str, query: QueryBuilder) -> Result<Self> {
+        Self::validate_identifier(name)?;
+        let (sql, params) = query.build_select();
+        self.ctes.push(CommonTableExpression {
+            name: name.to_string(),
+            sql,
+            params,
+        });
+        Ok(self)
+    }
+
+    /// Add a raw SQL CTE (for complex queries that can't be built with QueryBuilder)
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name to use for this CTE
+    /// * `sql` - The SQL query for this CTE
+    /// * `params` - Parameters for the CTE query
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the CTE name is invalid.
+    ///
+    /// # Security Note
+    ///
+    /// The CTE name is validated, but the SQL is not. Use this with caution
+    /// and only with trusted SQL strings.
+    pub fn with_cte_raw(mut self, name: &str, sql: &str, params: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(name)?;
+        self.ctes.push(CommonTableExpression {
+            name: name.to_string(),
+            sql: sql.to_string(),
+            params,
+        });
+        Ok(self)
+    }
+
+    /// Clear all CTEs
+    pub fn clear_ctes(mut self) -> Self {
+        self.ctes.clear();
         self
     }
 
@@ -397,14 +575,169 @@ impl QueryBuilder {
         self.join(JoinType::Full, table, alias, condition)
     }
 
+    /// Add an aggregate function to the query.
+    ///
+    /// # Arguments
+    ///
+    /// * `func` - Aggregate function to apply
+    /// * `alias` - Optional alias for the aggregate result
+    ///
+    /// # Errors
+    ///
+    /// Returns error if column names in the function or alias are invalid.
+    pub fn aggregate(mut self, func: AggregateFunction, alias: Option<&str>) -> Result<Self> {
+        // Validate column names in the aggregate function
+        match &func {
+            AggregateFunction::CountColumn(col) |
+            AggregateFunction::CountDistinct(col) |
+            AggregateFunction::Sum(col) |
+            AggregateFunction::Avg(col) |
+            AggregateFunction::Min(col) |
+            AggregateFunction::Max(col) => {
+                Self::validate_identifier(col)?;
+            }
+            AggregateFunction::Count => {}
+        }
+        if let Some(alias_str) = alias {
+            Self::validate_identifier(alias_str)?;
+        }
+        self.aggregates.push((func, alias.map(String::from)));
+        Ok(self)
+    }
+
+    /// Add GROUP BY columns.
+    ///
+    /// # Arguments
+    ///
+    /// * `columns` - Column names to group by
+    ///
+    /// # Errors
+    ///
+    /// Returns error if any column name is invalid.
+    pub fn group_by(mut self, columns: &[&str]) -> Result<Self> {
+        for col in columns {
+            Self::validate_identifier(col)?;
+            self.group_by_columns.push(col.to_string());
+        }
+        Ok(self)
+    }
+
+    /// Clear all aggregates and GROUP BY columns.
+    pub fn clear_aggregates(mut self) -> Self {
+        self.aggregates.clear();
+        self.group_by_columns.clear();
+        self
+    }
+
+    /// Add a HAVING condition to filter aggregate results
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_postgres::{QueryBuilder, AggregateFunction, Operator, ExtractedValue};
+    ///
+    /// // SELECT COUNT(*) FROM orders GROUP BY status HAVING COUNT(*) > 10
+    /// let qb = QueryBuilder::new("orders").unwrap()
+    ///     .aggregate(AggregateFunction::Count, Some("order_count")).unwrap()
+    ///     .group_by(&["status"]).unwrap()
+    ///     .having(AggregateFunction::Count, Operator::Gt, ExtractedValue::Int(10)).unwrap();
+    /// ```
+    pub fn having(
+        mut self,
+        aggregate: AggregateFunction,
+        operator: Operator,
+        value: ExtractedValue,
+    ) -> Result<Self> {
+        // Validate column names in the aggregate function
+        match &aggregate {
+            AggregateFunction::CountColumn(col) |
+            AggregateFunction::CountDistinct(col) |
+            AggregateFunction::Sum(col) |
+            AggregateFunction::Avg(col) |
+            AggregateFunction::Min(col) |
+            AggregateFunction::Max(col) => {
+                Self::validate_identifier(col)?;
+            }
+            AggregateFunction::Count => {}
+        }
+        self.having_conditions.push(HavingCondition {
+            aggregate,
+            operator,
+            value,
+        });
+        Ok(self)
+    }
+
+    /// Clear all HAVING conditions
+    pub fn clear_having(mut self) -> Self {
+        self.having_conditions.clear();
+        self
+    }
+
     /// Builds a SELECT SQL query string with parameter placeholders.
     ///
     /// Returns the SQL string with $1, $2, etc. placeholders.
     pub fn build_select(&self) -> (String, Vec<ExtractedValue>) {
-        let mut sql = String::from("SELECT ");
+        let mut sql = String::new();
+        let mut params = Vec::new();
 
-        // SELECT columns or *
-        if self.select_columns.is_empty() {
+        // Build WITH clause first if CTEs exist
+        if !self.ctes.is_empty() {
+            sql.push_str("WITH ");
+            let cte_parts: Vec<String> = self.ctes
+                .iter()
+                .map(|cte| {
+                    // Collect CTE params first
+                    let cte_param_offset = params.len();
+                    params.extend(cte.params.clone());
+
+                    // Adjust parameter indices in CTE SQL
+                    let adjusted_sql = Self::adjust_param_indices(&cte.sql, cte_param_offset);
+
+                    format!("{} AS ({})", Self::quote_identifier(&cte.name), adjusted_sql)
+                })
+                .collect();
+            sql.push_str(&cte_parts.join(", "));
+            sql.push(' ');
+        }
+
+        // Continue with SELECT clause
+        sql.push_str("SELECT ");
+
+        // Add DISTINCT ON if specified (takes precedence)
+        if !self.distinct_on_columns.is_empty() {
+            let cols: Vec<String> = self.distinct_on_columns
+                .iter()
+                .map(|c| Self::quote_identifier(c))
+                .collect();
+            sql.push_str(&format!("DISTINCT ON ({}) ", cols.join(", ")));
+        } else if self.distinct {
+            sql.push_str("DISTINCT ");
+        }
+
+        // SELECT columns or aggregates or *
+        if !self.aggregates.is_empty() {
+            let mut select_parts = Vec::new();
+
+            // Add GROUP BY columns first (they must appear in SELECT when using GROUP BY)
+            for col in &self.group_by_columns {
+                select_parts.push(Self::quote_identifier(col));
+            }
+
+            // Build aggregate expressions
+            let agg_parts: Vec<String> = self.aggregates.iter()
+                .map(|(func, alias)| {
+                    let agg_sql = self.build_aggregate_sql(func);
+                    if let Some(alias_str) = alias {
+                        format!("{} AS {}", agg_sql, Self::quote_identifier(alias_str))
+                    } else {
+                        agg_sql
+                    }
+                })
+                .collect();
+            select_parts.extend(agg_parts);
+
+            sql.push_str(&select_parts.join(", "));
+        } else if self.select_columns.is_empty() {
             sql.push('*');
         } else {
             let quoted_cols: Vec<String> = self.select_columns.iter()
@@ -431,7 +764,6 @@ impl QueryBuilder {
         }
 
         // WHERE clause
-        let mut params = Vec::new();
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
             let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
@@ -459,6 +791,29 @@ impl QueryBuilder {
                 }
             }).collect();
             sql.push_str(&where_parts.join(" AND "));
+        }
+
+        // GROUP BY clause
+        if !self.group_by_columns.is_empty() {
+            sql.push_str(" GROUP BY ");
+            let group_parts: Vec<String> = self.group_by_columns.iter()
+                .map(|col| Self::quote_identifier(col))
+                .collect();
+            sql.push_str(&group_parts.join(", "));
+        }
+
+        // HAVING clause
+        if !self.having_conditions.is_empty() {
+            sql.push_str(" HAVING ");
+            let having_parts: Vec<String> = self.having_conditions
+                .iter()
+                .map(|cond| {
+                    let agg_sql = self.build_aggregate_sql(&cond.aggregate);
+                    params.push(cond.value.clone());
+                    format!("{} {} ${}", agg_sql, cond.operator.to_sql(), params.len())
+                })
+                .collect();
+            sql.push_str(&having_parts.join(" AND "));
         }
 
         // ORDER BY clause
@@ -735,6 +1090,67 @@ impl QueryBuilder {
 
         // Simple identifier - validate as a single part
         Self::validate_identifier_part(name)
+    }
+
+    /// Builds the SQL for an aggregate function.
+    fn build_aggregate_sql(&self, func: &AggregateFunction) -> String {
+        match func {
+            AggregateFunction::Count => "COUNT(*)".to_string(),
+            AggregateFunction::CountColumn(col) => format!("COUNT({})", Self::quote_identifier(col)),
+            AggregateFunction::CountDistinct(col) => format!("COUNT(DISTINCT {})", Self::quote_identifier(col)),
+            AggregateFunction::Sum(col) => format!("SUM({})", Self::quote_identifier(col)),
+            AggregateFunction::Avg(col) => format!("AVG({})", Self::quote_identifier(col)),
+            AggregateFunction::Min(col) => format!("MIN({})", Self::quote_identifier(col)),
+            AggregateFunction::Max(col) => format!("MAX({})", Self::quote_identifier(col)),
+        }
+    }
+
+    /// Adjusts parameter indices in SQL by adding an offset.
+    ///
+    /// This is used when combining CTE parameters with main query parameters.
+    /// For example, if a CTE has $1 and $2, and the offset is 0, they stay as $1 and $2.
+    /// But if there's already another CTE with 2 params, the offset would be 2,
+    /// so $1 becomes $3 and $2 becomes $4.
+    fn adjust_param_indices(sql: &str, offset: usize) -> String {
+        if offset == 0 {
+            return sql.to_string();
+        }
+
+        let mut result = String::with_capacity(sql.len());
+        let mut chars = sql.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            if ch == '$' {
+                // Found a parameter marker, extract the number
+                let mut num_str = String::new();
+                while let Some(&next_ch) = chars.peek() {
+                    if next_ch.is_ascii_digit() {
+                        num_str.push(chars.next().unwrap());
+                    } else {
+                        break;
+                    }
+                }
+
+                if !num_str.is_empty() {
+                    if let Ok(num) = num_str.parse::<usize>() {
+                        // Adjust the parameter index
+                        result.push('$');
+                        result.push_str(&(num + offset).to_string());
+                    } else {
+                        // Failed to parse, keep as-is
+                        result.push('$');
+                        result.push_str(&num_str);
+                    }
+                } else {
+                    // No digits after $, keep as-is
+                    result.push('$');
+                }
+            } else {
+                result.push(ch);
+            }
+        }
+
+        result
     }
 
     /// Validates a single part of an identifier (no dots allowed).
@@ -1813,4 +2229,564 @@ mod tests {
         let result = JoinCondition::new("author_id", "users", "id OR 1=1--");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_aggregate_count_all() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::Count, None).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(*) FROM \"users\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_count_with_alias() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::Count, Some("total")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(*) AS \"total\" FROM \"users\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_count_column() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::CountColumn("email".to_string()), Some("email_count")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(\"email\") AS \"email_count\" FROM \"users\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_count_distinct() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::CountDistinct("customer_id".to_string()), Some("unique_customers")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(DISTINCT \"customer_id\") AS \"unique_customers\" FROM \"orders\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_sum() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Sum("total".to_string()), Some("revenue")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT SUM(\"total\") AS \"revenue\" FROM \"orders\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_avg() {
+        let qb = QueryBuilder::new("products").unwrap()
+            .aggregate(AggregateFunction::Avg("price".to_string()), Some("avg_price")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT AVG(\"price\") AS \"avg_price\" FROM \"products\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_min_max() {
+        let qb = QueryBuilder::new("temperatures").unwrap()
+            .aggregate(AggregateFunction::Min("value".to_string()), Some("min_temp")).unwrap()
+            .aggregate(AggregateFunction::Max("value".to_string()), Some("max_temp")).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT MIN(\"value\") AS \"min_temp\", MAX(\"value\") AS \"max_temp\" FROM \"temperatures\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_with_group_by() {
+        let qb = QueryBuilder::new("sales").unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total_sales")).unwrap()
+            .group_by(&["region", "product"]).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT \"region\", \"product\", SUM(\"amount\") AS \"total_sales\" FROM \"sales\" GROUP BY \"region\", \"product\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_with_where() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, Some("order_count")).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("completed".to_string())).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(*) AS \"order_count\" FROM \"orders\" WHERE \"status\" = $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_aggregate_with_where_and_group_by() {
+        let qb = QueryBuilder::new("sales").unwrap()
+            .aggregate(AggregateFunction::Sum("revenue".to_string()), Some("total")).unwrap()
+            .aggregate(AggregateFunction::Avg("revenue".to_string()), Some("average")).unwrap()
+            .where_clause("year", Operator::Eq, ExtractedValue::Int(2024)).unwrap()
+            .group_by(&["department"]).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT \"department\", SUM(\"revenue\") AS \"total\", AVG(\"revenue\") AS \"average\" FROM \"sales\" WHERE \"year\" = $1 GROUP BY \"department\""
+        );
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_aggregate_with_group_by_and_order_by() {
+        let qb = QueryBuilder::new("sales").unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total")).unwrap()
+            .group_by(&["category"]).unwrap()
+            .order_by("total", OrderDirection::Desc).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT \"category\", SUM(\"amount\") AS \"total\" FROM \"sales\" GROUP BY \"category\" ORDER BY \"total\" DESC"
+        );
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_with_limit() {
+        let qb = QueryBuilder::new("products").unwrap()
+            .aggregate(AggregateFunction::Count, None).unwrap()
+            .limit(1);
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(*) FROM \"products\" LIMIT $1");
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_clear_aggregates() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::Count, Some("total")).unwrap()
+            .group_by(&["department"]).unwrap()
+            .clear_aggregates();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT * FROM \"users\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_aggregate_invalid_column_name() {
+        let result = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::Sum("drop".to_string()), None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_aggregate_invalid_alias() {
+        let result = QueryBuilder::new("users").unwrap()
+            .aggregate(AggregateFunction::Count, Some("select"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_group_by_invalid_column() {
+        let result = QueryBuilder::new("users").unwrap()
+            .group_by(&["department", "select"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_aggregates_no_alias() {
+        let qb = QueryBuilder::new("sales").unwrap()
+            .aggregate(AggregateFunction::Count, None).unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), None).unwrap()
+            .aggregate(AggregateFunction::Avg("amount".to_string()), None).unwrap();
+        let (sql, params) = qb.build_select();
+        assert_eq!(sql, "SELECT COUNT(*), SUM(\"amount\"), AVG(\"amount\") FROM \"sales\"");
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_complex_aggregate_query() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, Some("total_orders")).unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total_revenue")).unwrap()
+            .aggregate(AggregateFunction::Avg("amount".to_string()), Some("avg_order_value")).unwrap()
+            .aggregate(AggregateFunction::CountDistinct("customer_id".to_string()), Some("unique_customers")).unwrap()
+            .where_clause("status", Operator::In, ExtractedValue::Array(vec![
+                ExtractedValue::String("completed".to_string()),
+                ExtractedValue::String("shipped".to_string()),
+            ])).unwrap()
+            .where_clause("created_at", Operator::Gte, ExtractedValue::String("2024-01-01".to_string())).unwrap()
+            .group_by(&["region", "product_category"]).unwrap()
+            .order_by("total_revenue", OrderDirection::Desc).unwrap()
+            .limit(10);
+        let (sql, params) = qb.build_select();
+        assert_eq!(
+            sql,
+            "SELECT \"region\", \"product_category\", COUNT(*) AS \"total_orders\", SUM(\"amount\") AS \"total_revenue\", AVG(\"amount\") AS \"avg_order_value\", COUNT(DISTINCT \"customer_id\") AS \"unique_customers\" FROM \"orders\" WHERE \"status\" IN ($1) AND \"created_at\" >= $2 GROUP BY \"region\", \"product_category\" ORDER BY \"total_revenue\" DESC LIMIT $3"
+        );
+        assert_eq!(params.len(), 3);
+    }
+
+    #[test]
+    fn test_having_basic() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, Some("order_count")).unwrap()
+            .group_by(&["status"]).unwrap()
+            .having(AggregateFunction::Count, Operator::Gt, ExtractedValue::Int(10)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING COUNT(*) > $"));
+        assert_eq!(params.len(), 1);
+        match &params[0] {
+            ExtractedValue::Int(10) => {},
+            _ => panic!("Expected Int(10)"),
+        }
+    }
+
+    #[test]
+    fn test_having_with_sum() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total")).unwrap()
+            .group_by(&["customer_id"]).unwrap()
+            .having(AggregateFunction::Sum("amount".to_string()), Operator::Gte, ExtractedValue::Float(1000.0)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING SUM(\"amount\") >= $"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_having_multiple_conditions() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, None).unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), None).unwrap()
+            .group_by(&["status"]).unwrap()
+            .having(AggregateFunction::Count, Operator::Gt, ExtractedValue::Int(5)).unwrap()
+            .having(AggregateFunction::Sum("amount".to_string()), Operator::Lt, ExtractedValue::Float(10000.0)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING COUNT(*) > $"));
+        assert!(sql.contains(" AND SUM(\"amount\") < $"));
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_having_with_where() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, Some("order_count")).unwrap()
+            .where_clause("year", Operator::Eq, ExtractedValue::Int(2024)).unwrap()
+            .group_by(&["status"]).unwrap()
+            .having(AggregateFunction::Count, Operator::Gte, ExtractedValue::Int(100)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("WHERE \"year\" = $1"));
+        assert!(sql.contains("HAVING COUNT(*) >= $2"));
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_having_with_avg() {
+        let qb = QueryBuilder::new("students").unwrap()
+            .aggregate(AggregateFunction::Avg("score".to_string()), Some("avg_score")).unwrap()
+            .group_by(&["class_id"]).unwrap()
+            .having(AggregateFunction::Avg("score".to_string()), Operator::Gt, ExtractedValue::Float(75.0)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING AVG(\"score\") > $"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_having_with_count_distinct() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::CountDistinct("customer_id".to_string()), Some("unique_customers")).unwrap()
+            .group_by(&["region"]).unwrap()
+            .having(AggregateFunction::CountDistinct("customer_id".to_string()), Operator::Gte, ExtractedValue::Int(50)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING COUNT(DISTINCT \"customer_id\") >= $"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_having_with_min_max() {
+        let qb = QueryBuilder::new("products").unwrap()
+            .aggregate(AggregateFunction::Max("price".to_string()), Some("max_price")).unwrap()
+            .group_by(&["category"]).unwrap()
+            .having(AggregateFunction::Max("price".to_string()), Operator::Lt, ExtractedValue::Float(1000.0)).unwrap();
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("HAVING MAX(\"price\") < $"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_clear_having() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, Some("order_count")).unwrap()
+            .group_by(&["status"]).unwrap()
+            .having(AggregateFunction::Count, Operator::Gt, ExtractedValue::Int(10)).unwrap()
+            .clear_having();
+
+        let (sql, params) = qb.build_select();
+        assert!(!sql.contains("HAVING"));
+        assert_eq!(params.len(), 0);
+    }
+
+    #[test]
+    fn test_having_invalid_column() {
+        let result = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Count, None).unwrap()
+            .group_by(&["status"]).unwrap()
+            .having(AggregateFunction::Sum("drop".to_string()), Operator::Gt, ExtractedValue::Int(100));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_complex_having_query() {
+        let qb = QueryBuilder::new("sales").unwrap()
+            .aggregate(AggregateFunction::Sum("revenue".to_string()), Some("total_revenue")).unwrap()
+            .aggregate(AggregateFunction::Count, Some("sale_count")).unwrap()
+            .aggregate(AggregateFunction::Avg("revenue".to_string()), Some("avg_revenue")).unwrap()
+            .where_clause("year", Operator::Eq, ExtractedValue::Int(2024)).unwrap()
+            .group_by(&["region", "category"]).unwrap()
+            .having(AggregateFunction::Sum("revenue".to_string()), Operator::Gte, ExtractedValue::Float(100000.0)).unwrap()
+            .having(AggregateFunction::Count, Operator::Gt, ExtractedValue::Int(10)).unwrap()
+            .order_by("total_revenue", OrderDirection::Desc).unwrap()
+            .limit(20);
+
+        let (sql, params) = qb.build_select();
+        assert!(sql.contains("SELECT \"region\", \"category\", SUM(\"revenue\") AS \"total_revenue\", COUNT(*) AS \"sale_count\", AVG(\"revenue\") AS \"avg_revenue\""));
+        assert!(sql.contains("WHERE \"year\" = $1"));
+        assert!(sql.contains("GROUP BY \"region\", \"category\""));
+        assert!(sql.contains("HAVING SUM(\"revenue\") >= $2 AND COUNT(*) > $3"));
+        assert!(sql.contains("ORDER BY \"total_revenue\" DESC"));
+        assert!(sql.contains("LIMIT $4"));
+        assert_eq!(params.len(), 4);
+    }
+
+    #[test]
+    fn test_distinct_basic() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec!["email".to_string()]).unwrap()
+            .distinct();
+        let (sql, _) = qb.build_select();
+        assert!(sql.starts_with("SELECT DISTINCT "));
+        assert!(sql.contains("\"email\""));
+    }
+
+    #[test]
+    fn test_distinct_on_single_column() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .distinct_on(&["user_id"]).unwrap()
+            .order_by("user_id", OrderDirection::Asc).unwrap();
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("DISTINCT ON (\"user_id\")"));
+    }
+
+    #[test]
+    fn test_distinct_on_multiple_columns() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .distinct_on(&["user_id", "status"]).unwrap();
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("DISTINCT ON (\"user_id\", \"status\")"));
+    }
+
+    #[test]
+    fn test_distinct_on_validates_columns() {
+        let result = QueryBuilder::new("orders").unwrap()
+            .distinct_on(&["user_id; DROP TABLE orders"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_distinct_with_where_and_order() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec!["email".to_string(), "name".to_string()]).unwrap()
+            .distinct()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .order_by("email", OrderDirection::Asc).unwrap();
+        let (sql, _) = qb.build_select();
+        assert!(sql.starts_with("SELECT DISTINCT "));
+        assert!(sql.contains("WHERE"));
+        assert!(sql.contains("ORDER BY"));
+    }
+
+    #[test]
+    fn test_distinct_on_takes_precedence_over_distinct() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .distinct()
+            .distinct_on(&["user_id"]).unwrap();
+        let (sql, _) = qb.build_select();
+        assert!(sql.contains("DISTINCT ON (\"user_id\")"));
+        assert!(!sql.contains("SELECT DISTINCT DISTINCT ON"));
+    }
+
+    #[test]
+    fn test_clear_distinct() {
+        let qb = QueryBuilder::new("users").unwrap()
+            .select(vec!["email".to_string()]).unwrap()
+            .distinct()
+            .clear_distinct();
+        let (sql, _) = qb.build_select();
+        assert!(!sql.contains("DISTINCT"));
+    }
+
+    #[test]
+    fn test_clear_distinct_on() {
+        let qb = QueryBuilder::new("orders").unwrap()
+            .distinct_on(&["user_id"]).unwrap()
+            .clear_distinct();
+        let (sql, _) = qb.build_select();
+        assert!(!sql.contains("DISTINCT ON"));
+    }
+
+    #[test]
+    fn test_cte_basic() {
+        let cte_query = QueryBuilder::new("orders").unwrap()
+            .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total")).unwrap()
+            .group_by(&["user_id"]).unwrap();
+
+        let main_query = QueryBuilder::new("order_totals").unwrap()
+            .with_cte("order_totals", cte_query).unwrap();
+
+        let (sql, _) = main_query.build_select();
+        assert!(sql.starts_with("WITH "));
+        assert!(sql.contains("\"order_totals\" AS ("));
+        assert!(sql.contains("SELECT \"user_id\", SUM(\"amount\") AS \"total\""));
+        assert!(sql.contains("FROM \"orders\""));
+        assert!(sql.contains("GROUP BY \"user_id\""));
+        assert!(sql.contains(") SELECT * FROM \"order_totals\""));
+    }
+
+    #[test]
+    fn test_cte_with_where() {
+        let cte_query = QueryBuilder::new("orders").unwrap()
+            .select(vec!["user_id".to_string(), "amount".to_string()]).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("completed".to_string())).unwrap();
+
+        let main_query = QueryBuilder::new("completed_orders").unwrap()
+            .with_cte("completed_orders", cte_query).unwrap()
+            .where_clause("amount", Operator::Gt, ExtractedValue::Float(100.0)).unwrap();
+
+        let (sql, params) = main_query.build_select();
+        assert!(sql.contains("WITH"));
+        assert!(sql.contains("\"completed_orders\" AS ("));
+        assert_eq!(params.len(), 2); // One from CTE, one from main query
+
+        // First param is from CTE (status = 'completed')
+        match &params[0] {
+            ExtractedValue::String(s) => assert_eq!(s, "completed"),
+            _ => panic!("Expected String for first param"),
+        }
+
+        // Second param is from main query (amount > 100.0)
+        match &params[1] {
+            ExtractedValue::Float(f) => assert_eq!(*f, 100.0),
+            _ => panic!("Expected Float for second param"),
+        }
+    }
+
+    #[test]
+    fn test_cte_name_validation() {
+        let cte_query = QueryBuilder::new("orders").unwrap();
+        let result = QueryBuilder::new("test").unwrap()
+            .with_cte("invalid; DROP TABLE", cte_query);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            // Should contain error about invalid characters (semicolon and space)
+            let error_msg = format!("{:?}", e);
+            assert!(error_msg.contains("invalid character") || error_msg.contains("contains invalid"));
+        }
+    }
+
+    #[test]
+    fn test_multiple_ctes() {
+        let cte1 = QueryBuilder::new("orders").unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("completed".to_string())).unwrap();
+        let cte2 = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap();
+
+        let main = QueryBuilder::new("completed_orders").unwrap()
+            .with_cte("completed_orders", cte1).unwrap()
+            .with_cte("active_users", cte2).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert!(sql.contains("WITH \"completed_orders\" AS"));
+        assert!(sql.contains("\"active_users\" AS"));
+        assert_eq!(params.len(), 2);
+
+        // Verify params are in correct order
+        match &params[0] {
+            ExtractedValue::String(s) => assert_eq!(s, "completed"),
+            _ => panic!("Expected String for first param"),
+        }
+        match &params[1] {
+            ExtractedValue::Bool(b) => assert_eq!(*b, true),
+            _ => panic!("Expected Bool for second param"),
+        }
+    }
+
+    #[test]
+    fn test_cte_with_raw_sql() {
+        let main_query = QueryBuilder::new("high_value").unwrap()
+            .with_cte_raw(
+                "high_value",
+                "SELECT user_id, SUM(amount) as total FROM orders GROUP BY user_id HAVING SUM(amount) > $1",
+                vec![ExtractedValue::Float(1000.0)]
+            ).unwrap()
+            .where_clause("total", Operator::Gt, ExtractedValue::Float(5000.0)).unwrap();
+
+        let (sql, params) = main_query.build_select();
+        assert!(sql.starts_with("WITH "));
+        assert!(sql.contains("\"high_value\" AS ("));
+        assert_eq!(params.len(), 2);
+    }
+
+    #[test]
+    fn test_clear_ctes() {
+        let cte_query = QueryBuilder::new("orders").unwrap();
+        let main_query = QueryBuilder::new("test").unwrap()
+            .with_cte("cte1", cte_query).unwrap()
+            .clear_ctes();
+
+        let (sql, _) = main_query.build_select();
+        assert!(!sql.contains("WITH"));
+    }
+
+    #[test]
+    fn test_cte_parameter_adjustment() {
+        // Test that parameter indices are correctly adjusted when combining CTEs
+        let cte1 = QueryBuilder::new("t1").unwrap()
+            .where_clause("a", Operator::Eq, ExtractedValue::Int(1)).unwrap();
+        let cte2 = QueryBuilder::new("t2").unwrap()
+            .where_clause("b", Operator::Eq, ExtractedValue::Int(2)).unwrap();
+
+        let main = QueryBuilder::new("result").unwrap()
+            .with_cte("cte1", cte1).unwrap()
+            .with_cte("cte2", cte2).unwrap()
+            .where_clause("c", Operator::Eq, ExtractedValue::Int(3)).unwrap();
+
+        let (sql, params) = main.build_select();
+
+        // The SQL should have properly adjusted parameter indices
+        // CTE1 uses $1, CTE2 should use $2, main query should use $3
+        assert!(sql.contains("WITH \"cte1\" AS (SELECT * FROM \"t1\" WHERE \"a\" = $1), \"cte2\" AS (SELECT * FROM \"t2\" WHERE \"b\" = $2)"));
+        assert!(sql.contains("WHERE \"c\" = $3"));
+
+        assert_eq!(params.len(), 3);
+        assert_eq!(params[0], ExtractedValue::Int(1));
+        assert_eq!(params[1], ExtractedValue::Int(2));
+        assert_eq!(params[2], ExtractedValue::Int(3));
+    }
+}
+#[test]
+fn debug_cte_sql() {
+    let cte_query = QueryBuilder::new("orders").unwrap()
+        .aggregate(AggregateFunction::Sum("amount".to_string()), Some("total")).unwrap()
+        .group_by(&["user_id"]).unwrap();
+
+    let main_query = QueryBuilder::new("order_totals").unwrap()
+        .with_cte("order_totals", cte_query).unwrap()
+        .where_clause("total", Operator::Gt, ExtractedValue::Float(1000.0)).unwrap();
+
+    let (sql, params) = main_query.build_select();
+    eprintln!("Generated SQL:\n{}", sql);
+    eprintln!("Parameters: {:?}", params);
+
+    // Verify the structure
+    assert!(sql.starts_with("WITH "));
+    assert!(sql.contains("\"order_totals\" AS ("));
 }

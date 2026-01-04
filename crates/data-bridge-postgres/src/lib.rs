@@ -32,7 +32,7 @@ pub mod schema;
 pub mod validation;
 
 pub use connection::{Connection, PoolConfig};
-pub use query::{QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition};
+pub use query::{QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition, AggregateFunction, HavingCondition};
 pub use row::{Row, RelationConfig};
 pub use transaction::Transaction;
 pub use types::{ExtractedValue, row_to_extracted};

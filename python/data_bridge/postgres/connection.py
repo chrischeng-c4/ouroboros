@@ -166,6 +166,59 @@ async def execute(
     return await _engine.execute(sql, params)
 
 
+async def query_aggregate(
+    table: str,
+    aggregates: List[tuple],
+    group_by: Optional[List[str]] = None,
+    having: Optional[List[tuple]] = None,
+    where_conditions: Optional[List[tuple]] = None,
+    order_by: Optional[List[tuple]] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Execute an aggregate query with GROUP BY and HAVING support.
+
+    Args:
+        table: Table name
+        aggregates: List of (func_type, column, alias) tuples
+                   func_type: "count", "count_column", "count_distinct", "sum", "avg", "min", "max"
+                   column: Column name (optional for "count")
+                   alias: Optional alias for the aggregate result
+        group_by: List of column names to group by
+        having: List of (func_type, column, operator, value) tuples for HAVING clause
+        where_conditions: List of (field, operator, value) tuples for WHERE clause
+        order_by: List of (column, direction) tuples - direction: "asc" or "desc"
+        limit: Optional row limit
+
+    Returns:
+        List of dictionaries with aggregate results
+
+    Example:
+        >>> # Group by user_id with HAVING clause
+        >>> results = await query_aggregate(
+        ...     "orders",
+        ...     [("sum", "amount", "total"), ("count", None, "count")],
+        ...     group_by=["user_id"],
+        ...     having=[("sum", "amount", "gt", 1000)],
+        ...     where_conditions=[("status", "eq", "completed")],
+        ...     order_by=[("total", "desc")],
+        ...     limit=10
+        ... )
+    """
+    if _engine is None:
+        raise RuntimeError("PostgreSQL engine not available.")
+
+    return await _engine.query_aggregate(
+        table,
+        aggregates,
+        group_by,
+        having,
+        where_conditions,
+        order_by,
+        limit
+    )
+
+
 async def insert_one(
     table: str,
     document: Dict[str, Any],

@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector};
+use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector, query::AggregateFunction};
 use sqlx::Row as SqlxRow;
 
 // For base64 encoding of binary data
@@ -24,9 +24,7 @@ static PG_POOL: StdRwLock<Option<Arc<Connection>>> = StdRwLock::new(None);
 // Panic Boundary Protection
 // ============================================================================
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::future::Future;
-use futures::FutureExt;
+use std::panic::catch_unwind;
 
 /// Safely execute a potentially panicking synchronous operation, converting panics to Python errors.
 ///
@@ -758,7 +756,7 @@ fn fetch_one<'py>(
 /// Example:
 ///     users = await fetch_all("users", {"age": 30}, limit=10, order_by=[("name", "asc")])
 #[pyfunction]
-#[pyo3(signature = (table, filter, limit=None, offset=None, order_by=None))]
+#[pyo3(signature = (table, filter, limit=None, offset=None, order_by=None, distinct=None, distinct_on=None))]
 fn fetch_all<'py>(
     py: Python<'py>,
     table: String,
@@ -766,6 +764,8 @@ fn fetch_all<'py>(
     limit: Option<i64>,
     offset: Option<i64>,
     order_by: Option<Vec<(String, String)>>,
+    distinct: Option<bool>,
+    distinct_on: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
     // Phase 1: Extract Python values (GIL held)
@@ -775,6 +775,17 @@ fn fetch_all<'py>(
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
             .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
+
+        // Apply DISTINCT settings
+        if distinct.unwrap_or(false) {
+            query = query.distinct();
+        }
+
+        if let Some(cols) = distinct_on {
+            let col_refs: Vec<&str> = cols.iter().map(|s| s.as_str()).collect();
+            query = query.distinct_on(&col_refs)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid distinct_on: {}", e)))?;
+        }
 
         // Add WHERE conditions
         for (field, value) in filter_values {
@@ -2363,7 +2374,7 @@ fn find_by_foreign_key<'py>(
 ///         limit=10
 ///     )
 #[pyfunction]
-#[pyo3(signature = (table, where_clause, params, order_by=None, offset=None, limit=None, select_cols=None))]
+#[pyo3(signature = (table, where_clause, params, order_by=None, offset=None, limit=None, select_cols=None, distinct=None, distinct_on=None))]
 fn find_many<'py>(
     py: Python<'py>,
     table: String,
@@ -2373,6 +2384,8 @@ fn find_many<'py>(
     offset: Option<i64>,
     limit: Option<i64>,
     select_cols: Option<Vec<String>>,
+    distinct: Option<bool>,
+    distinct_on: Option<Vec<String>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -2384,6 +2397,15 @@ fn find_many<'py>(
 
     // Phase 2: Execute SQL (GIL released via future_into_py)
     future_into_py(py, async move {
+        // Build DISTINCT clause
+        let distinct_clause = if let Some(cols) = &distinct_on {
+            format!("DISTINCT ON ({}) ", cols.join(", "))
+        } else if distinct.unwrap_or(false) {
+            "DISTINCT ".to_string()
+        } else {
+            String::new()
+        };
+
         // Build SELECT clause
         let select_clause = if let Some(cols) = select_cols {
             cols.join(", ")
@@ -2392,7 +2414,7 @@ fn find_many<'py>(
         };
 
         // Start building SQL
-        let mut sql = format!("SELECT {} FROM {}", select_clause, table);
+        let mut sql = format!("SELECT {}{} FROM {}", distinct_clause, select_clause, table);
 
         // Add WHERE clause if provided
         if !where_clause.is_empty() {
@@ -2852,6 +2874,435 @@ fn autogenerate_migration<'py>(
     Ok(result.into())
 }
 
+/// Execute an aggregate query with GROUP BY support
+///
+/// Args:
+///     table: Table name
+///     aggregates: List of tuples (func_type, column, alias)
+///                 func_type: "count", "count_column", "count_distinct", "sum", "avg", "min", "max"
+///                 column: Column name (optional for "count")
+///                 alias: Optional alias for the aggregate result
+///     group_by: List of column names to group by
+///     having: List of tuples (func_type, column, operator, value) for HAVING clause
+///             func_type and column same as aggregates
+///             operator: same as where_conditions
+///     where_conditions: List of tuples (field, operator, value) for WHERE clause
+///                      operator: "eq", "ne", "gt", "gte", "lt", "lte", "like", "ilike", "in", "is_null", "is_not_null"
+///     order_by: List of tuples (column, direction) - direction: "asc" or "desc"
+///     limit: Optional row limit
+///     distinct: Whether to use DISTINCT (default: False)
+///     distinct_on: List of column names for DISTINCT ON (PostgreSQL-specific)
+///
+/// Returns:
+///     List of dictionaries with aggregate results
+///
+/// Example:
+///     results = await query_aggregate(
+///         "orders",
+///         [("sum", "amount", "total"), ("count", None, "count")],
+///         ["user_id"],
+///         [("sum", "amount", "gt", 1000)],  # HAVING SUM(amount) > 1000
+///         [("status", "eq", "completed")],
+///         [("total", "desc")],
+///         10,
+///         distinct=True
+///     )
+#[pyfunction]
+#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None))]
+fn query_aggregate<'py>(
+    py: Python<'py>,
+    table: String,
+    aggregates: Vec<(String, Option<String>, Option<String>)>,
+    group_by: Option<Vec<String>>,
+    having: Option<Vec<(String, Option<String>, String, Bound<'py, PyAny>)>>,
+    where_conditions: Option<Vec<(String, String, Bound<'py, PyAny>)>>,
+    order_by: Option<Vec<(String, String)>>,
+    limit: Option<i64>,
+    distinct: Option<bool>,
+    distinct_on: Option<Vec<String>>,
+    ctes: Option<Vec<(String, String, Vec<Bound<'py, PyAny>>)>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Parse aggregates and extract Python values (GIL held)
+    let mut agg_funcs = Vec::new();
+    for (func_type, column, alias) in aggregates {
+        let agg_func = match func_type.to_lowercase().as_str() {
+            "count" => AggregateFunction::Count,
+            "count_column" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("count_column requires a column name")
+                )?;
+                AggregateFunction::CountColumn(col)
+            }
+            "count_distinct" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("count_distinct requires a column name")
+                )?;
+                AggregateFunction::CountDistinct(col)
+            }
+            "sum" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("sum requires a column name")
+                )?;
+                AggregateFunction::Sum(col)
+            }
+            "avg" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("avg requires a column name")
+                )?;
+                AggregateFunction::Avg(col)
+            }
+            "min" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("min requires a column name")
+                )?;
+                AggregateFunction::Min(col)
+            }
+            "max" => {
+                let col = column.ok_or_else(||
+                    PyValueError::new_err("max requires a column name")
+                )?;
+                AggregateFunction::Max(col)
+            }
+            _ => return Err(PyValueError::new_err(format!("Unknown aggregate function: {}", func_type))),
+        };
+        agg_funcs.push((agg_func, alias));
+    }
+
+    // Extract WHERE condition values
+    let where_params: Vec<(String, Operator, data_bridge_postgres::ExtractedValue)> = if let Some(conditions) = where_conditions {
+        conditions
+            .into_iter()
+            .map(|(field, op_str, value)| {
+                let operator = parse_operator(&op_str)?;
+                let extracted_value = py_value_to_extracted(py, &value)?;
+                Ok((field, operator, extracted_value))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    // Extract HAVING condition values
+    let having_params: Vec<(AggregateFunction, Operator, data_bridge_postgres::ExtractedValue)> = if let Some(conditions) = having {
+        conditions
+            .into_iter()
+            .map(|(func_type, column, op_str, value)| {
+                // Parse aggregate function
+                let agg_func = match func_type.to_lowercase().as_str() {
+                    "count" => AggregateFunction::Count,
+                    "count_column" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("count_column requires a column name")
+                        )?;
+                        AggregateFunction::CountColumn(col)
+                    }
+                    "count_distinct" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("count_distinct requires a column name")
+                        )?;
+                        AggregateFunction::CountDistinct(col)
+                    }
+                    "sum" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("sum requires a column name")
+                        )?;
+                        AggregateFunction::Sum(col)
+                    }
+                    "avg" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("avg requires a column name")
+                        )?;
+                        AggregateFunction::Avg(col)
+                    }
+                    "min" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("min requires a column name")
+                        )?;
+                        AggregateFunction::Min(col)
+                    }
+                    "max" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("max requires a column name")
+                        )?;
+                        AggregateFunction::Max(col)
+                    }
+                    _ => return Err(PyValueError::new_err(format!("Unknown aggregate function: {}", func_type))),
+                };
+
+                // Parse operator
+                let operator = parse_operator(&op_str)?;
+
+                // Extract value
+                let extracted_value = py_value_to_extracted(py, &value)?;
+
+                Ok((agg_func, operator, extracted_value))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    // Extract CTE parameters
+    let cte_params: Vec<(String, String, Vec<data_bridge_postgres::ExtractedValue>)> = if let Some(cte_list) = ctes {
+        cte_list
+            .into_iter()
+            .map(|(name, sql, params)| {
+                let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+                    .iter()
+                    .map(|p| py_value_to_extracted(py, p))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok((name, sql, extracted_params))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    // Phase 2: Build and execute query (GIL released via future_into_py)
+    future_into_py(py, async move {
+        let mut query = QueryBuilder::new(&table)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
+
+        // Apply CTEs before other operations
+        for (name, sql, params) in cte_params {
+            query = query.with_cte_raw(&name, &sql, params)
+                .map_err(|e| PyValueError::new_err(format!("Invalid CTE: {}", e)))?;
+        }
+
+        // Apply DISTINCT settings
+        if distinct.unwrap_or(false) {
+            query = query.distinct();
+        }
+
+        if let Some(cols) = distinct_on {
+            let col_refs: Vec<&str> = cols.iter().map(|s| s.as_str()).collect();
+            query = query.distinct_on(&col_refs)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid distinct_on: {}", e)))?;
+        }
+
+        // Add aggregates
+        for (agg_func, alias) in agg_funcs {
+            let alias_ref: Option<&str> = alias.as_deref();
+            query = query.aggregate(agg_func, alias_ref)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid aggregate: {}", e)))?;
+        }
+
+        // Add GROUP BY
+        if let Some(group_cols) = group_by {
+            let group_refs: Vec<&str> = group_cols.iter().map(|s| s.as_str()).collect();
+            query = query.group_by(&group_refs)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid group_by: {}", e)))?;
+        }
+
+        // Add HAVING conditions
+        for (agg_func, operator, value) in having_params {
+            query = query.having(agg_func, operator, value)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid having clause: {}", e)))?;
+        }
+
+        // Add WHERE conditions
+        for (field, operator, value) in where_params {
+            query = query.where_clause(&field, operator, value)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
+        }
+
+        // Add ORDER BY
+        if let Some(order_specs) = order_by {
+            for (field, direction) in order_specs {
+                let dir = if direction.to_lowercase() == "desc" {
+                    OrderDirection::Desc
+                } else {
+                    OrderDirection::Asc
+                };
+                query = query.order_by(&field, dir)
+                    .map_err(|e| PyRuntimeError::new_err(format!("Invalid order_by: {}", e)))?;
+            }
+        }
+
+        // Add LIMIT
+        if let Some(l) = limit {
+            query = query.limit(l);
+        }
+
+        // Build SQL and parameters
+        let (sql, params) = query.build_select();
+
+        // Bind parameters
+        let mut args = sqlx::postgres::PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let pg_rows = sqlx::query_with(&sql, args)
+            .fetch_all(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("Aggregate query failed: {}", e)))?;
+
+        // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
+        let mut wrappers = Vec::with_capacity(pg_rows.len());
+        for pg_row in &pg_rows {
+            let row = Row::from_sqlx(pg_row)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+            wrappers.push(RowWrapper::from_row(&row)?);
+        }
+
+        Ok(RowsWrapper(wrappers))
+    })
+}
+
+/// Execute a query with Common Table Expressions (CTEs)
+///
+/// This function makes it easier to work with CTEs by providing a dedicated interface.
+///
+/// # Arguments
+/// * `main_table` - The table or CTE name to query from in the main SELECT
+/// * `ctes` - List of CTEs as (name, sql, params) tuples
+/// * `select_columns` - Optional list of columns to select (defaults to *)
+/// * `where_conditions` - WHERE clause conditions as (field, operator, value) tuples
+/// * `order_by` - ORDER BY specifications as (field, direction) tuples
+/// * `limit` - Optional LIMIT value
+///
+/// # Example
+/// ```python
+/// results = await query_with_cte(
+///     "high_value_orders",
+///     [("high_value_orders", "SELECT * FROM orders WHERE total > $1", [1000])],
+///     select_columns=["order_id", "total"],
+///     where_conditions=[("status", "eq", "completed")],
+///     order_by=[("total", "desc")],
+///     limit=10
+/// )
+/// ```
+#[pyfunction]
+#[pyo3(signature = (main_table, ctes, select_columns=None, where_conditions=None, order_by=None, limit=None))]
+fn query_with_cte<'py>(
+    py: Python<'py>,
+    main_table: String,
+    ctes: Vec<(String, String, Vec<Bound<'py, PyAny>>)>,
+    select_columns: Option<Vec<String>>,
+    where_conditions: Option<Vec<(String, String, Bound<'py, PyAny>)>>,
+    order_by: Option<Vec<(String, String)>>,
+    limit: Option<i64>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+
+    // Phase 1: Extract CTE parameters
+    let cte_params: Vec<(String, String, Vec<data_bridge_postgres::ExtractedValue>)> = ctes
+        .into_iter()
+        .map(|(name, sql, params)| {
+            let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+                .iter()
+                .map(|p| py_value_to_extracted(py, p))
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok((name, sql, extracted_params))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+
+    // Extract WHERE condition values
+    let where_params: Vec<(String, Operator, data_bridge_postgres::ExtractedValue)> = if let Some(conditions) = where_conditions {
+        conditions
+            .into_iter()
+            .map(|(field, op_str, value)| {
+                let operator = parse_operator(&op_str)?;
+                let extracted_value = py_value_to_extracted(py, &value)?;
+                Ok((field, operator, extracted_value))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
+    // Phase 2: Build and execute query (GIL released via future_into_py)
+    future_into_py(py, async move {
+        let mut query = QueryBuilder::new(&main_table)
+            .map_err(|e| PyRuntimeError::new_err(format!("Invalid table name: {}", e)))?;
+
+        // Apply CTEs
+        for (name, sql, params) in cte_params {
+            query = query.with_cte_raw(&name, &sql, params)
+                .map_err(|e| PyValueError::new_err(format!("Invalid CTE: {}", e)))?;
+        }
+
+        // Apply SELECT columns (if specified)
+        if let Some(cols) = select_columns {
+            query = query.select(cols)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid select columns: {}", e)))?;
+        }
+
+        // Add WHERE conditions
+        for (field, operator, value) in where_params {
+            query = query.where_clause(&field, operator, value)
+                .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
+        }
+
+        // Add ORDER BY
+        if let Some(order_specs) = order_by {
+            for (field, direction) in order_specs {
+                let dir = if direction.to_lowercase() == "desc" {
+                    OrderDirection::Desc
+                } else {
+                    OrderDirection::Asc
+                };
+                query = query.order_by(&field, dir)
+                    .map_err(|e| PyRuntimeError::new_err(format!("Invalid order_by: {}", e)))?;
+            }
+        }
+
+        // Add LIMIT
+        if let Some(l) = limit {
+            query = query.limit(l);
+        }
+
+        // Build SQL and parameters
+        let (sql, params) = query.build_select();
+
+        // Bind parameters
+        let mut args = sqlx::postgres::PgArguments::default();
+        for param in &params {
+            param.bind_to_arguments(&mut args)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to bind parameter: {}", e)))?;
+        }
+
+        // Execute query
+        let pg_rows = sqlx::query_with(&sql, args)
+            .fetch_all(conn.pool())
+            .await
+            .map_err(|e| PyRuntimeError::new_err(format!("CTE query failed: {}", e)))?;
+
+        // Phase 3: Convert results to Python (GIL acquired inside future_into_py)
+        let mut wrappers = Vec::with_capacity(pg_rows.len());
+        for pg_row in &pg_rows {
+            let row = Row::from_sqlx(pg_row)
+                .map_err(|e| PyRuntimeError::new_err(format!("Failed to convert row: {}", e)))?;
+            wrappers.push(RowWrapper::from_row(&row)?);
+        }
+
+        Ok(RowsWrapper(wrappers))
+    })
+}
+
+/// Helper function to parse operator string to Operator enum
+fn parse_operator(op_str: &str) -> PyResult<Operator> {
+    match op_str.to_lowercase().as_str() {
+        "eq" | "=" => Ok(Operator::Eq),
+        "ne" | "!=" | "<>" => Ok(Operator::Ne),
+        "gt" | ">" => Ok(Operator::Gt),
+        "gte" | ">=" => Ok(Operator::Gte),
+        "lt" | "<" => Ok(Operator::Lt),
+        "lte" | "<=" => Ok(Operator::Lte),
+        "like" => Ok(Operator::Like),
+        "ilike" => Ok(Operator::ILike),
+        "in" => Ok(Operator::In),
+        "is_null" => Ok(Operator::IsNull),
+        "is_not_null" => Ok(Operator::IsNotNull),
+        _ => Err(PyValueError::new_err(format!("Unknown operator: {}", op_str))),
+    }
+}
+
 // ============================================================================
 // Module Registration
 // ============================================================================
@@ -2884,6 +3335,8 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count, m)?)?;
     m.add_function(wrap_pyfunction!(execute, m)?)?;
     m.add_function(wrap_pyfunction!(begin_transaction, m)?)?;
+    m.add_function(wrap_pyfunction!(query_aggregate, m)?)?;
+    m.add_function(wrap_pyfunction!(query_with_cte, m)?)?;
 
     // Schema introspection functions
     m.add_function(wrap_pyfunction!(list_tables, m)?)?;
