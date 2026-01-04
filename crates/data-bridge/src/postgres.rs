@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector, query::{AggregateFunction, WindowFunction, WindowSpec}};
+use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector, query::{AggregateFunction, WindowFunction, WindowSpec}, schema::ManyToManyConfig};
 use sqlx::Row as SqlxRow;
 
 // For base64 encoding of binary data
@@ -1657,6 +1657,423 @@ fn count<'py>(
 
         // Phase 3: Return result (GIL acquired inside future_into_py)
         Ok(count)
+    })
+}
+
+// ============================================================================
+// Many-to-Many Relationship Functions
+// ============================================================================
+
+/// Create a join table for many-to-many relationship
+///
+/// Args:
+///     join_table: Name of the join table to create
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     source_table: Name of the source table
+///     target_table: Name of the target table
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Example:
+///     await m2m_create_join_table("user_roles", "user_id", "role_id", "users", "roles")
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, source_table, target_table, source_reference="id", target_reference="id"))]
+fn m2m_create_join_table<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    source_table: String,
+    target_table: String,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        data_bridge_postgres::row::Row::create_join_table(conn.pool(), &config, &source_table)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(Python::with_gil(|py| py.None()))
+    })
+}
+
+/// Add a relation between source and target in the join table
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     target_id: ID of the target record
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Example:
+///     await m2m_add_relation("user_roles", "user_id", "role_id", "roles", 1, 2)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, target_id, source_reference="id", target_reference="id"))]
+fn m2m_add_relation<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    target_id: i64,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        data_bridge_postgres::row::Row::add_m2m_relation(conn.pool(), &config, source_id, target_id)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(Python::with_gil(|py| py.None()))
+    })
+}
+
+/// Remove a relation between source and target from the join table
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     target_id: ID of the target record
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Returns:
+///     int: Number of relations removed
+///
+/// Example:
+///     count = await m2m_remove_relation("user_roles", "user_id", "role_id", "roles", 1, 2)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, target_id, source_reference="id", target_reference="id"))]
+fn m2m_remove_relation<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    target_id: i64,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        let affected = data_bridge_postgres::row::Row::remove_m2m_relation(conn.pool(), &config, source_id, target_id)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(affected)
+    })
+}
+
+/// Clear all relations for a source from the join table
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Returns:
+///     int: Number of relations cleared
+///
+/// Example:
+///     count = await m2m_clear_relations("user_roles", "user_id", "role_id", "roles", 1)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, source_reference="id", target_reference="id"))]
+fn m2m_clear_relations<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        let affected = data_bridge_postgres::row::Row::clear_m2m_relations(conn.pool(), &config, source_id)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(affected)
+    })
+}
+
+/// Fetch all related target records for a source through the join table
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     select_columns: Optional list of columns to select from target table
+///     order_by: Optional list of (column, direction) tuples for ordering
+///     limit: Optional maximum number of records to return
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Returns:
+///     List[Dict]: List of related target records
+///
+/// Example:
+///     roles = await m2m_fetch_related("user_roles", "user_id", "role_id", "roles", 1,
+///                                      select_columns=["id", "name"],
+///                                      order_by=[("name", "ASC")],
+///                                      limit=10)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, select_columns=None, order_by=None, limit=None, source_reference="id", target_reference="id"))]
+fn m2m_fetch_related<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    select_columns: Option<Vec<String>>,
+    order_by: Option<Vec<(String, String)>>,
+    limit: Option<i64>,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        // Convert select_columns to references
+        let cols_refs: Option<Vec<&str>> = select_columns.as_ref().map(|v| v.iter().map(|s| s.as_str()).collect());
+
+        // Convert order_by to references
+        let order_refs: Option<Vec<(&str, &str)>> = order_by.as_ref().map(|v| {
+            v.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect()
+        });
+
+        let results = data_bridge_postgres::row::Row::fetch_m2m_related(
+            conn.pool(),
+            &config,
+            source_id,
+            cols_refs.as_deref(),
+            order_refs.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        // Convert to Python dicts
+        Python::with_gil(|py| {
+            let py_results: Vec<PyObject> = results
+                .into_iter()
+                .map(|row| {
+                    let dict = PyDict::new(py);
+                    for (column_name, value) in row {
+                        let py_value = extracted_to_py_value(py, &value)?;
+                        dict.set_item(column_name, py_value)?;
+                    }
+                    Ok(dict.to_object(py))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            Ok(py_results.into_pyobject(py)?.into_any().unbind())
+        })
+    })
+}
+
+/// Count the number of related target records for a source
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Returns:
+///     int: Number of related records
+///
+/// Example:
+///     count = await m2m_count_related("user_roles", "user_id", "role_id", "roles", 1)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, source_reference="id", target_reference="id"))]
+fn m2m_count_related<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        let count = data_bridge_postgres::row::Row::count_m2m_related(conn.pool(), &config, source_id)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(count)
+    })
+}
+
+/// Check if a relation exists between source and target
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     target_id: ID of the target record
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Returns:
+///     bool: True if relation exists, False otherwise
+///
+/// Example:
+///     exists = await m2m_has_relation("user_roles", "user_id", "role_id", "roles", 1, 2)
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, target_id, source_reference="id", target_reference="id"))]
+fn m2m_has_relation<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    target_id: i64,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        let exists = data_bridge_postgres::row::Row::has_m2m_relation(conn.pool(), &config, source_id, target_id)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(exists)
+    })
+}
+
+/// Set the exact list of related targets (remove old, add new)
+///
+/// Args:
+///     join_table: Name of the join table
+///     source_key: Column name for the source foreign key
+///     target_key: Column name for the target foreign key
+///     target_table: Name of the target table
+///     source_id: ID of the source record
+///     target_ids: List of target IDs to set as relations
+///     source_reference: Column in source table being referenced (default: "id")
+///     target_reference: Column in target table being referenced (default: "id")
+///
+/// Example:
+///     await m2m_set_relations("user_roles", "user_id", "role_id", "roles", 1, [2, 3, 4])
+#[pyfunction]
+#[pyo3(signature = (join_table, source_key, target_key, target_table, source_id, target_ids, source_reference="id", target_reference="id"))]
+fn m2m_set_relations<'py>(
+    py: Python<'py>,
+    join_table: String,
+    source_key: String,
+    target_key: String,
+    target_table: String,
+    source_id: i64,
+    target_ids: Vec<i64>,
+    source_reference: &str,
+    target_reference: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let conn = get_connection()?;
+    let source_ref = source_reference.to_string();
+    let target_ref = target_reference.to_string();
+
+    future_into_py(py, async move {
+        let config = ManyToManyConfig::new(
+            join_table, source_key, target_key, target_table
+        )
+        .with_source_reference(source_ref)
+        .with_target_reference(target_ref);
+
+        data_bridge_postgres::row::Row::set_m2m_relations(conn.pool(), &config, source_id, &target_ids)
+            .await
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(Python::with_gil(|py| py.None()))
     })
 }
 
@@ -3710,6 +4127,16 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(migration_rollback, m)?)?;
     m.add_function(wrap_pyfunction!(migration_create, m)?)?;
     m.add_function(wrap_pyfunction!(autogenerate_migration, m)?)?;
+
+    // Many-to-Many functions
+    m.add_function(wrap_pyfunction!(m2m_create_join_table, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_add_relation, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_remove_relation, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_clear_relations, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_fetch_related, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_count_related, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_has_relation, m)?)?;
+    m.add_function(wrap_pyfunction!(m2m_set_relations, m)?)?;
 
     // Add module docstring
     m.add("__doc__", "PostgreSQL ORM module with async support")?;

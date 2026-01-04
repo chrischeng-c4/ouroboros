@@ -40,7 +40,7 @@ pub use row::{Row, RelationConfig};
 pub use transaction::Transaction;
 pub use types::{ExtractedValue, row_to_extracted};
 pub use migration::{Migration, MigrationRunner, MigrationStatus};
-pub use schema::{SchemaInspector, CascadeRule, BackRef};
+pub use schema::{SchemaInspector, CascadeRule, BackRef, ManyToManyConfig};
 pub use validation::validate_foreign_key_reference;
 
 pub use data_bridge_common::{DataBridgeError, Result};

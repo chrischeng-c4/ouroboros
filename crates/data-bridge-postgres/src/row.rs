@@ -1074,6 +1074,265 @@ impl Row {
 
         Ok(backrefs)
     }
+
+    // ============================================================================
+    // Many-to-Many Operations
+    // ============================================================================
+
+    /// Create a join table for many-to-many relationship if it doesn't exist
+    pub async fn create_join_table(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_table: &str,
+    ) -> Result<()> {
+        // Validate identifiers
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+        QueryBuilder::validate_identifier(&config.target_key)?;
+        QueryBuilder::validate_identifier(&config.target_table)?;
+        QueryBuilder::validate_identifier(source_table)?;
+
+        let sql = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS "{}" (
+                "{}" INTEGER NOT NULL REFERENCES "{}"("{}") ON DELETE CASCADE,
+                "{}" INTEGER NOT NULL REFERENCES "{}"("{}") ON DELETE CASCADE,
+                PRIMARY KEY ("{}", "{}")
+            )
+            "#,
+            config.join_table,
+            config.source_key, source_table, config.source_reference,
+            config.target_key, config.target_table, config.target_reference,
+            config.source_key, config.target_key
+        );
+
+        sqlx::query(&sql).execute(pool).await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Add a relation between source and target in the join table
+    pub async fn add_m2m_relation(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+        target_id: i64,
+    ) -> Result<()> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+        QueryBuilder::validate_identifier(&config.target_key)?;
+
+        let sql = format!(
+            r#"INSERT INTO "{}" ("{}", "{}") VALUES ($1, $2) ON CONFLICT DO NOTHING"#,
+            config.join_table, config.source_key, config.target_key
+        );
+
+        sqlx::query(&sql)
+            .bind(source_id)
+            .bind(target_id)
+            .execute(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Remove a relation between source and target from the join table
+    pub async fn remove_m2m_relation(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+        target_id: i64,
+    ) -> Result<u64> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+        QueryBuilder::validate_identifier(&config.target_key)?;
+
+        let sql = format!(
+            r#"DELETE FROM "{}" WHERE "{}" = $1 AND "{}" = $2"#,
+            config.join_table, config.source_key, config.target_key
+        );
+
+        let result = sqlx::query(&sql)
+            .bind(source_id)
+            .bind(target_id)
+            .execute(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Remove all relations for a source from the join table
+    pub async fn clear_m2m_relations(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+    ) -> Result<u64> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+
+        let sql = format!(
+            r#"DELETE FROM "{}" WHERE "{}" = $1"#,
+            config.join_table, config.source_key
+        );
+
+        let result = sqlx::query(&sql)
+            .bind(source_id)
+            .execute(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Fetch all related target records for a source through the join table
+    pub async fn fetch_m2m_related(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+        select_columns: Option<&[&str]>,
+        order_by: Option<&[(&str, &str)]>,
+        limit: Option<i64>,
+    ) -> Result<Vec<HashMap<String, ExtractedValue>>> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+        QueryBuilder::validate_identifier(&config.target_key)?;
+        QueryBuilder::validate_identifier(&config.target_table)?;
+        QueryBuilder::validate_identifier(&config.target_reference)?;
+
+        // Validate select columns if provided
+        let columns = match select_columns {
+            Some(cols) => {
+                for col in cols {
+                    QueryBuilder::validate_identifier(col)?;
+                }
+                cols.iter().map(|c| format!(r#"t."{}""#, c)).collect::<Vec<_>>().join(", ")
+            }
+            None => "t.*".to_string(),
+        };
+
+        // Build ORDER BY clause
+        let order_clause = match order_by {
+            Some(orders) => {
+                let mut parts = Vec::new();
+                for (col, dir) in orders {
+                    QueryBuilder::validate_identifier(col)?;
+                    let direction = if dir.to_lowercase() == "desc" { "DESC" } else { "ASC" };
+                    parts.push(format!(r#"t."{}" {}"#, col, direction));
+                }
+                format!("ORDER BY {}", parts.join(", "))
+            }
+            None => String::new(),
+        };
+
+        // Build LIMIT clause
+        let limit_clause = match limit {
+            Some(n) => format!("LIMIT {}", n),
+            None => String::new(),
+        };
+
+        let sql = format!(
+            r#"
+            SELECT {columns}
+            FROM "{target_table}" t
+            INNER JOIN "{join_table}" j ON t."{target_ref}" = j."{target_key}"
+            WHERE j."{source_key}" = $1
+            {order_clause}
+            {limit_clause}
+            "#,
+            columns = columns,
+            target_table = config.target_table,
+            join_table = config.join_table,
+            target_ref = config.target_reference,
+            target_key = config.target_key,
+            source_key = config.source_key,
+            order_clause = order_clause,
+            limit_clause = limit_clause,
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(source_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in rows {
+            results.push(crate::row_to_extracted(&row)?);
+        }
+
+        Ok(results)
+    }
+
+    /// Count the number of related target records for a source
+    pub async fn count_m2m_related(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+    ) -> Result<i64> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+
+        let sql = format!(
+            r#"SELECT COUNT(*) as count FROM "{}" WHERE "{}" = $1"#,
+            config.join_table, config.source_key
+        );
+
+        let row = sqlx::query(&sql)
+            .bind(source_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        let count: i64 = row.try_get("count")
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+        Ok(count)
+    }
+
+    /// Check if a relation exists between source and target
+    pub async fn has_m2m_relation(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+        target_id: i64,
+    ) -> Result<bool> {
+        QueryBuilder::validate_identifier(&config.join_table)?;
+        QueryBuilder::validate_identifier(&config.source_key)?;
+        QueryBuilder::validate_identifier(&config.target_key)?;
+
+        let sql = format!(
+            r#"SELECT 1 FROM "{}" WHERE "{}" = $1 AND "{}" = $2 LIMIT 1"#,
+            config.join_table, config.source_key, config.target_key
+        );
+
+        let result = sqlx::query(&sql)
+            .bind(source_id)
+            .bind(target_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| DataBridgeError::Database(e.to_string()))?;
+
+        Ok(result.is_some())
+    }
+
+    /// Set the exact list of related targets (remove old, add new)
+    pub async fn set_m2m_relations(
+        pool: &PgPool,
+        config: &crate::schema::ManyToManyConfig,
+        source_id: i64,
+        target_ids: &[i64],
+    ) -> Result<()> {
+        // Clear existing relations
+        Self::clear_m2m_relations(pool, config, source_id).await?;
+
+        // Add new relations
+        for &target_id in target_ids {
+            Self::add_m2m_relation(pool, config, source_id, target_id).await?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Helper function to convert ExtractedValue to JSON.

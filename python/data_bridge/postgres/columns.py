@@ -18,10 +18,22 @@ Example:
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
     from .table import Table
+
+__all__ = [
+    "SqlExpr",
+    "ColumnProxy",
+    "Column",
+    "ForeignKeyProxy",
+    "BackReference",
+    "BackReferenceQuery",
+    "ManyToMany",
+    "ManyToManyQuery",
+    "create_m2m_join_table",
+]
 
 
 class SqlExpr:
@@ -690,3 +702,361 @@ class BackReference:
 
     def __repr__(self) -> str:
         return f"BackReference({self.source_table}.{self.source_column} -> {self.target_column})"
+
+
+class ManyToManyQuery:
+    """
+    Query helper for many-to-many relationships.
+
+    Provides methods to query, add, remove, and manage related objects
+    through a join table.
+
+    Example:
+        # Get all tags for a post
+        tags = await post.tags.fetch_all()
+
+        # Add a tag to a post
+        await post.tags.add(tag_id)
+
+        # Remove a tag from a post
+        await post.tags.remove(tag_id)
+
+        # Check if post has a specific tag
+        has_tag = await post.tags.has(tag_id)
+
+        # Count tags
+        count = await post.tags.count()
+
+        # Replace all tags
+        await post.tags.set([tag_id1, tag_id2])
+    """
+
+    def __init__(
+        self,
+        join_table: str,
+        source_key: str,
+        target_key: str,
+        target_table: str,
+        source_id: Any,
+        source_reference: str = "id",
+        target_reference: str = "id",
+    ):
+        self.join_table = join_table
+        self.source_key = source_key
+        self.target_key = target_key
+        self.target_table = target_table
+        self.source_id = source_id
+        self.source_reference = source_reference
+        self.target_reference = target_reference
+
+    async def fetch_all(
+        self,
+        select_columns: Optional[List[str]] = None,
+        order_by: Optional[List[Tuple[str, str]]] = None,
+        limit: Optional[int] = None,
+    ) -> List[dict]:
+        """
+        Fetch all related objects.
+
+        Args:
+            select_columns: Columns to select (None for all)
+            order_by: List of (column, direction) tuples
+            limit: Maximum number of results
+
+        Returns:
+            List of related objects as dictionaries
+        """
+        from . import _engine
+        return await _engine.m2m_fetch_related(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            select_columns,
+            order_by,
+            limit,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def fetch_one(self) -> Optional[dict]:
+        """Fetch the first related object."""
+        results = await self.fetch_all(limit=1)
+        return results[0] if results else None
+
+    async def add(self, target_id: int) -> None:
+        """
+        Add a relation to the target.
+
+        Args:
+            target_id: ID of the target to relate
+        """
+        from . import _engine
+        await _engine.m2m_add_relation(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            target_id,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def remove(self, target_id: int) -> int:
+        """
+        Remove a relation to the target.
+
+        Args:
+            target_id: ID of the target to unrelate
+
+        Returns:
+            Number of relations removed (0 or 1)
+        """
+        from . import _engine
+        return await _engine.m2m_remove_relation(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            target_id,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def clear(self) -> int:
+        """
+        Remove all relations for this source.
+
+        Returns:
+            Number of relations removed
+        """
+        from . import _engine
+        return await _engine.m2m_clear_relations(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def count(self) -> int:
+        """
+        Count the number of related objects.
+
+        Returns:
+            Number of related objects
+        """
+        from . import _engine
+        return await _engine.m2m_count_related(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def has(self, target_id: int) -> bool:
+        """
+        Check if a relation to the target exists.
+
+        Args:
+            target_id: ID of the target to check
+
+        Returns:
+            True if the relation exists
+        """
+        from . import _engine
+        return await _engine.m2m_has_relation(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            target_id,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def set(self, target_ids: List[int]) -> None:
+        """
+        Replace all relations with the given targets.
+
+        This will remove all existing relations and add the new ones.
+
+        Args:
+            target_ids: List of target IDs to relate
+        """
+        from . import _engine
+        await _engine.m2m_set_relations(
+            self.join_table,
+            self.source_key,
+            self.target_key,
+            self.target_table,
+            self.source_id,
+            target_ids,
+            self.source_reference,
+            self.target_reference,
+        )
+
+    async def ids(self) -> List[int]:
+        """
+        Get just the IDs of related objects.
+
+        Returns:
+            List of related object IDs
+        """
+        results = await self.fetch_all(select_columns=[self.target_reference])
+        return [r[self.target_reference] for r in results]
+
+
+class ManyToMany:
+    """
+    Descriptor for many-to-many relationships via join table.
+
+    When accessed on a Table instance, returns a ManyToManyQuery
+    that provides async methods to manage the relationship.
+
+    Example:
+        class Post(Table):
+            id: int
+            title: str
+            tags: ManyToMany["Tag"] = ManyToMany(
+                join_table="post_tags",
+                source_key="post_id",
+                target_key="tag_id",
+                target_table="tags",
+            )
+
+        class Tag(Table):
+            id: int
+            name: str
+            posts: ManyToMany["Post"] = ManyToMany(
+                join_table="post_tags",
+                source_key="tag_id",
+                target_key="post_id",
+                target_table="posts",
+            )
+
+        # Usage
+        post = await Post.find_one(id=1)
+        tags = await post.tags.fetch_all()
+        await post.tags.add(new_tag.id)
+    """
+
+    def __init__(
+        self,
+        join_table: str,
+        source_key: str,
+        target_key: str,
+        target_table: str,
+        source_reference: str = "id",
+        target_reference: str = "id",
+    ):
+        """
+        Initialize a ManyToMany descriptor.
+
+        Args:
+            join_table: Name of the join table (e.g., "post_tags")
+            source_key: Column in join table for source FK (e.g., "post_id")
+            target_key: Column in join table for target FK (e.g., "tag_id")
+            target_table: Name of the target table (e.g., "tags")
+            source_reference: Column in source table being referenced (default: "id")
+            target_reference: Column in target table being referenced (default: "id")
+        """
+        self.join_table = join_table
+        self.source_key = source_key
+        self.target_key = target_key
+        self.target_table = target_table
+        self.source_reference = source_reference
+        self.target_reference = target_reference
+        self._name: Optional[str] = None
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        """Called when the descriptor is assigned to a class attribute."""
+        self._name = name
+
+    def __get__(self, obj: Any, objtype: Optional[type] = None) -> "ManyToManyQuery":
+        """
+        Get the ManyToManyQuery for this relationship.
+
+        When accessed on a class, raises AttributeError.
+        When accessed on an instance, returns a ManyToManyQuery bound to the instance's ID.
+        """
+        if obj is None:
+            # Class-level access - return self for introspection
+            return self  # type: ignore
+
+        # Instance-level access - get the source ID
+        source_id = getattr(obj, self.source_reference, None)
+        if source_id is None:
+            raise ValueError(
+                f"Cannot access ManyToMany relationship: "
+                f"'{self.source_reference}' is not set on the instance"
+            )
+
+        return ManyToManyQuery(
+            join_table=self.join_table,
+            source_key=self.source_key,
+            target_key=self.target_key,
+            target_table=self.target_table,
+            source_id=source_id,
+            source_reference=self.source_reference,
+            target_reference=self.target_reference,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"ManyToMany(join_table={self.join_table!r}, "
+            f"source_key={self.source_key!r}, target_key={self.target_key!r}, "
+            f"target_table={self.target_table!r})"
+        )
+
+
+async def create_m2m_join_table(
+    join_table: str,
+    source_key: str,
+    target_key: str,
+    source_table: str,
+    target_table: str,
+    source_reference: str = "id",
+    target_reference: str = "id",
+) -> None:
+    """
+    Create a join table for a many-to-many relationship.
+
+    This is a helper function to create the join table with proper
+    foreign key constraints.
+
+    Args:
+        join_table: Name of the join table to create
+        source_key: Column name for source FK
+        target_key: Column name for target FK
+        source_table: Name of the source table
+        target_table: Name of the target table
+        source_reference: Column in source table (default: "id")
+        target_reference: Column in target table (default: "id")
+
+    Example:
+        await create_m2m_join_table(
+            "post_tags",
+            "post_id", "tag_id",
+            "posts", "tags"
+        )
+    """
+    from . import _engine
+    await _engine.m2m_create_join_table(
+        join_table,
+        source_key,
+        target_key,
+        source_table,
+        target_table,
+        source_reference,
+        target_reference,
+    )

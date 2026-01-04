@@ -265,14 +265,14 @@ Atomic, testable tasks organized by priority and component.
 
 ### P4-M2M: Many-to-Many Relationships
 
-- [ ] P4-M2M-01: Add `ManyToMany` struct in Rust
-- [ ] P4-M2M-02: Implement auto join table creation
-- [ ] P4-M2M-03: Implement `add_relation()` - insert into join table
-- [ ] P4-M2M-04: Implement `remove_relation()` - delete from join table
-- [ ] P4-M2M-05: Implement `fetch_related()` - query through join table
-- [ ] P4-M2M-06: Add `ManyToMany[T]` Python descriptor
-- [ ] P4-M2M-07: Support explicit join table with extra columns
-- [ ] P4-M2M-08: Add integration tests (10+ tests)
+- [x] P4-M2M-01: Add `ManyToMany` struct in Rust (2025-01-05)
+- [x] P4-M2M-02: Implement auto join table creation (2025-01-05)
+- [x] P4-M2M-03: Implement `add_relation()` - insert into join table (2025-01-05)
+- [x] P4-M2M-04: Implement `remove_relation()` - delete from join table (2025-01-05)
+- [x] P4-M2M-05: Implement `fetch_related()` - query through join table (2025-01-05)
+- [x] P4-M2M-06: Add `ManyToMany[T]` Python descriptor (2025-01-05)
+- [x] P4-M2M-07: Support explicit join table with extra columns (2025-01-05)
+- [x] P4-M2M-08: Add integration tests (18 tests) (2025-01-05)
 
 ---
 

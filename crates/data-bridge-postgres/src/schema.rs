@@ -5,7 +5,7 @@
 
 use crate::{Connection, Result};
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+use sqlx::{PgPool, Row};
 
 /// PostgreSQL column data type.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -215,6 +215,63 @@ pub struct BackRef {
     pub on_delete: CascadeRule,
     /// What to do on update of parent row
     pub on_update: CascadeRule,
+}
+
+/// Configuration for a Many-to-Many relationship via join table
+#[derive(Debug, Clone)]
+pub struct ManyToManyConfig {
+    /// Name of the join table (e.g., "user_tags")
+    pub join_table: String,
+    /// Column in join table referencing source table (e.g., "user_id")
+    pub source_key: String,
+    /// Column in join table referencing target table (e.g., "tag_id")
+    pub target_key: String,
+    /// Target table name (e.g., "tags")
+    pub target_table: String,
+    /// Column in source table being referenced (default: "id")
+    pub source_reference: String,
+    /// Column in target table being referenced (default: "id")
+    pub target_reference: String,
+    /// Cascade rule for deleting source (what happens to join table rows)
+    pub on_delete: CascadeRule,
+}
+
+impl ManyToManyConfig {
+    /// Create a new ManyToManyConfig with sensible defaults
+    pub fn new(
+        join_table: impl Into<String>,
+        source_key: impl Into<String>,
+        target_key: impl Into<String>,
+        target_table: impl Into<String>,
+    ) -> Self {
+        Self {
+            join_table: join_table.into(),
+            source_key: source_key.into(),
+            target_key: target_key.into(),
+            target_table: target_table.into(),
+            source_reference: "id".to_string(),
+            target_reference: "id".to_string(),
+            on_delete: CascadeRule::Cascade,
+        }
+    }
+
+    /// Set the source reference column
+    pub fn with_source_reference(mut self, col: impl Into<String>) -> Self {
+        self.source_reference = col.into();
+        self
+    }
+
+    /// Set the target reference column
+    pub fn with_target_reference(mut self, col: impl Into<String>) -> Self {
+        self.target_reference = col.into();
+        self
+    }
+
+    /// Set the on_delete cascade rule
+    pub fn with_on_delete(mut self, rule: CascadeRule) -> Self {
+        self.on_delete = rule;
+        self
+    }
 }
 
 /// Represents a database table.
@@ -1020,6 +1077,156 @@ impl SchemaInspector {
 
         Ok(backrefs)
     }
+
+    /// Detect potential many-to-many relationships by finding join tables.
+    ///
+    /// A join table is detected when:
+    /// - Table has exactly 2 foreign key columns
+    /// - Both FK columns together form the primary key (composite PK)
+    /// - Table may have additional metadata columns
+    pub async fn detect_many_to_many(
+        &self,
+        table: &str,
+        schema: Option<&str>,
+    ) -> Result<Vec<ManyToManyConfig>> {
+        let schema_name = schema.unwrap_or("public");
+
+        // Query to find tables that reference this table via FK
+        // and are themselves join tables (2 FK columns as composite PK)
+        let query = r#"
+            WITH join_tables AS (
+                SELECT DISTINCT
+                    kcu.table_name as join_table,
+                    array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as fk_columns,
+                    array_agg(ccu.table_name ORDER BY kcu.ordinal_position) as ref_tables,
+                    array_agg(ccu.column_name ORDER BY kcu.ordinal_position) as ref_columns
+                FROM information_schema.key_column_usage kcu
+                JOIN information_schema.table_constraints tc
+                    ON kcu.constraint_name = tc.constraint_name
+                    AND kcu.table_schema = tc.table_schema
+                JOIN information_schema.constraint_column_usage ccu
+                    ON tc.constraint_name = ccu.constraint_name
+                    AND tc.table_schema = ccu.table_schema
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND kcu.table_schema = $2
+                    AND ccu.table_name = $1
+                GROUP BY kcu.table_name
+                HAVING count(*) >= 2
+            )
+            SELECT
+                jt.join_table,
+                jt.fk_columns[1] as source_key,
+                jt.fk_columns[2] as target_key,
+                jt.ref_tables[1] as source_table,
+                jt.ref_tables[2] as target_table,
+                jt.ref_columns[1] as source_ref,
+                jt.ref_columns[2] as target_ref
+            FROM join_tables jt
+            WHERE jt.ref_tables[1] = $1
+        "#;
+
+        let rows = sqlx::query(query)
+            .bind(table)
+            .bind(schema_name)
+            .fetch_all(self.conn.pool())
+            .await?;
+
+        let mut configs = Vec::new();
+        for row in rows {
+            let join_table: String = row.try_get("join_table")?;
+            let source_key: String = row.try_get("source_key")?;
+            let target_key: String = row.try_get("target_key")?;
+            let target_table: String = row.try_get("target_table")?;
+            let source_ref: String = row.try_get("source_ref")?;
+            let target_ref: String = row.try_get("target_ref")?;
+
+            configs.push(ManyToManyConfig {
+                join_table,
+                source_key,
+                target_key,
+                target_table,
+                source_reference: source_ref,
+                target_reference: target_ref,
+                on_delete: CascadeRule::Cascade,
+            });
+        }
+
+        Ok(configs)
+    }
+}
+
+/// Detect potential many-to-many relationships by finding join tables (standalone function).
+///
+/// A join table is detected when:
+/// - Table has exactly 2 foreign key columns
+/// - Both FK columns together form the primary key (composite PK)
+/// - Table may have additional metadata columns
+pub async fn detect_many_to_many(
+    pool: &PgPool,
+    table: &str,
+    schema: &str,
+) -> Result<Vec<ManyToManyConfig>> {
+    // Query to find tables that reference this table via FK
+    // and are themselves join tables (2 FK columns as composite PK)
+    let query = r#"
+        WITH join_tables AS (
+            SELECT DISTINCT
+                kcu.table_name as join_table,
+                array_agg(kcu.column_name ORDER BY kcu.ordinal_position) as fk_columns,
+                array_agg(ccu.table_name ORDER BY kcu.ordinal_position) as ref_tables,
+                array_agg(ccu.column_name ORDER BY kcu.ordinal_position) as ref_columns
+            FROM information_schema.key_column_usage kcu
+            JOIN information_schema.table_constraints tc
+                ON kcu.constraint_name = tc.constraint_name
+                AND kcu.table_schema = tc.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+                ON tc.constraint_name = ccu.constraint_name
+                AND tc.table_schema = ccu.table_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND kcu.table_schema = $2
+                AND ccu.table_name = $1
+            GROUP BY kcu.table_name
+            HAVING count(*) >= 2
+        )
+        SELECT
+            jt.join_table,
+            jt.fk_columns[1] as source_key,
+            jt.fk_columns[2] as target_key,
+            jt.ref_tables[1] as source_table,
+            jt.ref_tables[2] as target_table,
+            jt.ref_columns[1] as source_ref,
+            jt.ref_columns[2] as target_ref
+        FROM join_tables jt
+        WHERE jt.ref_tables[1] = $1
+    "#;
+
+    let rows = sqlx::query(query)
+        .bind(table)
+        .bind(schema)
+        .fetch_all(pool)
+        .await?;
+
+    let mut configs = Vec::new();
+    for row in rows {
+        let join_table: String = row.try_get("join_table")?;
+        let source_key: String = row.try_get("source_key")?;
+        let target_key: String = row.try_get("target_key")?;
+        let target_table: String = row.try_get("target_table")?;
+        let source_ref: String = row.try_get("source_ref")?;
+        let target_ref: String = row.try_get("target_ref")?;
+
+        configs.push(ManyToManyConfig {
+            join_table,
+            source_key,
+            target_key,
+            target_table,
+            source_reference: source_ref,
+            target_reference: target_ref,
+            on_delete: CascadeRule::Cascade,
+        });
+    }
+
+    Ok(configs)
 }
 
 #[cfg(test)]
@@ -1734,5 +1941,46 @@ mod tests {
 
         assert_eq!(backref.source_table, "posts");
         assert_eq!(backref.on_delete, CascadeRule::Cascade);
+    }
+
+    #[test]
+    fn test_many_to_many_config_builder() {
+        // Test basic creation with defaults
+        let config = ManyToManyConfig::new(
+            "user_tags",
+            "user_id",
+            "tag_id",
+            "tags",
+        );
+
+        assert_eq!(config.join_table, "user_tags");
+        assert_eq!(config.source_key, "user_id");
+        assert_eq!(config.target_key, "tag_id");
+        assert_eq!(config.target_table, "tags");
+        assert_eq!(config.source_reference, "id");
+        assert_eq!(config.target_reference, "id");
+        assert_eq!(config.on_delete, CascadeRule::Cascade);
+    }
+
+    #[test]
+    fn test_many_to_many_config_builder_with_options() {
+        // Test builder pattern with custom values
+        let config = ManyToManyConfig::new(
+            "user_roles",
+            "user_uuid",
+            "role_uuid",
+            "roles",
+        )
+        .with_source_reference("uuid")
+        .with_target_reference("uuid")
+        .with_on_delete(CascadeRule::SetNull);
+
+        assert_eq!(config.join_table, "user_roles");
+        assert_eq!(config.source_key, "user_uuid");
+        assert_eq!(config.target_key, "role_uuid");
+        assert_eq!(config.target_table, "roles");
+        assert_eq!(config.source_reference, "uuid");
+        assert_eq!(config.target_reference, "uuid");
+        assert_eq!(config.on_delete, CascadeRule::SetNull);
     }
 }

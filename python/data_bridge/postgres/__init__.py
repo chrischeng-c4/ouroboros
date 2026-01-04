@@ -1,7 +1,7 @@
 """PostgreSQL ORM for data-bridge."""
 
 from .table import Table
-from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery
+from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery, ManyToMany, ManyToManyQuery, create_m2m_join_table
 from .query import QueryBuilder
 from .connection import (
     init, close, is_connected, execute, query_aggregate, query_with_cte,
@@ -27,6 +27,9 @@ __all__ = [
     "ForeignKeyProxy",
     "BackReference",
     "BackReferenceQuery",
+    "ManyToMany",
+    "ManyToManyQuery",
+    "create_m2m_join_table",
     # Query
     "QueryBuilder",
     # Connection
