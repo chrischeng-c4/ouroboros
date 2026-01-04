@@ -347,7 +347,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-LOAD-06 | selectinload | Batch load with IN clause |
 | P5-LOAD-07 | defer()/undefer() | Defer loading of large columns |
 
-### P5-EVENT: Event System
+### P5-EVENT: Event System (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|

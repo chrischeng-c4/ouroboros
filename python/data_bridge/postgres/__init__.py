@@ -18,6 +18,14 @@ from .connection import (
 from .transactions import pg_transaction, Transaction
 from .migrations import Migration, run_migrations, get_migration_status, autogenerate_migration
 from .session import Session, IdentityMap, DirtyTracker, UnitOfWork, get_session
+from .events import (
+    EventType, EventDispatcher, listens_for,
+    before_insert, after_insert,
+    before_update, after_update,
+    before_delete, after_delete,
+    before_flush, after_commit,
+    AttributeEvents
+)
 
 __all__ = [
     # Base class
@@ -81,4 +89,17 @@ __all__ = [
     "DirtyTracker",
     "UnitOfWork",
     "get_session",
+    # Event System
+    "EventType",
+    "EventDispatcher",
+    "listens_for",
+    "before_insert",
+    "after_insert",
+    "before_update",
+    "after_update",
+    "before_delete",
+    "after_delete",
+    "before_flush",
+    "after_commit",
+    "AttributeEvents",
 ]
