@@ -2908,7 +2908,7 @@ fn autogenerate_migration<'py>(
 ///         distinct=True
 ///     )
 #[pyfunction]
-#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None))]
+#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None, subqueries=None))]
 fn query_aggregate<'py>(
     py: Python<'py>,
     table: String,
@@ -2921,6 +2921,7 @@ fn query_aggregate<'py>(
     distinct: Option<bool>,
     distinct_on: Option<Vec<String>>,
     ctes: Option<Vec<(String, String, Vec<Bound<'py, PyAny>>)>>,
+    subqueries: Option<Vec<(String, Option<String>, String, Vec<Bound<'py, PyAny>>)>>,  // (type, field, sql, params)
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -3060,6 +3061,22 @@ fn query_aggregate<'py>(
         Vec::new()
     };
 
+    // Extract subquery parameters
+    let subquery_params: Vec<(String, Option<String>, String, Vec<data_bridge_postgres::ExtractedValue>)> = if let Some(sq_list) = subqueries {
+        sq_list
+            .into_iter()
+            .map(|(sq_type, field, sql, params)| {
+                let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+                    .iter()
+                    .map(|p| py_value_to_extracted(py, p))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok((sq_type, field, sql, extracted_params))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
     // Phase 2: Build and execute query (GIL released via future_into_py)
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
@@ -3106,6 +3123,35 @@ fn query_aggregate<'py>(
         for (field, operator, value) in where_params {
             query = query.where_clause(&field, operator, value)
                 .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
+        }
+
+        // Add subquery conditions
+        for (sq_type, field, sql, params) in subquery_params {
+            match sq_type.to_lowercase().as_str() {
+                "in" => {
+                    let field_str = field.ok_or_else(||
+                        PyValueError::new_err("IN subquery requires a field name")
+                    )?;
+                    query = query.where_in_raw_sql(&field_str, &sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid IN subquery: {}", e)))?;
+                }
+                "not_in" => {
+                    let field_str = field.ok_or_else(||
+                        PyValueError::new_err("NOT IN subquery requires a field name")
+                    )?;
+                    query = query.where_not_in_raw_sql(&field_str, &sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid NOT IN subquery: {}", e)))?;
+                }
+                "exists" => {
+                    query = query.where_exists_raw_sql(&sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid EXISTS subquery: {}", e)))?;
+                }
+                "not_exists" => {
+                    query = query.where_not_exists_raw_sql(&sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid NOT EXISTS subquery: {}", e)))?;
+                }
+                _ => return Err(PyValueError::new_err(format!("Unknown subquery type: {}. Expected 'in', 'not_in', 'exists', or 'not_exists'", sq_type))),
+            }
         }
 
         // Add ORDER BY
@@ -3178,7 +3224,7 @@ fn query_aggregate<'py>(
 /// )
 /// ```
 #[pyfunction]
-#[pyo3(signature = (main_table, ctes, select_columns=None, where_conditions=None, order_by=None, limit=None))]
+#[pyo3(signature = (main_table, ctes, select_columns=None, where_conditions=None, order_by=None, limit=None, subqueries=None))]
 fn query_with_cte<'py>(
     py: Python<'py>,
     main_table: String,
@@ -3187,6 +3233,7 @@ fn query_with_cte<'py>(
     where_conditions: Option<Vec<(String, String, Bound<'py, PyAny>)>>,
     order_by: Option<Vec<(String, String)>>,
     limit: Option<i64>,
+    subqueries: Option<Vec<(String, Option<String>, String, Vec<Bound<'py, PyAny>>)>>,  // (type, field, sql, params)
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -3216,6 +3263,22 @@ fn query_with_cte<'py>(
         Vec::new()
     };
 
+    // Extract subquery parameters
+    let subquery_params: Vec<(String, Option<String>, String, Vec<data_bridge_postgres::ExtractedValue>)> = if let Some(sq_list) = subqueries {
+        sq_list
+            .into_iter()
+            .map(|(sq_type, field, sql, params)| {
+                let extracted_params: Vec<data_bridge_postgres::ExtractedValue> = params
+                    .iter()
+                    .map(|p| py_value_to_extracted(py, p))
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok((sq_type, field, sql, extracted_params))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
     // Phase 2: Build and execute query (GIL released via future_into_py)
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&main_table)
@@ -3237,6 +3300,35 @@ fn query_with_cte<'py>(
         for (field, operator, value) in where_params {
             query = query.where_clause(&field, operator, value)
                 .map_err(|e| PyRuntimeError::new_err(format!("Invalid filter: {}", e)))?;
+        }
+
+        // Add subquery conditions
+        for (sq_type, field, sql, params) in subquery_params {
+            match sq_type.to_lowercase().as_str() {
+                "in" => {
+                    let field_str = field.ok_or_else(||
+                        PyValueError::new_err("IN subquery requires a field name")
+                    )?;
+                    query = query.where_in_raw_sql(&field_str, &sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid IN subquery: {}", e)))?;
+                }
+                "not_in" => {
+                    let field_str = field.ok_or_else(||
+                        PyValueError::new_err("NOT IN subquery requires a field name")
+                    )?;
+                    query = query.where_not_in_raw_sql(&field_str, &sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid NOT IN subquery: {}", e)))?;
+                }
+                "exists" => {
+                    query = query.where_exists_raw_sql(&sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid EXISTS subquery: {}", e)))?;
+                }
+                "not_exists" => {
+                    query = query.where_not_exists_raw_sql(&sql, params)
+                        .map_err(|e| PyRuntimeError::new_err(format!("Invalid NOT EXISTS subquery: {}", e)))?;
+                }
+                _ => return Err(PyValueError::new_err(format!("Unknown subquery type: {}. Expected 'in', 'not_in', 'exists', or 'not_exists'", sq_type))),
+            }
         }
 
         // Add ORDER BY

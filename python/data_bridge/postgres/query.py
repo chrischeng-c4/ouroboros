@@ -7,6 +7,7 @@ This module provides a query builder that supports:
 - Type-safe query expressions
 - Aggregation queries: .sum().avg().count_agg().group_by().having().aggregate()
 - Common Table Expressions (CTEs): .with_cte().with_cte_raw().from_cte()
+- Subqueries: .where_in_subquery().where_exists().where_not_in_subquery().where_not_exists()
 
 Example:
     >>> # Find and list rows
@@ -38,6 +39,12 @@ Example:
     ...     .sum(Order.amount, "total") \\
     ...     .group_by("user_id") \\
     ...     .aggregate()
+
+    >>> # Using subqueries
+    >>> order_users = Order.find().select(Order.user_id)
+    >>> users = await User.find() \\
+    ...     .where_in_subquery(User.id, order_users) \\
+    ...     .to_list()
 """
 
 from __future__ import annotations
@@ -113,6 +120,7 @@ class QueryBuilder(Generic[T]):
         _distinct: Optional[bool] = None,
         _distinct_on: Optional[List[str]] = None,
         _ctes: Optional[List[tuple]] = None,
+        _subqueries: Optional[List[tuple]] = None,
     ) -> None:
         """
         Initialize query builder.
@@ -130,6 +138,7 @@ class QueryBuilder(Generic[T]):
             _distinct: Enable DISTINCT (unique rows only)
             _distinct_on: DISTINCT ON columns (PostgreSQL-specific)
             _ctes: Common Table Expressions [(name, sql, params), ...]
+            _subqueries: Subquery conditions [(type, field, sql, params), ...]
         """
         self._model = model
         self._filters = filters
@@ -143,6 +152,7 @@ class QueryBuilder(Generic[T]):
         self._distinct: bool = _distinct if _distinct is not None else False
         self._distinct_on_cols: list[str] = _distinct_on or []
         self._ctes: list[tuple[str, str, list[Any]]] = _ctes or []  # (name, sql, params)
+        self._subqueries: list[tuple[str, str | None, str, list[Any]]] = _subqueries or []  # (type, field, sql, params)
 
     def _clone(self, **kwargs: Any) -> "QueryBuilder[T]":
         """Create a copy of this builder with updated values."""
@@ -159,6 +169,7 @@ class QueryBuilder(Generic[T]):
             _distinct=kwargs.get("_distinct", self._distinct),
             _distinct_on=kwargs.get("_distinct_on", self._distinct_on_cols.copy()),
             _ctes=kwargs.get("_ctes", self._ctes.copy()),
+            _subqueries=kwargs.get("_subqueries", self._subqueries.copy()),
         )
 
     def order_by(self, *fields: Union[ColumnProxy, str]) -> "QueryBuilder[T]":
@@ -729,6 +740,157 @@ class QueryBuilder(Generic[T]):
         new_qb._ctes.append((name, sql, params or []))
         return new_qb
 
+    def where_in_subquery(
+        self,
+        column: Union[str, "ColumnProxy"],
+        subquery: "QueryBuilder[Any]",
+    ) -> "QueryBuilder[T]":
+        """Add a WHERE column IN (subquery) condition.
+
+        Args:
+            column: The column to check.
+            subquery: A QueryBuilder defining the subquery.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> # Find users who have orders
+            >>> order_users = Order.find().select(Order.user_id)
+            >>> users = await User.find() \\
+            ...     .where_in_subquery(User.id, order_users) \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        sql, params = subquery._build_sql()
+        new_qb._subqueries.append(("in", col_name, sql, params))
+        return new_qb
+
+    def where_not_in_subquery(
+        self,
+        column: Union[str, "ColumnProxy"],
+        subquery: "QueryBuilder[Any]",
+    ) -> "QueryBuilder[T]":
+        """Add a WHERE column NOT IN (subquery) condition.
+
+        Args:
+            column: The column to check.
+            subquery: A QueryBuilder defining the subquery.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> # Find users who have no orders
+            >>> order_users = Order.find().select(Order.user_id)
+            >>> users = await User.find() \\
+            ...     .where_not_in_subquery(User.id, order_users) \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        sql, params = subquery._build_sql()
+        new_qb._subqueries.append(("not_in", col_name, sql, params))
+        return new_qb
+
+    def where_exists(self, subquery: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """Add a WHERE EXISTS (subquery) condition.
+
+        Args:
+            subquery: A QueryBuilder defining the subquery.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> # Find users who have at least one order
+            >>> has_orders = Order.find()  # Will be correlated
+            >>> users = await User.find() \\
+            ...     .where_exists(has_orders) \\
+            ...     .to_list()
+        """
+        new_qb = self._clone()
+        sql, params = subquery._build_sql()
+        new_qb._subqueries.append(("exists", None, sql, params))
+        return new_qb
+
+    def where_not_exists(self, subquery: "QueryBuilder[Any]") -> "QueryBuilder[T]":
+        """Add a WHERE NOT EXISTS (subquery) condition.
+
+        Args:
+            subquery: A QueryBuilder defining the subquery.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> # Find users who have no orders
+            >>> has_orders = Order.find()
+            >>> users = await User.find() \\
+            ...     .where_not_exists(has_orders) \\
+            ...     .to_list()
+        """
+        new_qb = self._clone()
+        sql, params = subquery._build_sql()
+        new_qb._subqueries.append(("not_exists", None, sql, params))
+        return new_qb
+
+    def where_in_raw(
+        self,
+        column: Union[str, "ColumnProxy"],
+        sql: str,
+        params: Optional[List[Any]] = None,
+    ) -> "QueryBuilder[T]":
+        """Add a WHERE column IN (raw SQL) condition.
+
+        Use this for complex subqueries that can't be built with QueryBuilder.
+
+        Args:
+            column: The column to check.
+            sql: Raw SQL for the subquery.
+            params: Parameters for the SQL.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_in_raw(User.id, "SELECT user_id FROM orders WHERE total > $1", [1000]) \\
+            ...     .to_list()
+        """
+        from .columns import ColumnProxy
+
+        new_qb = self._clone()
+        col_name = column.name if isinstance(column, ColumnProxy) else column
+        new_qb._subqueries.append(("in", col_name, sql, params or []))
+        return new_qb
+
+    def where_exists_raw(self, sql: str, params: Optional[List[Any]] = None) -> "QueryBuilder[T]":
+        """Add a WHERE EXISTS (raw SQL) condition.
+
+        Use this for complex EXISTS queries that can't be built with QueryBuilder.
+
+        Args:
+            sql: Raw SQL for the EXISTS subquery.
+            params: Parameters for the SQL.
+
+        Returns:
+            A new QueryBuilder with the condition added.
+
+        Example:
+            >>> users = await User.find() \\
+            ...     .where_exists_raw("SELECT 1 FROM orders WHERE user_id = users.id AND total > $1", [1000]) \\
+            ...     .to_list()
+        """
+        new_qb = self._clone()
+        new_qb._subqueries.append(("exists", None, sql, params or []))
+        return new_qb
+
     @classmethod
     def from_cte(cls, cte_name: str, cte_query: "QueryBuilder[Any]", model: Optional[Type[T]] = None) -> "QueryBuilder[T]":
         """
@@ -889,6 +1051,7 @@ class QueryBuilder(Generic[T]):
             distinct=self._distinct if self._distinct else None,
             distinct_on=self._distinct_on_cols if self._distinct_on_cols else None,
             ctes=self._ctes if self._ctes else None,
+            subqueries=self._subqueries if self._subqueries else None,
         )
 
     async def to_list(self) -> List[T]:

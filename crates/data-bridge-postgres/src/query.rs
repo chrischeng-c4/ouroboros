@@ -76,6 +76,15 @@ pub struct CommonTableExpression {
     pub params: Vec<ExtractedValue>,
 }
 
+/// Represents a subquery for use in WHERE clauses
+#[derive(Debug, Clone)]
+pub struct Subquery {
+    /// The SQL of the subquery
+    pub sql: String,
+    /// Parameters for the subquery
+    pub params: Vec<ExtractedValue>,
+}
+
 /// Query comparison operators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operator {
@@ -103,6 +112,14 @@ pub enum Operator {
     IsNull,
     /// IS NOT NULL
     IsNotNull,
+    /// Column value is in subquery results
+    InSubquery,
+    /// Column value is not in subquery results
+    NotInSubquery,
+    /// Subquery returns at least one row
+    Exists,
+    /// Subquery returns no rows
+    NotExists,
 }
 
 impl Operator {
@@ -121,6 +138,10 @@ impl Operator {
             Operator::ILike => "ILIKE",
             Operator::IsNull => "IS NULL",
             Operator::IsNotNull => "IS NOT NULL",
+            Operator::InSubquery => "IN",
+            Operator::NotInSubquery => "NOT IN",
+            Operator::Exists => "EXISTS",
+            Operator::NotExists => "NOT EXISTS",
         }
     }
 }
@@ -288,6 +309,7 @@ struct WhereCondition {
     field: String,
     operator: Operator,
     value: Option<ExtractedValue>, // None for IS NULL / IS NOT NULL
+    subquery: Option<Subquery>,    // Some for subquery conditions
 }
 
 impl QueryBuilder {
@@ -352,6 +374,7 @@ impl QueryBuilder {
             field: field.to_string(),
             operator,
             value: condition_value,
+            subquery: None,
         });
         Ok(self)
     }
@@ -364,6 +387,185 @@ impl QueryBuilder {
     /// Adds a WHERE condition for IS NOT NULL.
     pub fn where_not_null(self, field: &str) -> Result<Self> {
         self.where_clause(field, Operator::IsNotNull, ExtractedValue::Null)
+    }
+
+    /// Add a WHERE column IN (subquery) condition
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 1000)
+    /// let subquery = QueryBuilder::new("orders")?
+    ///     .select(vec!["user_id".to_string()])?
+    ///     .where_clause("total", Operator::Gt, ExtractedValue::Float(1000.0))?;
+    ///
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_in_subquery("id", subquery)?;
+    /// ```
+    pub fn where_in_subquery(mut self, field: &str, subquery: QueryBuilder) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        let (sql, params) = subquery.build_select();
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::InSubquery,
+            value: None,
+            subquery: Some(Subquery { sql, params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE column NOT IN (subquery) condition
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE id NOT IN (SELECT user_id FROM inactive_users)
+    /// let subquery = QueryBuilder::new("inactive_users")?
+    ///     .select(vec!["user_id".to_string()])?;
+    ///
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_not_in_subquery("id", subquery)?;
+    /// ```
+    pub fn where_not_in_subquery(mut self, field: &str, subquery: QueryBuilder) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        let (sql, params) = subquery.build_select();
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::NotInSubquery,
+            value: None,
+            subquery: Some(Subquery { sql, params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE EXISTS (subquery) condition
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users u WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = u.id)
+    /// let subquery = QueryBuilder::new("orders")?
+    ///     .select(vec!["1".to_string()])?
+    ///     .where_clause("user_id", Operator::Eq, ExtractedValue::Int(1))?;
+    ///
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_exists(subquery)?;
+    /// ```
+    pub fn where_exists(mut self, subquery: QueryBuilder) -> Result<Self> {
+        let (sql, params) = subquery.build_select();
+        self.where_conditions.push(WhereCondition {
+            field: String::new(),  // Not used for EXISTS
+            operator: Operator::Exists,
+            value: None,
+            subquery: Some(Subquery { sql, params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE NOT EXISTS (subquery) condition
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)
+    /// let subquery = QueryBuilder::new("orders")?
+    ///     .select(vec!["1".to_string()])?
+    ///     .where_clause("user_id", Operator::Eq, ExtractedValue::Int(1))?;
+    ///
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_not_exists(subquery)?;
+    /// ```
+    pub fn where_not_exists(mut self, subquery: QueryBuilder) -> Result<Self> {
+        let (sql, params) = subquery.build_select();
+        self.where_conditions.push(WhereCondition {
+            field: String::new(),  // Not used for NOT EXISTS
+            operator: Operator::NotExists,
+            value: None,
+            subquery: Some(Subquery { sql, params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE column IN (raw SQL subquery) condition
+    ///
+    /// This method allows using raw SQL for subqueries, which is useful when building
+    /// subqueries from Python or other sources where you already have the SQL string.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > $1)
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_in_raw_sql("id", "SELECT user_id FROM orders WHERE total > $1", vec![ExtractedValue::Float(1000.0)])?;
+    /// ```
+    pub fn where_in_raw_sql(mut self, field: &str, sql: &str, params: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::InSubquery,
+            value: None,
+            subquery: Some(Subquery { sql: sql.to_string(), params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE column NOT IN (raw SQL subquery) condition
+    ///
+    /// This method allows using raw SQL for subqueries, which is useful when building
+    /// subqueries from Python or other sources where you already have the SQL string.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE id NOT IN (SELECT user_id FROM inactive_users)
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_not_in_raw_sql("id", "SELECT user_id FROM inactive_users", vec![])?;
+    /// ```
+    pub fn where_not_in_raw_sql(mut self, field: &str, sql: &str, params: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::NotInSubquery,
+            value: None,
+            subquery: Some(Subquery { sql: sql.to_string(), params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE EXISTS (raw SQL subquery) condition
+    ///
+    /// This method allows using raw SQL for subqueries, which is useful when building
+    /// subqueries from Python or other sources where you already have the SQL string.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id AND total > $1)
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_exists_raw_sql("SELECT 1 FROM orders WHERE orders.user_id = users.id AND total > $1", vec![ExtractedValue::Float(1000.0)])?;
+    /// ```
+    pub fn where_exists_raw_sql(mut self, sql: &str, params: Vec<ExtractedValue>) -> Result<Self> {
+        self.where_conditions.push(WhereCondition {
+            field: String::new(),  // Not used for EXISTS
+            operator: Operator::Exists,
+            value: None,
+            subquery: Some(Subquery { sql: sql.to_string(), params }),
+        });
+        Ok(self)
+    }
+
+    /// Add a WHERE NOT EXISTS (raw SQL subquery) condition
+    ///
+    /// This method allows using raw SQL for subqueries, which is useful when building
+    /// subqueries from Python or other sources where you already have the SQL string.
+    ///
+    /// # Example
+    /// ```ignore
+    /// // SELECT * FROM users WHERE NOT EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)
+    /// let main = QueryBuilder::new("users")?
+    ///     .where_not_exists_raw_sql("SELECT 1 FROM orders WHERE orders.user_id = users.id", vec![])?;
+    /// ```
+    pub fn where_not_exists_raw_sql(mut self, sql: &str, params: Vec<ExtractedValue>) -> Result<Self> {
+        self.where_conditions.push(WhereCondition {
+            field: String::new(),  // Not used for NOT EXISTS
+            operator: Operator::NotExists,
+            value: None,
+            subquery: Some(Subquery { sql: sql.to_string(), params }),
+        });
+        Ok(self)
     }
 
     /// Adds an ORDER BY clause.
@@ -766,13 +968,53 @@ impl QueryBuilder {
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
-            let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
-                let quoted_field = Self::quote_identifier(&cond.field);
-                match cond.operator {
+            let mut where_parts: Vec<String> = Vec::new();
+
+            for cond in &self.where_conditions {
+                let part = match cond.operator {
+                    Operator::InSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            // Adjust parameter indices in subquery SQL
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::NotInSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} NOT IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} NOT IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::Exists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("EXISTS ({})", adjusted_sql)
+                        } else {
+                            "EXISTS (NULL)".to_string()
+                        }
+                    }
+                    Operator::NotExists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("NOT EXISTS ({})", adjusted_sql)
+                        } else {
+                            "NOT EXISTS (NULL)".to_string()
+                        }
+                    }
                     Operator::IsNull | Operator::IsNotNull => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
                     Operator::In | Operator::NotIn => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
                             format!("{} {} (${})", quoted_field, cond.operator.to_sql(), params.len())
@@ -781,6 +1023,7 @@ impl QueryBuilder {
                         }
                     }
                     _ => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
                             format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
@@ -788,8 +1031,10 @@ impl QueryBuilder {
                             format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
-                }
-            }).collect();
+                };
+                where_parts.push(part);
+            }
+
             sql.push_str(&where_parts.join(" AND "));
         }
 
@@ -893,13 +1138,61 @@ impl QueryBuilder {
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
-            let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
-                let quoted_field = Self::quote_identifier(&cond.field);
-                match cond.operator {
+            let mut where_parts: Vec<String> = Vec::new();
+
+            for cond in &self.where_conditions {
+                let part = match cond.operator {
+                    Operator::InSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::NotInSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} NOT IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} NOT IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::Exists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("EXISTS ({})", adjusted_sql)
+                        } else {
+                            "EXISTS (NULL)".to_string()
+                        }
+                    }
+                    Operator::NotExists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("NOT EXISTS ({})", adjusted_sql)
+                        } else {
+                            "NOT EXISTS (NULL)".to_string()
+                        }
+                    }
                     Operator::IsNull | Operator::IsNotNull => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
+                    Operator::In | Operator::NotIn => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
+                        if let Some(ref value) = cond.value {
+                            params.push(value.clone());
+                            format!("{} {} (${})", quoted_field, cond.operator.to_sql(), params.len())
+                        } else {
+                            format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
+                        }
+                    }
                     _ => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
                             format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
@@ -907,8 +1200,10 @@ impl QueryBuilder {
                             format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
-                }
-            }).collect();
+                };
+                where_parts.push(part);
+            }
+
             sql.push_str(&where_parts.join(" AND "));
         }
 
@@ -1025,13 +1320,61 @@ impl QueryBuilder {
         // WHERE clause
         if !self.where_conditions.is_empty() {
             sql.push_str(" WHERE ");
-            let where_parts: Vec<String> = self.where_conditions.iter().map(|cond| {
-                let quoted_field = Self::quote_identifier(&cond.field);
-                match cond.operator {
+            let mut where_parts: Vec<String> = Vec::new();
+
+            for cond in &self.where_conditions {
+                let part = match cond.operator {
+                    Operator::InSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::NotInSubquery => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("{} NOT IN ({})", Self::quote_identifier(&cond.field), adjusted_sql)
+                        } else {
+                            format!("{} NOT IN (NULL)", Self::quote_identifier(&cond.field))
+                        }
+                    }
+                    Operator::Exists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("EXISTS ({})", adjusted_sql)
+                        } else {
+                            "EXISTS (NULL)".to_string()
+                        }
+                    }
+                    Operator::NotExists => {
+                        if let Some(ref sq) = cond.subquery {
+                            let adjusted_sql = Self::adjust_param_indices(&sq.sql, params.len());
+                            params.extend(sq.params.clone());
+                            format!("NOT EXISTS ({})", adjusted_sql)
+                        } else {
+                            "NOT EXISTS (NULL)".to_string()
+                        }
+                    }
                     Operator::IsNull | Operator::IsNotNull => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         format!("{} {}", quoted_field, cond.operator.to_sql())
                     }
+                    Operator::In | Operator::NotIn => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
+                        if let Some(ref value) = cond.value {
+                            params.push(value.clone());
+                            format!("{} {} (${})", quoted_field, cond.operator.to_sql(), params.len())
+                        } else {
+                            format!("{} {} (NULL)", quoted_field, cond.operator.to_sql())
+                        }
+                    }
                     _ => {
+                        let quoted_field = Self::quote_identifier(&cond.field);
                         if let Some(ref value) = cond.value {
                             params.push(value.clone());
                             format!("{} {} ${}", quoted_field, cond.operator.to_sql(), params.len())
@@ -1039,8 +1382,10 @@ impl QueryBuilder {
                             format!("{} {} NULL", quoted_field, cond.operator.to_sql())
                         }
                     }
-                }
-            }).collect();
+                };
+                where_parts.push(part);
+            }
+
             sql.push_str(&where_parts.join(" AND "));
         }
 
@@ -1474,6 +1819,10 @@ mod tests {
         assert_eq!(Operator::ILike.to_sql(), "ILIKE");
         assert_eq!(Operator::IsNull.to_sql(), "IS NULL");
         assert_eq!(Operator::IsNotNull.to_sql(), "IS NOT NULL");
+        assert_eq!(Operator::InSubquery.to_sql(), "IN");
+        assert_eq!(Operator::NotInSubquery.to_sql(), "NOT IN");
+        assert_eq!(Operator::Exists.to_sql(), "EXISTS");
+        assert_eq!(Operator::NotExists.to_sql(), "NOT EXISTS");
     }
 
     #[test]
@@ -2770,6 +3119,130 @@ mod tests {
         assert_eq!(params[0], ExtractedValue::Int(1));
         assert_eq!(params[1], ExtractedValue::Int(2));
         assert_eq!(params[2], ExtractedValue::Int(3));
+    }
+
+    #[test]
+    fn test_where_in_subquery() {
+        let subquery = QueryBuilder::new("orders").unwrap()
+            .select(vec!["user_id".to_string()]).unwrap()
+            .where_clause("total", Operator::Gt, ExtractedValue::Float(1000.0)).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_in_subquery("id", subquery).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert!(sql.contains("WHERE \"id\" IN (SELECT"));
+        assert!(sql.contains("\"user_id\""));
+        assert!(sql.contains("\"total\" > $1"));
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0], ExtractedValue::Float(1000.0));
+    }
+
+    #[test]
+    fn test_where_not_in_subquery() {
+        let subquery = QueryBuilder::new("inactive_users").unwrap()
+            .select(vec!["user_id".to_string()]).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_not_in_subquery("id", subquery).unwrap();
+
+        let (sql, _) = main.build_select();
+        assert!(sql.contains("WHERE \"id\" NOT IN (SELECT"));
+        assert!(sql.contains("\"user_id\""));
+    }
+
+    #[test]
+    fn test_where_exists() {
+        let subquery = QueryBuilder::new("orders").unwrap()
+            .where_clause("user_id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_exists(subquery).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert!(sql.contains("WHERE EXISTS (SELECT"));
+        assert!(sql.contains("\"user_id\" = $1"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_where_not_exists() {
+        let subquery = QueryBuilder::new("orders").unwrap()
+            .where_clause("user_id", Operator::Eq, ExtractedValue::Int(1)).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_not_exists(subquery).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert!(sql.contains("WHERE NOT EXISTS (SELECT"));
+        assert_eq!(params.len(), 1);
+    }
+
+    #[test]
+    fn test_subquery_with_multiple_params() {
+        let subquery = QueryBuilder::new("orders").unwrap()
+            .where_clause("total", Operator::Gt, ExtractedValue::Float(100.0)).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("completed".to_string())).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_clause("active", Operator::Eq, ExtractedValue::Bool(true)).unwrap()
+            .where_in_subquery("id", subquery).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert_eq!(params.len(), 3); // 1 from main + 2 from subquery
+        // Main query param comes first
+        assert_eq!(params[0], ExtractedValue::Bool(true));
+        // Then subquery params
+        assert_eq!(params[1], ExtractedValue::Float(100.0));
+        assert_eq!(params[2], ExtractedValue::String("completed".to_string()));
+
+        // Verify parameter indices are adjusted correctly
+        assert!(sql.contains("\"active\" = $1"));
+        assert!(sql.contains("\"total\" > $2"));
+        assert!(sql.contains("\"status\" = $3"));
+    }
+
+    #[test]
+    fn test_subquery_parameter_index_adjustment() {
+        // Test that subquery parameter indices are correctly adjusted
+        let subquery = QueryBuilder::new("orders").unwrap()
+            .where_clause("total", Operator::Gt, ExtractedValue::Float(500.0)).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_clause("age", Operator::Gte, ExtractedValue::Int(18)).unwrap()
+            .where_clause("status", Operator::Eq, ExtractedValue::String("active".to_string())).unwrap()
+            .where_in_subquery("id", subquery).unwrap();
+
+        let (sql, params) = main.build_select();
+
+        // Should have 3 params: age, status, total
+        assert_eq!(params.len(), 3);
+
+        // Main query params should use $1 and $2
+        assert!(sql.contains("\"age\" >= $1"));
+        assert!(sql.contains("\"status\" = $2"));
+
+        // Subquery param should be adjusted to $3
+        assert!(sql.contains("\"total\" > $3"));
+    }
+
+    #[test]
+    fn test_multiple_subqueries() {
+        let subquery1 = QueryBuilder::new("orders").unwrap()
+            .select(vec!["user_id".to_string()]).unwrap()
+            .where_clause("total", Operator::Gt, ExtractedValue::Float(1000.0)).unwrap();
+
+        let subquery2 = QueryBuilder::new("banned_users").unwrap()
+            .select(vec!["user_id".to_string()]).unwrap();
+
+        let main = QueryBuilder::new("users").unwrap()
+            .where_in_subquery("id", subquery1).unwrap()
+            .where_not_in_subquery("id", subquery2).unwrap();
+
+        let (sql, params) = main.build_select();
+        assert!(sql.contains("\"id\" IN (SELECT"));
+        assert!(sql.contains("\"id\" NOT IN (SELECT"));
+        assert_eq!(params.len(), 1);
     }
 }
 #[test]
