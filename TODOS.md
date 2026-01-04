@@ -251,14 +251,14 @@ Atomic, testable tasks organized by priority and component.
 
 ### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
-- [ ] P4-QUERY-01: Implement subqueries (WHERE id IN (SELECT ...))
-- [ ] P4-QUERY-02: Implement COUNT/SUM/AVG/MIN/MAX aggregations
-- [ ] P4-QUERY-03: Implement GROUP BY clause
-- [ ] P4-QUERY-04: Implement HAVING clause
-- [ ] P4-QUERY-05: Implement window functions (ROW_NUMBER, RANK)
-- [ ] P4-QUERY-06: Implement CTE (WITH ... AS ...)
+- [x] P4-QUERY-01: Implement subqueries (WHERE id IN (SELECT ...)) (2025-01-04)
+- [x] P4-QUERY-02: Implement COUNT/SUM/AVG/MIN/MAX aggregations (2025-01-04)
+- [x] P4-QUERY-03: Implement GROUP BY clause (2025-01-04)
+- [x] P4-QUERY-04: Implement HAVING clause (2025-01-04)
+- [x] P4-QUERY-05: Implement window functions (ROW_NUMBER, RANK) (2025-01-04)
+- [x] P4-QUERY-06: Implement CTE (WITH ... AS ...) (2025-01-04)
 - [ ] P4-QUERY-07: Implement UNION/INTERSECT/EXCEPT
-- [ ] P4-QUERY-08: Implement DISTINCT ON
+- [x] P4-QUERY-08: Implement DISTINCT ON (2025-01-04)
 - [ ] P4-QUERY-09: Implement JSONB operators
 - [ ] P4-QUERY-10: Support RETURNING clause in Updates/Deletes
 - [ ] P4-QUERY-11: Add integration tests (25+ tests)

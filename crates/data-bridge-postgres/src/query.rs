@@ -270,6 +270,75 @@ pub struct JoinClause {
     pub on_condition: JoinCondition,
 }
 
+/// Window function types
+#[derive(Debug, Clone, PartialEq)]
+pub enum WindowFunction {
+    /// ROW_NUMBER() - assigns sequential numbers
+    RowNumber,
+    /// RANK() - assigns rank with gaps
+    Rank,
+    /// DENSE_RANK() - assigns rank without gaps
+    DenseRank,
+    /// NTILE(n) - divides rows into n groups
+    Ntile(i32),
+    /// LAG(column, offset, default) - access previous row
+    Lag(String, Option<i32>, Option<ExtractedValue>),
+    /// LEAD(column, offset, default) - access next row
+    Lead(String, Option<i32>, Option<ExtractedValue>),
+    /// FIRST_VALUE(column) - first value in window
+    FirstValue(String),
+    /// LAST_VALUE(column) - last value in window
+    LastValue(String),
+    /// SUM(column) as window function
+    Sum(String),
+    /// AVG(column) as window function
+    Avg(String),
+    /// COUNT(*) as window function
+    Count,
+    /// COUNT(column) as window function
+    CountColumn(String),
+    /// MIN(column) as window function
+    Min(String),
+    /// MAX(column) as window function
+    Max(String),
+}
+
+/// Window specification (PARTITION BY, ORDER BY)
+#[derive(Debug, Clone, Default)]
+pub struct WindowSpec {
+    /// PARTITION BY columns
+    pub partition_by: Vec<String>,
+    /// ORDER BY columns with direction
+    pub order_by: Vec<(String, OrderDirection)>,
+}
+
+impl WindowSpec {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn partition_by(mut self, columns: &[&str]) -> Self {
+        self.partition_by = columns.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn order_by(mut self, column: &str, direction: OrderDirection) -> Self {
+        self.order_by.push((column.to_string(), direction));
+        self
+    }
+}
+
+/// A window function expression with alias
+#[derive(Debug, Clone)]
+pub struct WindowExpression {
+    /// The window function
+    pub function: WindowFunction,
+    /// The window specification
+    pub spec: WindowSpec,
+    /// Alias for the result column
+    pub alias: String,
+}
+
 /// Type-safe SQL query builder.
 ///
 /// Provides a fluent API for constructing SELECT, INSERT, UPDATE, and DELETE queries
@@ -301,6 +370,8 @@ pub struct QueryBuilder {
     distinct_on_columns: Vec<String>,
     /// Common Table Expressions (WITH clause)
     ctes: Vec<CommonTableExpression>,
+    /// Window function expressions
+    windows: Vec<WindowExpression>,
 }
 
 /// Represents a WHERE condition.
@@ -338,6 +409,7 @@ impl QueryBuilder {
             distinct: false,
             distinct_on_columns: Vec::new(),
             ctes: Vec::new(),
+            windows: Vec::new(),
         })
     }
 
@@ -706,6 +778,58 @@ impl QueryBuilder {
         self
     }
 
+    /// Add a window function to the query
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_postgres::{QueryBuilder, WindowFunction, WindowSpec, OrderDirection};
+    ///
+    /// // SELECT *, ROW_NUMBER() OVER (ORDER BY amount DESC) as rank FROM orders
+    /// let qb = QueryBuilder::new("orders").unwrap()
+    ///     .window(
+    ///         WindowFunction::RowNumber,
+    ///         WindowSpec::new().order_by("amount", OrderDirection::Desc),
+    ///         "rank"
+    ///     ).unwrap();
+    /// ```
+    pub fn window(
+        mut self,
+        function: WindowFunction,
+        spec: WindowSpec,
+        alias: &str,
+    ) -> Result<Self> {
+        // Validate all column names
+        Self::validate_identifier(alias)?;
+        for col in &spec.partition_by {
+            Self::validate_identifier(col)?;
+        }
+        for (col, _) in &spec.order_by {
+            Self::validate_identifier(col)?;
+        }
+        // Validate columns in function
+        match &function {
+            WindowFunction::Lag(col, _, _)
+            | WindowFunction::Lead(col, _, _)
+            | WindowFunction::FirstValue(col)
+            | WindowFunction::LastValue(col)
+            | WindowFunction::Sum(col)
+            | WindowFunction::Avg(col)
+            | WindowFunction::CountColumn(col)
+            | WindowFunction::Min(col)
+            | WindowFunction::Max(col) => {
+                Self::validate_identifier(col)?;
+            }
+            _ => {}
+        }
+
+        self.windows.push(WindowExpression {
+            function,
+            spec,
+            alias: alias.to_string(),
+        });
+        Ok(self)
+    }
+
     /// Add a JOIN clause.
     ///
     /// # Arguments
@@ -917,9 +1041,9 @@ impl QueryBuilder {
         }
 
         // SELECT columns or aggregates or *
-        if !self.aggregates.is_empty() {
-            let mut select_parts = Vec::new();
+        let mut select_parts = Vec::new();
 
+        if !self.aggregates.is_empty() {
             // Add GROUP BY columns first (they must appear in SELECT when using GROUP BY)
             for col in &self.group_by_columns {
                 select_parts.push(Self::quote_identifier(col));
@@ -937,15 +1061,23 @@ impl QueryBuilder {
                 })
                 .collect();
             select_parts.extend(agg_parts);
-
-            sql.push_str(&select_parts.join(", "));
-        } else if self.select_columns.is_empty() {
-            sql.push('*');
-        } else {
+        } else if !self.select_columns.is_empty() {
             let quoted_cols: Vec<String> = self.select_columns.iter()
                 .map(|c| Self::quote_identifier(c))
                 .collect();
-            sql.push_str(&quoted_cols.join(", "));
+            select_parts.extend(quoted_cols);
+        }
+
+        // Add window functions to SELECT (they can be combined with regular columns or aggregates)
+        for expr in &self.windows {
+            select_parts.push(self.build_window_sql(expr));
+        }
+
+        // If no explicit columns, aggregates, or windows, select *
+        if select_parts.is_empty() {
+            sql.push('*');
+        } else {
+            sql.push_str(&select_parts.join(", "));
         }
 
         sql.push_str(" FROM ");
@@ -1448,6 +1580,67 @@ impl QueryBuilder {
             AggregateFunction::Min(col) => format!("MIN({})", Self::quote_identifier(col)),
             AggregateFunction::Max(col) => format!("MAX({})", Self::quote_identifier(col)),
         }
+    }
+
+    /// Builds the SQL for a window function expression.
+    fn build_window_sql(&self, expr: &WindowExpression) -> String {
+        let func_sql = match &expr.function {
+            WindowFunction::RowNumber => "ROW_NUMBER()".to_string(),
+            WindowFunction::Rank => "RANK()".to_string(),
+            WindowFunction::DenseRank => "DENSE_RANK()".to_string(),
+            WindowFunction::Ntile(n) => format!("NTILE({})", n),
+            WindowFunction::Lag(col, offset, _) => {
+                let off = offset.unwrap_or(1);
+                format!("LAG({}, {})", Self::quote_identifier(col), off)
+            }
+            WindowFunction::Lead(col, offset, _) => {
+                let off = offset.unwrap_or(1);
+                format!("LEAD({}, {})", Self::quote_identifier(col), off)
+            }
+            WindowFunction::FirstValue(col) => {
+                format!("FIRST_VALUE({})", Self::quote_identifier(col))
+            }
+            WindowFunction::LastValue(col) => {
+                format!("LAST_VALUE({})", Self::quote_identifier(col))
+            }
+            WindowFunction::Sum(col) => format!("SUM({})", Self::quote_identifier(col)),
+            WindowFunction::Avg(col) => format!("AVG({})", Self::quote_identifier(col)),
+            WindowFunction::Count => "COUNT(*)".to_string(),
+            WindowFunction::CountColumn(col) => {
+                format!("COUNT({})", Self::quote_identifier(col))
+            }
+            WindowFunction::Min(col) => format!("MIN({})", Self::quote_identifier(col)),
+            WindowFunction::Max(col) => format!("MAX({})", Self::quote_identifier(col)),
+        };
+
+        let mut over_parts = Vec::new();
+
+        if !expr.spec.partition_by.is_empty() {
+            let cols: Vec<String> = expr
+                .spec
+                .partition_by
+                .iter()
+                .map(|c| Self::quote_identifier(c))
+                .collect();
+            over_parts.push(format!("PARTITION BY {}", cols.join(", ")));
+        }
+
+        if !expr.spec.order_by.is_empty() {
+            let cols: Vec<String> = expr
+                .spec
+                .order_by
+                .iter()
+                .map(|(c, d)| format!("{} {}", Self::quote_identifier(c), d.to_sql()))
+                .collect();
+            over_parts.push(format!("ORDER BY {}", cols.join(", ")));
+        }
+
+        format!(
+            "{} OVER ({}) AS {}",
+            func_sql,
+            over_parts.join(" "),
+            Self::quote_identifier(&expr.alias)
+        )
     }
 
     /// Adjusts parameter indices in SQL by adding an offset.
@@ -3262,4 +3455,163 @@ fn debug_cte_sql() {
     // Verify the structure
     assert!(sql.starts_with("WITH "));
     assert!(sql.contains("\"order_totals\" AS ("));
+}
+
+#[test]
+fn test_window_row_number() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::RowNumber,
+            WindowSpec::new().order_by("amount", OrderDirection::Desc),
+            "rank",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("ROW_NUMBER() OVER (ORDER BY \"amount\" DESC) AS \"rank\""));
+}
+
+#[test]
+fn test_window_with_partition() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::Sum("amount".to_string()),
+            WindowSpec::new()
+                .partition_by(&["user_id"])
+                .order_by("created_at", OrderDirection::Asc),
+            "running_total",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("SUM(\"amount\") OVER"));
+    assert!(sql.contains("PARTITION BY \"user_id\""));
+    assert!(sql.contains("ORDER BY \"created_at\" ASC"));
+    assert!(sql.contains("AS \"running_total\""));
+}
+
+#[test]
+fn test_window_lag() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::Lag("amount".to_string(), Some(1), None),
+            WindowSpec::new().order_by("created_at", OrderDirection::Asc),
+            "prev_amount",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("LAG(\"amount\", 1) OVER"));
+    assert!(sql.contains("ORDER BY \"created_at\" ASC"));
+    assert!(sql.contains("AS \"prev_amount\""));
+}
+
+#[test]
+fn test_window_multiple_functions() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::RowNumber,
+            WindowSpec::new().order_by("amount", OrderDirection::Desc),
+            "rank",
+        )
+        .unwrap()
+        .window(
+            WindowFunction::Sum("amount".to_string()),
+            WindowSpec::new().partition_by(&["user_id"]),
+            "user_total",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("ROW_NUMBER()"));
+    assert!(sql.contains("SUM(\"amount\")"));
+    assert!(sql.contains("AS \"rank\""));
+    assert!(sql.contains("AS \"user_total\""));
+}
+
+#[test]
+fn test_window_with_select_columns() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .select(vec!["id".to_string(), "amount".to_string()])
+        .unwrap()
+        .window(
+            WindowFunction::RowNumber,
+            WindowSpec::new().order_by("amount", OrderDirection::Desc),
+            "rank",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("\"id\", \"amount\""));
+    assert!(sql.contains("ROW_NUMBER() OVER"));
+}
+
+#[test]
+fn test_window_ntile() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::Ntile(4),
+            WindowSpec::new().order_by("amount", OrderDirection::Desc),
+            "quartile",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("NTILE(4) OVER"));
+    assert!(sql.contains("AS \"quartile\""));
+}
+
+#[test]
+fn test_window_first_last_value() {
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .window(
+            WindowFunction::FirstValue("amount".to_string()),
+            WindowSpec::new()
+                .partition_by(&["user_id"])
+                .order_by("created_at", OrderDirection::Asc),
+            "first_amount",
+        )
+        .unwrap()
+        .window(
+            WindowFunction::LastValue("amount".to_string()),
+            WindowSpec::new()
+                .partition_by(&["user_id"])
+                .order_by("created_at", OrderDirection::Asc),
+            "last_amount",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    assert!(sql.contains("FIRST_VALUE(\"amount\")"));
+    assert!(sql.contains("LAST_VALUE(\"amount\")"));
+}
+
+#[test]
+fn debug_window_sql() {
+    // This test demonstrates the generated SQL for window functions
+    let qb = QueryBuilder::new("orders")
+        .unwrap()
+        .select(vec!["id".to_string(), "user_id".to_string(), "amount".to_string()])
+        .unwrap()
+        .window(
+            WindowFunction::RowNumber,
+            WindowSpec::new().order_by("amount", OrderDirection::Desc),
+            "rank",
+        )
+        .unwrap()
+        .window(
+            WindowFunction::Sum("amount".to_string()),
+            WindowSpec::new()
+                .partition_by(&["user_id"])
+                .order_by("created_at", OrderDirection::Asc),
+            "running_total",
+        )
+        .unwrap();
+    let (sql, _) = qb.build_select();
+    eprintln!("Generated Window SQL:\n{}", sql);
+
+    // Verify the expected SQL structure
+    assert!(sql.contains("SELECT \"id\", \"user_id\", \"amount\""));
+    assert!(sql.contains("ROW_NUMBER() OVER (ORDER BY \"amount\" DESC) AS \"rank\""));
+    assert!(sql.contains("SUM(\"amount\") OVER (PARTITION BY \"user_id\" ORDER BY \"created_at\" ASC) AS \"running_total\""));
 }

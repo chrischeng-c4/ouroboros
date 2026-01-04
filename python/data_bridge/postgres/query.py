@@ -8,6 +8,7 @@ This module provides a query builder that supports:
 - Aggregation queries: .sum().avg().count_agg().group_by().having().aggregate()
 - Common Table Expressions (CTEs): .with_cte().with_cte_raw().from_cte()
 - Subqueries: .where_in_subquery().where_exists().where_not_in_subquery().where_not_exists()
+- Window functions: .row_number().rank().lag().lead().window_sum().window_avg()
 
 Example:
     >>> # Find and list rows
@@ -45,6 +46,11 @@ Example:
     >>> users = await User.find() \\
     ...     .where_in_subquery(User.id, order_users) \\
     ...     .to_list()
+
+    >>> # Window functions
+    >>> results = await Order.find() \\
+    ...     .row_number("rank", spec=WindowSpec().order_by(Order.amount, "desc")) \\
+    ...     .aggregate()
 """
 
 from __future__ import annotations
@@ -65,6 +71,33 @@ except ImportError:
 
 
 T = TypeVar("T", bound="Table")
+
+
+class WindowSpec:
+    """Window specification for PARTITION BY and ORDER BY."""
+
+    def __init__(self):
+        self._partition_by: list[str] = []
+        self._order_by: list[tuple[str, str]] = []
+
+    def partition_by(self, *columns: Union[str, "ColumnProxy"]) -> "WindowSpec":
+        """Add PARTITION BY columns."""
+        spec = WindowSpec()
+        spec._partition_by = self._partition_by.copy()
+        spec._order_by = self._order_by.copy()
+        for col in columns:
+            col_name = col.name if hasattr(col, 'name') else col
+            spec._partition_by.append(col_name)
+        return spec
+
+    def order_by(self, column: Union[str, "ColumnProxy"], direction: str = "asc") -> "WindowSpec":
+        """Add ORDER BY column."""
+        spec = WindowSpec()
+        spec._partition_by = self._partition_by.copy()
+        spec._order_by = self._order_by.copy()
+        col_name = column.name if hasattr(column, 'name') else column
+        spec._order_by.append((col_name, direction))
+        return spec
 
 
 class QueryBuilder(Generic[T]):
@@ -121,6 +154,7 @@ class QueryBuilder(Generic[T]):
         _distinct_on: Optional[List[str]] = None,
         _ctes: Optional[List[tuple]] = None,
         _subqueries: Optional[List[tuple]] = None,
+        _windows: Optional[List[tuple]] = None,
     ) -> None:
         """
         Initialize query builder.
@@ -139,6 +173,7 @@ class QueryBuilder(Generic[T]):
             _distinct_on: DISTINCT ON columns (PostgreSQL-specific)
             _ctes: Common Table Expressions [(name, sql, params), ...]
             _subqueries: Subquery conditions [(type, field, sql, params), ...]
+            _windows: Window functions [(func_type, column, offset, default, partition_by, order_by, alias), ...]
         """
         self._model = model
         self._filters = filters
@@ -153,6 +188,7 @@ class QueryBuilder(Generic[T]):
         self._distinct_on_cols: list[str] = _distinct_on or []
         self._ctes: list[tuple[str, str, list[Any]]] = _ctes or []  # (name, sql, params)
         self._subqueries: list[tuple[str, str | None, str, list[Any]]] = _subqueries or []  # (type, field, sql, params)
+        self._windows: list[tuple[str, str | None, int | None, Any, list[str], list[tuple[str, str]], str]] = _windows or []  # (func_type, column, offset, default, partition_by, order_by, alias)
 
     def _clone(self, **kwargs: Any) -> "QueryBuilder[T]":
         """Create a copy of this builder with updated values."""
@@ -170,6 +206,7 @@ class QueryBuilder(Generic[T]):
             _distinct_on=kwargs.get("_distinct_on", self._distinct_on_cols.copy()),
             _ctes=kwargs.get("_ctes", self._ctes.copy()),
             _subqueries=kwargs.get("_subqueries", self._subqueries.copy()),
+            _windows=kwargs.get("_windows", self._windows.copy()),
         )
 
     def order_by(self, *fields: Union[ColumnProxy, str]) -> "QueryBuilder[T]":
@@ -688,6 +725,83 @@ class QueryBuilder(Generic[T]):
         """
         return self.having("max", column, operator, value)
 
+    def window(
+        self,
+        func_type: str,
+        alias: str,
+        column: Union[str, ColumnProxy, None] = None,
+        spec: WindowSpec | None = None,
+        offset: int | None = None,
+        default: Any = None,
+    ) -> "QueryBuilder[T]":
+        """Add a window function to the query.
+
+        Args:
+            func_type: Window function type ("row_number", "rank", "sum", "lag", etc.)
+            alias: Alias for the result column.
+            column: Column name for functions that need it.
+            spec: WindowSpec with PARTITION BY and ORDER BY.
+            offset: Offset for LAG/LEAD functions.
+            default: Default value for LAG/LEAD functions.
+
+        Returns:
+            A new QueryBuilder with the window function added.
+
+        Example:
+            >>> results = await Order.find() \\
+            ...     .window("row_number", "rank",
+            ...             spec=WindowSpec().order_by(Order.amount, "desc")) \\
+            ...     .aggregate()
+        """
+        new_qb = self._clone()
+        col_name = column.name if hasattr(column, 'name') else column
+        partition_by = spec._partition_by if spec else []
+        order_by = spec._order_by if spec else []
+        new_qb._windows.append((func_type, col_name, offset, default, partition_by, order_by, alias))
+        return new_qb
+
+    def row_number(self, alias: str, spec: WindowSpec | None = None) -> "QueryBuilder[T]":
+        """Add ROW_NUMBER() window function."""
+        return self.window("row_number", alias, spec=spec)
+
+    def rank(self, alias: str, spec: WindowSpec | None = None) -> "QueryBuilder[T]":
+        """Add RANK() window function."""
+        return self.window("rank", alias, spec=spec)
+
+    def dense_rank(self, alias: str, spec: WindowSpec | None = None) -> "QueryBuilder[T]":
+        """Add DENSE_RANK() window function."""
+        return self.window("dense_rank", alias, spec=spec)
+
+    def window_sum(self, column: Union[str, ColumnProxy], alias: str, spec: WindowSpec | None = None) -> "QueryBuilder[T]":
+        """Add SUM() as window function."""
+        return self.window("sum", alias, column=column, spec=spec)
+
+    def window_avg(self, column: Union[str, ColumnProxy], alias: str, spec: WindowSpec | None = None) -> "QueryBuilder[T]":
+        """Add AVG() as window function."""
+        return self.window("avg", alias, column=column, spec=spec)
+
+    def lag(
+        self,
+        column: Union[str, ColumnProxy],
+        alias: str,
+        offset: int = 1,
+        default: Any = None,
+        spec: WindowSpec | None = None,
+    ) -> "QueryBuilder[T]":
+        """Add LAG() window function to access previous row."""
+        return self.window("lag", alias, column=column, spec=spec, offset=offset, default=default)
+
+    def lead(
+        self,
+        column: Union[str, ColumnProxy],
+        alias: str,
+        offset: int = 1,
+        default: Any = None,
+        spec: WindowSpec | None = None,
+    ) -> "QueryBuilder[T]":
+        """Add LEAD() window function to access next row."""
+        return self.window("lead", alias, column=column, spec=spec, offset=offset, default=default)
+
     def with_cte(self, name: str, query: "QueryBuilder[Any]") -> "QueryBuilder[T]":
         """
         Add a Common Table Expression (CTE) to the query.
@@ -1052,6 +1166,7 @@ class QueryBuilder(Generic[T]):
             distinct_on=self._distinct_on_cols if self._distinct_on_cols else None,
             ctes=self._ctes if self._ctes else None,
             subqueries=self._subqueries if self._subqueries else None,
+            windows=self._windows if self._windows else None,
         )
 
     async def to_list(self) -> List[T]:

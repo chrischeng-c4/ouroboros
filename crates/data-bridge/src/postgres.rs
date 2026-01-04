@@ -10,7 +10,7 @@ use pyo3_async_runtimes::tokio::future_into_py;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector, query::AggregateFunction};
+use data_bridge_postgres::{Connection, PoolConfig, QueryBuilder, Operator, OrderDirection, Row, Transaction, transaction::IsolationLevel, SchemaInspector, query::{AggregateFunction, WindowFunction, WindowSpec}};
 use sqlx::Row as SqlxRow;
 
 // For base64 encoding of binary data
@@ -2908,7 +2908,7 @@ fn autogenerate_migration<'py>(
 ///         distinct=True
 ///     )
 #[pyfunction]
-#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None, subqueries=None))]
+#[pyo3(signature = (table, aggregates, group_by=None, having=None, where_conditions=None, order_by=None, limit=None, distinct=None, distinct_on=None, ctes=None, subqueries=None, windows=None))]
 fn query_aggregate<'py>(
     py: Python<'py>,
     table: String,
@@ -2922,6 +2922,7 @@ fn query_aggregate<'py>(
     distinct_on: Option<Vec<String>>,
     ctes: Option<Vec<(String, String, Vec<Bound<'py, PyAny>>)>>,
     subqueries: Option<Vec<(String, Option<String>, String, Vec<Bound<'py, PyAny>>)>>,  // (type, field, sql, params)
+    windows: Option<Vec<(String, Option<String>, Option<i32>, Option<Bound<'py, PyAny>>, Vec<String>, Vec<(String, String)>, String)>>,  // (func_type, column, offset, default, partition_by, order_by, alias)
 ) -> PyResult<Bound<'py, PyAny>> {
     let conn = get_connection()?;
 
@@ -3077,6 +3078,110 @@ fn query_aggregate<'py>(
         Vec::new()
     };
 
+    // Extract window function parameters
+    let window_params: Vec<(WindowFunction, Vec<String>, Vec<(String, OrderDirection)>, String)> = if let Some(window_list) = windows {
+        window_list
+            .into_iter()
+            .map(|(func_type, column, offset, default_val, partition_by, order_by, alias)| {
+                // Parse window function
+                let func = match func_type.to_lowercase().as_str() {
+                    "row_number" => WindowFunction::RowNumber,
+                    "rank" => WindowFunction::Rank,
+                    "dense_rank" => WindowFunction::DenseRank,
+                    "ntile" => {
+                        let n = offset.ok_or_else(||
+                            PyValueError::new_err("ntile requires an offset parameter")
+                        )?;
+                        WindowFunction::Ntile(n)
+                    }
+                    "sum" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("sum requires a column name")
+                        )?;
+                        WindowFunction::Sum(col)
+                    }
+                    "avg" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("avg requires a column name")
+                        )?;
+                        WindowFunction::Avg(col)
+                    }
+                    "count" => WindowFunction::Count,
+                    "count_column" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("count_column requires a column name")
+                        )?;
+                        WindowFunction::CountColumn(col)
+                    }
+                    "min" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("min requires a column name")
+                        )?;
+                        WindowFunction::Min(col)
+                    }
+                    "max" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("max requires a column name")
+                        )?;
+                        WindowFunction::Max(col)
+                    }
+                    "lag" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("lag requires a column name")
+                        )?;
+                        let default_extracted = if let Some(default_py) = default_val {
+                            Some(py_value_to_extracted(py, &default_py)?)
+                        } else {
+                            None
+                        };
+                        WindowFunction::Lag(col, offset, default_extracted)
+                    }
+                    "lead" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("lead requires a column name")
+                        )?;
+                        let default_extracted = if let Some(default_py) = default_val {
+                            Some(py_value_to_extracted(py, &default_py)?)
+                        } else {
+                            None
+                        };
+                        WindowFunction::Lead(col, offset, default_extracted)
+                    }
+                    "first_value" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("first_value requires a column name")
+                        )?;
+                        WindowFunction::FirstValue(col)
+                    }
+                    "last_value" => {
+                        let col = column.ok_or_else(||
+                            PyValueError::new_err("last_value requires a column name")
+                        )?;
+                        WindowFunction::LastValue(col)
+                    }
+                    _ => return Err(PyValueError::new_err(format!("Unknown window function: {}", func_type))),
+                };
+
+                // Parse order_by directions
+                let order_specs: Vec<(String, OrderDirection)> = order_by
+                    .into_iter()
+                    .map(|(col, dir)| {
+                        let direction = if dir.to_lowercase() == "desc" {
+                            OrderDirection::Desc
+                        } else {
+                            OrderDirection::Asc
+                        };
+                        (col, direction)
+                    })
+                    .collect();
+
+                Ok((func, partition_by, order_specs, alias))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+
     // Phase 2: Build and execute query (GIL released via future_into_py)
     future_into_py(py, async move {
         let mut query = QueryBuilder::new(&table)
@@ -3152,6 +3257,25 @@ fn query_aggregate<'py>(
                 }
                 _ => return Err(PyValueError::new_err(format!("Unknown subquery type: {}. Expected 'in', 'not_in', 'exists', or 'not_exists'", sq_type))),
             }
+        }
+
+        // Add window functions
+        for (func, partition_by, order_specs, alias) in window_params {
+            let mut spec = WindowSpec::new();
+
+            // Add PARTITION BY if specified
+            if !partition_by.is_empty() {
+                let cols: Vec<&str> = partition_by.iter().map(|s| s.as_str()).collect();
+                spec = spec.partition_by(&cols);
+            }
+
+            // Add ORDER BY if specified
+            for (col, direction) in order_specs {
+                spec = spec.order_by(&col, direction);
+            }
+
+            query = query.window(func, spec, &alias)
+                .map_err(|e| PyValueError::new_err(format!("Invalid window function: {}", e)))?;
         }
 
         // Add ORDER BY
