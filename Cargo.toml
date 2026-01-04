@@ -6,6 +6,7 @@ members = [
     "crates/data-bridge-http",
     "crates/data-bridge-test",
     "crates/data-bridge-common",
+    "crates/data-bridge-tasks",
 ]
 resolver = "2"
 
@@ -60,6 +61,13 @@ regex = "1.11"
 rayon = "1.10"
 once_cell = "1.20"
 walkdir = "2.5"
+
+# Task queue (for data-bridge-tasks crate)
+dashmap = "6.1"
+async-nats = "0.38"
+deadpool-redis = "0.18"
+cron = "0.12"
+tokio-util = { version = "0.7", features = ["rt"] }
 
 [profile.release]
 opt-level = 3
