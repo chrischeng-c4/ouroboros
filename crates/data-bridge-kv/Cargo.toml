@@ -1,0 +1,29 @@
+[package]
+name = "data-bridge-kv"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High-performance, multi-core key-value store with tiered storage for data-bridge"
+
+[dependencies]
+# Core dependencies (use workspace references)
+tokio.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+
+# High-precision numeric
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+# Shared utilities
+data-bridge-common = { path = "../data-bridge-common" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+
+[[bench]]
+name = "kv_bench"
+harness = false
