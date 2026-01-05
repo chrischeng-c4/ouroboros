@@ -32,6 +32,13 @@ from .loading import (
     LazyLoadingProxy, DeferredColumn, RelationshipLoader,
     LazyLoadError, SQLGenerationError
 )
+from .inheritance import (
+    InheritanceType, InheritanceConfig, inheritance,
+    SingleTableInheritance, JoinedTableInheritance, ConcreteTableInheritance,
+    PolymorphicQueryMixin,
+    get_inheritance_type, get_discriminator_column, get_discriminator_value,
+    register_polymorphic_class, get_polymorphic_map
+)
 
 __all__ = [
     # Base class
@@ -124,4 +131,17 @@ __all__ = [
     "RelationshipLoader",
     "LazyLoadError",
     "SQLGenerationError",
+    # Inheritance Patterns
+    "InheritanceType",
+    "InheritanceConfig",
+    "inheritance",
+    "SingleTableInheritance",
+    "JoinedTableInheritance",
+    "ConcreteTableInheritance",
+    "PolymorphicQueryMixin",
+    "get_inheritance_type",
+    "get_discriminator_column",
+    "get_discriminator_value",
+    "register_polymorphic_class",
+    "get_polymorphic_map",
 ]
