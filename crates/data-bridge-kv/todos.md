@@ -35,6 +35,12 @@ Redis-comparable in-memory KV store with:
 - [ ] Authentication (AUTH command)
 - [ ] TLS support
 
+### Phase 6: Lock API
+- [ ] Implement SETNX command (SET if Not Exists)
+- [ ] Add Lock API with auto-release TTL
+- [ ] Python context manager: `async with client.lock("key", ttl=30)`
+- [ ] Lock renewal (extend TTL while holding)
+
 ## Completed
 
 ### Phase 1: Core Engine ✅ (2025-01-05)
