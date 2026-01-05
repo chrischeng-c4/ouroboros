@@ -26,6 +26,12 @@ from .events import (
     before_flush, after_commit,
     AttributeEvents
 )
+from .loading import (
+    LoadingStrategy, LoadingConfig,
+    lazy, joined, subquery, selectinload, noload, raiseload, defer, undefer,
+    LazyLoadingProxy, DeferredColumn, RelationshipLoader,
+    LazyLoadError, SQLGenerationError
+)
 
 __all__ = [
     # Base class
@@ -102,4 +108,20 @@ __all__ = [
     "before_flush",
     "after_commit",
     "AttributeEvents",
+    # Loading Strategies
+    "LoadingStrategy",
+    "LoadingConfig",
+    "lazy",
+    "joined",
+    "subquery",
+    "selectinload",
+    "noload",
+    "raiseload",
+    "defer",
+    "undefer",
+    "LazyLoadingProxy",
+    "DeferredColumn",
+    "RelationshipLoader",
+    "LazyLoadError",
+    "SQLGenerationError",
 ]

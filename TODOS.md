@@ -335,7 +335,7 @@ Atomic, testable tasks organized by priority and component.
 - [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
 - [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
-### P5-LOAD: Loading Strategies
+### P5-LOAD: Loading Strategies (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
