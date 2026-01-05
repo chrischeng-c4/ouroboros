@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "pytest-asyncio>=1.3.0",
+    "redis>=7.1.0",
     "uvloop>=0.21.0",
 ]
 
@@ -49,7 +50,7 @@ benchmark = [
 module-name = "data_bridge"
 python-source = "python"
 manifest-path = "crates/data-bridge/Cargo.toml"
-features = ["mongodb", "postgres", "http", "test"]  # Build with all features
+features = ["mongodb", "postgres", "http", "test", "kv"]  # Build with all features
 
 [tool.ruff]
 line-length = 100

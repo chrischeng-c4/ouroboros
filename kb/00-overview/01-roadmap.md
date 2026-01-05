@@ -42,6 +42,11 @@ Focus: Tooling and core utilities.
 - Async Rust driver for Postgres.
 - Pydantic model mapping to SQL tables.
 
+### KV Store Solution
+- Cloud Native Simple KV Store.
+- Support for Redis types + Decimal/Int/Float.
+- Rust-based engine.
+
 ### Redis Integration
 - High-performance caching layer.
 - Queue implementation.
