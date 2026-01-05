@@ -42,6 +42,10 @@ pub enum Command {
     Cas = 0x07,
     Ping = 0x08,
     Info = 0x09,
+    Setnx = 0x0A,
+    Lock = 0x0B,
+    Unlock = 0x0C,
+    ExtendLock = 0x0D,
 }
 
 impl TryFrom<u8> for Command {
@@ -58,6 +62,10 @@ impl TryFrom<u8> for Command {
             0x07 => Ok(Command::Cas),
             0x08 => Ok(Command::Ping),
             0x09 => Ok(Command::Info),
+            0x0A => Ok(Command::Setnx),
+            0x0B => Ok(Command::Lock),
+            0x0C => Ok(Command::Unlock),
+            0x0D => Ok(Command::ExtendLock),
             _ => Err(ProtocolError::InvalidCommand(byte)),
         }
     }

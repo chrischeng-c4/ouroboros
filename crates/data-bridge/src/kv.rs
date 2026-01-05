@@ -272,6 +272,71 @@ impl PyKvClient {
         })
     }
 
+    /// Set if not exists (atomic)
+    #[pyo3(signature = (key, value, ttl = None))]
+    fn setnx<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        value: &Bound<'py, PyAny>,
+        ttl: Option<f64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kv_value = py_to_kv_value(value)?;
+        let duration = ttl.map(Duration::from_secs_f64);
+        let client = self.client.clone();
+
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            guard.setnx(&key, kv_value, duration).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Acquire a distributed lock
+    #[pyo3(signature = (key, owner, ttl = 30.0))]
+    fn lock<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        owner: String,
+        ttl: f64,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let duration = Duration::from_secs_f64(ttl);
+        let client = self.client.clone();
+
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            guard.lock(&key, &owner, duration).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Release a distributed lock
+    fn unlock<'py>(&self, py: Python<'py>, key: String, owner: String) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            guard.unlock(&key, &owner).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Extend lock TTL
+    #[pyo3(signature = (key, owner, ttl = 30.0))]
+    fn extend_lock<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        owner: String,
+        ttl: f64,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let duration = Duration::from_secs_f64(ttl);
+        let client = self.client.clone();
+
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            guard.extend_lock(&key, &owner, duration).await.map_err(client_error_to_py)
+        })
+    }
+
     fn __repr__(&self) -> String {
         "KvClient(connected)".to_string()
     }

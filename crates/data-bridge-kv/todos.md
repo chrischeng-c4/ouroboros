@@ -35,12 +35,6 @@ Redis-comparable in-memory KV store with:
 - [ ] Authentication (AUTH command)
 - [ ] TLS support
 
-### Phase 6: Lock API
-- [ ] Implement SETNX command (SET if Not Exists)
-- [ ] Add Lock API with auto-release TTL
-- [ ] Python context manager: `async with client.lock("key", ttl=30)`
-- [ ] Lock renewal (extend TTL while holding)
-
 ## Completed
 
 ### Phase 1: Core Engine ✅ (2025-01-05)
@@ -84,6 +78,12 @@ Redis-comparable in-memory KV store with:
 - [x] ✅ Create python/data_bridge/kv/ wrapper
 - [x] ✅ Type annotations and docstrings
 - [x] ✅ Feature-gated with graceful degradation
+
+### Phase 6: Lock API ✅ (2025-01-05)
+- [x] ✅ Implement SETNX command (SET if Not Exists)
+- [x] ✅ Add Lock API with auto-release TTL
+- [x] ✅ Python context manager: `async with client.lock("key", ttl=30)`
+- [x] ✅ Lock renewal (extend TTL while holding)
 
 ## Crate Summary
 

@@ -157,6 +157,82 @@ impl Shard {
         guard.retain(|_, entry| !entry.is_expired());
         before - guard.len()
     }
+
+    /// Set if not exists (atomic)
+    pub fn setnx(&self, key: String, value: KvValue, ttl: Option<Duration>) -> bool {
+        let mut guard = self.data.write();
+
+        // Check if key exists and not expired
+        if let Some(entry) = guard.get(&key) {
+            if !entry.is_expired() {
+                return false; // Key exists, operation fails
+            }
+        }
+
+        // Key doesn't exist or expired - set it
+        guard.insert(key, Entry::new(value, ttl));
+        true
+    }
+
+    /// Acquire a lock with owner ID and TTL
+    pub fn lock(&self, key: String, owner: String, ttl: Duration) -> bool {
+        self.setnx(key, KvValue::String(owner), Some(ttl))
+    }
+
+    /// Release a lock (only if owned)
+    pub fn unlock(&self, key: &str, owner: &str) -> Result<bool, KvError> {
+        let mut guard = self.data.write();
+
+        match guard.get(key) {
+            Some(entry) if !entry.is_expired() => {
+                match &entry.value {
+                    KvValue::String(stored_owner) if stored_owner == owner => {
+                        guard.remove(key);
+                        Ok(true)
+                    }
+                    KvValue::String(stored_owner) => {
+                        Err(KvError::LockOwnerMismatch {
+                            expected: owner.to_string(),
+                            actual: stored_owner.clone(),
+                        })
+                    }
+                    _ => Err(KvError::TypeMismatch {
+                        expected: "String (lock owner)".to_string(),
+                        actual: "other type".to_string(),
+                    }),
+                }
+            }
+            _ => Ok(false), // Lock not held or expired
+        }
+    }
+
+    /// Extend lock TTL (only if owned)
+    pub fn extend_lock(&self, key: &str, owner: &str, ttl: Duration) -> Result<bool, KvError> {
+        let mut guard = self.data.write();
+
+        match guard.get_mut(key) {
+            Some(entry) if !entry.is_expired() => {
+                match &entry.value {
+                    KvValue::String(stored_owner) if stored_owner == owner => {
+                        entry.expires_at = Some(Instant::now() + ttl);
+                        entry.version += 1;
+                        Ok(true)
+                    }
+                    KvValue::String(stored_owner) => {
+                        Err(KvError::LockOwnerMismatch {
+                            expected: owner.to_string(),
+                            actual: stored_owner.clone(),
+                        })
+                    }
+                    _ => Err(KvError::TypeMismatch {
+                        expected: "String (lock owner)".to_string(),
+                        actual: "other type".to_string(),
+                    }),
+                }
+            }
+            _ => Ok(false), // Lock not held or expired
+        }
+    }
 }
 
 impl Default for Shard {
@@ -259,6 +335,30 @@ impl KvEngine {
     /// Cleanup expired entries across all shards, returns total removed
     pub fn cleanup_expired(&self) -> usize {
         self.shards.iter().map(|s| s.cleanup_expired()).sum()
+    }
+
+    /// Set if not exists
+    pub fn setnx(&self, key: &KvKey, value: KvValue, ttl: Option<Duration>) -> bool {
+        self.shard_for_key(key.as_str())
+            .setnx(key.as_str().to_string(), value, ttl)
+    }
+
+    /// Acquire a lock
+    pub fn lock(&self, key: &KvKey, owner: &str, ttl: Duration) -> bool {
+        self.shard_for_key(key.as_str())
+            .lock(key.as_str().to_string(), owner.to_string(), ttl)
+    }
+
+    /// Release a lock
+    pub fn unlock(&self, key: &KvKey, owner: &str) -> Result<bool, KvError> {
+        self.shard_for_key(key.as_str())
+            .unlock(key.as_str(), owner)
+    }
+
+    /// Extend lock TTL
+    pub fn extend_lock(&self, key: &KvKey, owner: &str, ttl: Duration) -> Result<bool, KvError> {
+        self.shard_for_key(key.as_str())
+            .extend_lock(key.as_str(), owner, ttl)
     }
 }
 
@@ -507,5 +607,93 @@ mod tests {
         let removed = engine.cleanup_expired();
         assert_eq!(removed, 10);
         assert_eq!(engine.len(), 10);
+    }
+
+    #[test]
+    fn test_setnx_success() {
+        let engine = KvEngine::new();
+        let key = KvKey::new("setnx_key").unwrap();
+
+        // First SETNX should succeed
+        assert!(engine.setnx(&key, KvValue::String("value1".to_string()), None));
+
+        // Second SETNX should fail (key exists)
+        assert!(!engine.setnx(&key, KvValue::String("value2".to_string()), None));
+
+        // Value should still be the first one
+        assert_eq!(engine.get(&key), Some(KvValue::String("value1".to_string())));
+    }
+
+    #[test]
+    fn test_setnx_expired() {
+        let engine = KvEngine::new();
+        let key = KvKey::new("setnx_expired").unwrap();
+
+        // Set with short TTL
+        engine.setnx(&key, KvValue::String("old".to_string()), Some(Duration::from_millis(10)));
+
+        // Wait for expiration
+        thread::sleep(Duration::from_millis(20));
+
+        // SETNX should now succeed (expired)
+        assert!(engine.setnx(&key, KvValue::String("new".to_string()), None));
+        assert_eq!(engine.get(&key), Some(KvValue::String("new".to_string())));
+    }
+
+    #[test]
+    fn test_lock_unlock() {
+        let engine = KvEngine::new();
+        let key = KvKey::new("lock_test").unwrap();
+
+        // Acquire lock
+        assert!(engine.lock(&key, "worker-1", Duration::from_secs(30)));
+
+        // Second acquire should fail
+        assert!(!engine.lock(&key, "worker-2", Duration::from_secs(30)));
+
+        // Unlock by wrong owner should fail
+        let result = engine.unlock(&key, "worker-2");
+        assert!(matches!(result, Err(KvError::LockOwnerMismatch { .. })));
+
+        // Unlock by correct owner should succeed
+        assert!(engine.unlock(&key, "worker-1").unwrap());
+
+        // Now another worker can acquire
+        assert!(engine.lock(&key, "worker-2", Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn test_lock_expiration() {
+        let engine = KvEngine::new();
+        let key = KvKey::new("lock_expire").unwrap();
+
+        // Acquire with short TTL
+        assert!(engine.lock(&key, "worker-1", Duration::from_millis(10)));
+
+        // Wait for expiration
+        thread::sleep(Duration::from_millis(20));
+
+        // Another worker can now acquire (lock expired)
+        assert!(engine.lock(&key, "worker-2", Duration::from_secs(30)));
+    }
+
+    #[test]
+    fn test_extend_lock() {
+        let engine = KvEngine::new();
+        let key = KvKey::new("lock_extend").unwrap();
+
+        // Acquire lock
+        assert!(engine.lock(&key, "worker-1", Duration::from_millis(50)));
+
+        // Extend by wrong owner should fail
+        let result = engine.extend_lock(&key, "worker-2", Duration::from_secs(30));
+        assert!(matches!(result, Err(KvError::LockOwnerMismatch { .. })));
+
+        // Extend by correct owner should succeed
+        assert!(engine.extend_lock(&key, "worker-1", Duration::from_secs(30)).unwrap());
+
+        // Wait a bit - lock should still be held (was extended)
+        thread::sleep(Duration::from_millis(60));
+        assert!(engine.exists(&key));
     }
 }

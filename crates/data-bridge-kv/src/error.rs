@@ -20,6 +20,12 @@ pub enum KvError {
     #[error("CAS conflict: expected version {expected}, current version {current}")]
     CasConflict { expected: u64, current: u64 },
 
+    #[error("Lock not held or expired")]
+    LockNotHeld,
+
+    #[error("Lock held by different owner")]
+    LockOwnerMismatch { expected: String, actual: String },
+
     #[error("Storage error: {0}")]
     Storage(String),
 }

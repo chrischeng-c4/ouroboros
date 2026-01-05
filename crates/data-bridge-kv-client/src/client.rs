@@ -161,6 +161,81 @@ impl KvClient {
         let (_, payload) = self.request(Command::Info, &[]).await?;
         Ok(String::from_utf8_lossy(&payload).to_string())
     }
+
+    /// Set if not exists (atomic)
+    pub async fn setnx(&mut self, key: &str, value: KvValue, ttl: Option<Duration>) -> Result<bool, ClientError> {
+        let mut payload = Vec::new();
+
+        // key_len (2 bytes) + key
+        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(key.as_bytes());
+
+        // ttl in ms (8 bytes)
+        let ttl_ms = ttl.map(|d| d.as_millis() as u64).unwrap_or(0);
+        payload.extend_from_slice(&ttl_ms.to_be_bytes());
+
+        // value
+        payload.extend_from_slice(&encode_value(&value));
+
+        let (_, resp) = self.request(Command::Setnx, &payload).await?;
+        Ok(resp.first() == Some(&1))
+    }
+
+    /// Acquire a distributed lock
+    pub async fn lock(&mut self, key: &str, owner: &str, ttl: Duration) -> Result<bool, ClientError> {
+        let mut payload = Vec::new();
+
+        // key_len (2 bytes) + key
+        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(key.as_bytes());
+
+        // owner_len (2 bytes) + owner
+        payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
+        payload.extend_from_slice(owner.as_bytes());
+
+        // ttl in ms (8 bytes)
+        let ttl_ms = ttl.as_millis() as u64;
+        payload.extend_from_slice(&ttl_ms.to_be_bytes());
+
+        let (_, resp) = self.request(Command::Lock, &payload).await?;
+        Ok(resp.first() == Some(&1))
+    }
+
+    /// Release a distributed lock
+    pub async fn unlock(&mut self, key: &str, owner: &str) -> Result<bool, ClientError> {
+        let mut payload = Vec::new();
+
+        // key_len (2 bytes) + key
+        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(key.as_bytes());
+
+        // owner_len (2 bytes) + owner
+        payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
+        payload.extend_from_slice(owner.as_bytes());
+
+        let (_, resp) = self.request(Command::Unlock, &payload).await?;
+        Ok(resp.first() == Some(&1))
+    }
+
+    /// Extend lock TTL
+    pub async fn extend_lock(&mut self, key: &str, owner: &str, ttl: Duration) -> Result<bool, ClientError> {
+        let mut payload = Vec::new();
+
+        // key_len (2 bytes) + key
+        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(key.as_bytes());
+
+        // owner_len (2 bytes) + owner
+        payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
+        payload.extend_from_slice(owner.as_bytes());
+
+        // ttl in ms (8 bytes)
+        let ttl_ms = ttl.as_millis() as u64;
+        payload.extend_from_slice(&ttl_ms.to_be_bytes());
+
+        let (_, resp) = self.request(Command::ExtendLock, &payload).await?;
+        Ok(resp.first() == Some(&1))
+    }
 }
 
 #[cfg(test)]

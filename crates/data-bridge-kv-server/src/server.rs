@@ -1,7 +1,7 @@
 //! TCP server implementation
 
 use crate::protocol::{
-    encode_value, parse_incr_payload, parse_key, parse_set_payload,
+    encode_value, parse_incr_payload, parse_key, parse_lock_payload, parse_set_payload,
     read_request, write_response, Command, ProtocolError, Status,
 };
 use data_bridge_kv::{KvEngine, KvKey};
@@ -174,6 +174,61 @@ fn process_request(data: &[u8], engine: &KvEngine) -> Result<Vec<u8>, ProtocolEr
         Command::Cas => {
             // TODO: Implement CAS parsing and execution
             Ok(write_response(Status::Error, b"CAS not implemented yet"))
+        }
+        Command::Setnx => {
+            let (key_str, ttl_ms, value) = parse_set_payload(&payload)?;
+            let key = KvKey::new(&key_str).map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+            let ttl = ttl_ms.map(Duration::from_millis);
+
+            let success = engine.setnx(&key, value, ttl);
+            let result = if success { 1u8 } else { 0u8 };
+            Ok(write_response(Status::Ok, &[result]))
+        }
+        Command::Lock => {
+            let (key_str, owner, ttl_ms) = parse_lock_payload(&payload, true)?;
+            let key = KvKey::new(&key_str).map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+            let ttl = Duration::from_millis(ttl_ms.unwrap_or(30000));
+
+            let success = engine.lock(&key, &owner, ttl);
+            let result = if success { 1u8 } else { 0u8 };
+            Ok(write_response(Status::Ok, &[result]))
+        }
+        Command::Unlock => {
+            let (key_str, owner, _) = parse_lock_payload(&payload, false)?;
+            let key = KvKey::new(&key_str).map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+
+            match engine.unlock(&key, &owner) {
+                Ok(success) => {
+                    let result = if success { 1u8 } else { 0u8 };
+                    Ok(write_response(Status::Ok, &[result]))
+                }
+                Err(e) => {
+                    Ok(write_response(Status::Error, e.to_string().as_bytes()))
+                }
+            }
+        }
+        Command::ExtendLock => {
+            let (key_str, owner, ttl_ms) = parse_lock_payload(&payload, true)?;
+            let key = KvKey::new(&key_str).map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+            let ttl = Duration::from_millis(ttl_ms.unwrap_or(30000));
+
+            match engine.extend_lock(&key, &owner, ttl) {
+                Ok(success) => {
+                    let result = if success { 1u8 } else { 0u8 };
+                    Ok(write_response(Status::Ok, &[result]))
+                }
+                Err(e) => {
+                    Ok(write_response(Status::Error, e.to_string().as_bytes()))
+                }
+            }
         }
         Command::Info => {
             let info = format!(

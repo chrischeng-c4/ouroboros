@@ -26,7 +26,7 @@ except ImportError:
     # KV feature not enabled
     _KvClient = None
 
-__all__ = ["KvClient", "KvValue"]
+__all__ = ["KvClient", "KvValue", "Lock"]
 
 # Type alias for supported value types
 KvValue = Union[None, int, float, Decimal, str, bytes, list, dict]
@@ -225,5 +225,137 @@ class KvClient:
         """
         return await self._client.info()
 
+    async def setnx(
+        self,
+        key: str,
+        value: KvValue,
+        ttl: Optional[float] = None,
+    ) -> bool:
+        """
+        Set if not exists (atomic).
+
+        Args:
+            key: The key to set.
+            value: The value to store.
+            ttl: Optional time-to-live in seconds.
+
+        Returns:
+            True if the key was set, False if it already exists.
+
+        Example:
+            >>> success = await client.setnx("unique_key", "value")
+            >>> if success:
+            ...     print("Key was set")
+            ... else:
+            ...     print("Key already exists")
+        """
+        return await self._client.setnx(key, value, ttl)
+
+    async def lock(
+        self,
+        key: str,
+        owner: str,
+        ttl: float = 30.0,
+    ) -> bool:
+        """
+        Acquire a distributed lock.
+
+        Args:
+            key: The lock key (e.g., "lock:resource").
+            owner: Unique identifier for the lock owner (e.g., "worker-123").
+            ttl: Lock time-to-live in seconds (default: 30).
+
+        Returns:
+            True if lock was acquired, False if already held.
+
+        Example:
+            >>> if await client.lock("lock:task:123", "worker-1", ttl=60):
+            ...     try:
+            ...         # Do work while holding lock
+            ...         pass
+            ...     finally:
+            ...         await client.unlock("lock:task:123", "worker-1")
+        """
+        return await self._client.lock(key, owner, ttl)
+
+    async def unlock(self, key: str, owner: str) -> bool:
+        """
+        Release a distributed lock.
+
+        Args:
+            key: The lock key.
+            owner: The lock owner (must match the owner who acquired it).
+
+        Returns:
+            True if lock was released, False if not held or wrong owner.
+
+        Example:
+            >>> released = await client.unlock("lock:task:123", "worker-1")
+        """
+        return await self._client.unlock(key, owner)
+
+    async def extend_lock(self, key: str, owner: str, ttl: float = 30.0) -> bool:
+        """
+        Extend a lock's TTL.
+
+        Args:
+            key: The lock key.
+            owner: The lock owner (must match).
+            ttl: New TTL in seconds.
+
+        Returns:
+            True if extended, False if not held or wrong owner.
+
+        Example:
+            >>> # Extend lock while doing long work
+            >>> await client.extend_lock("lock:task:123", "worker-1", ttl=60)
+        """
+        return await self._client.extend_lock(key, owner, ttl)
+
     def __repr__(self) -> str:
         return "KvClient(connected)"
+
+
+class Lock:
+    """
+    Async context manager for distributed locks.
+
+    Example:
+        >>> async with Lock(client, "resource", "worker-1", ttl=30) as acquired:
+        ...     if acquired:
+        ...         # Do work while holding lock
+        ...         pass
+    """
+
+    __slots__ = ("_client", "_key", "_owner", "_ttl", "_acquired")
+
+    def __init__(
+        self,
+        client: KvClient,
+        key: str,
+        owner: str,
+        ttl: float = 30.0,
+    ) -> None:
+        self._client = client
+        self._key = key
+        self._owner = owner
+        self._ttl = ttl
+        self._acquired = False
+
+    async def __aenter__(self) -> bool:
+        """Acquire the lock."""
+        self._acquired = await self._client.lock(self._key, self._owner, self._ttl)
+        return self._acquired
+
+    async def __aexit__(self, *args: Any) -> None:
+        """Release the lock if acquired."""
+        if self._acquired:
+            await self._client.unlock(self._key, self._owner)
+
+    async def extend(self, ttl: Optional[float] = None) -> bool:
+        """Extend the lock TTL."""
+        if not self._acquired:
+            return False
+        return await self._client.extend_lock(
+            self._key, self._owner, ttl or self._ttl
+        )

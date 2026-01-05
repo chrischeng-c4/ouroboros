@@ -42,6 +42,11 @@ pub enum Command {
     Cas = 0x07,
     Ping = 0x08,
     Info = 0x09,
+    // Lock commands
+    Setnx = 0x0A,
+    Lock = 0x0B,
+    Unlock = 0x0C,
+    ExtendLock = 0x0D,
 }
 
 impl TryFrom<u8> for Command {
@@ -58,6 +63,10 @@ impl TryFrom<u8> for Command {
             0x07 => Ok(Command::Cas),
             0x08 => Ok(Command::Ping),
             0x09 => Ok(Command::Info),
+            0x0A => Ok(Command::Setnx),
+            0x0B => Ok(Command::Lock),
+            0x0C => Ok(Command::Unlock),
+            0x0D => Ok(Command::ExtendLock),
             _ => Err(ProtocolError::InvalidCommand(byte)),
         }
     }
@@ -342,6 +351,48 @@ pub fn parse_incr_payload(payload: &[u8]) -> Result<(String, i64), ProtocolError
 
     let delta = i64::from_be_bytes(payload[pos..pos + 8].try_into().unwrap());
     Ok((key, delta))
+}
+
+/// Parse LOCK/UNLOCK/EXTEND payload: key_len(2) + key + owner_len(2) + owner + ttl(8, only for LOCK/EXTEND)
+pub fn parse_lock_payload(payload: &[u8], with_ttl: bool) -> Result<(String, String, Option<u64>), ProtocolError> {
+    if payload.len() < 4 {
+        return Err(ProtocolError::UnexpectedEof);
+    }
+
+    let key_len = u16::from_be_bytes(payload[0..2].try_into().unwrap()) as usize;
+    let mut pos = 2;
+
+    if payload.len() < pos + key_len + 2 {
+        return Err(ProtocolError::UnexpectedEof);
+    }
+
+    let key = std::str::from_utf8(&payload[pos..pos + key_len])
+        .map_err(|_| ProtocolError::InvalidUtf8)?
+        .to_string();
+    pos += key_len;
+
+    let owner_len = u16::from_be_bytes(payload[pos..pos + 2].try_into().unwrap()) as usize;
+    pos += 2;
+
+    if payload.len() < pos + owner_len {
+        return Err(ProtocolError::UnexpectedEof);
+    }
+
+    let owner = std::str::from_utf8(&payload[pos..pos + owner_len])
+        .map_err(|_| ProtocolError::InvalidUtf8)?
+        .to_string();
+    pos += owner_len;
+
+    let ttl = if with_ttl {
+        if payload.len() < pos + 8 {
+            return Err(ProtocolError::UnexpectedEof);
+        }
+        Some(u64::from_be_bytes(payload[pos..pos + 8].try_into().unwrap()))
+    } else {
+        None
+    };
+
+    Ok((key, owner, ttl))
 }
 
 #[cfg(test)]
