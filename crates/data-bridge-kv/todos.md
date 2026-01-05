@@ -85,6 +85,13 @@ Redis-comparable in-memory KV store with:
 - [x] ✅ Python context manager: `async with client.lock("key", ttl=30)`
 - [x] ✅ Lock renewal (extend TTL while holding)
 
+### Phase 7: Namespace Support ✅ (2025-01-05)
+- [x] ✅ Parse namespace from connection string (host:port/namespace)
+- [x] ✅ Key prefixing for all operations
+- [x] ✅ Namespace isolation (keys, locks)
+- [x] ✅ Python namespace property
+- [x] ✅ 19 integration tests
+
 ## Crate Summary
 
 | Crate | Type | Purpose |
