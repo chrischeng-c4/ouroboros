@@ -381,7 +381,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-COMPUTED-03 | GENERATED AS | PostgreSQL computed column support |
 | P5-COMPUTED-04 | Default factories | `default=lambda: datetime.now()` |
 
-### P5-QUERY: Query Builder Enhancements
+### P5-QUERY: Query Builder Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|

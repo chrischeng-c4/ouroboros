@@ -3,6 +3,11 @@
 from .table import Table
 from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery, ManyToMany, ManyToManyQuery, create_m2m_join_table
 from .query import QueryBuilder
+from .query_ext import (
+    filter_by, and_, or_, not_, any_, has, aliased,
+    QueryFragment, BooleanClause, AliasedClass,
+    active_filter, date_range_filter, in_list_filter, null_check_filter
+)
 from .connection import (
     init, close, is_connected, execute, query_aggregate, query_with_cte,
     insert_one, insert_many,
@@ -60,6 +65,21 @@ __all__ = [
     "create_m2m_join_table",
     # Query
     "QueryBuilder",
+    # Query Extensions
+    "filter_by",
+    "and_",
+    "or_",
+    "not_",
+    "any_",
+    "has",
+    "aliased",
+    "QueryFragment",
+    "BooleanClause",
+    "AliasedClass",
+    "active_filter",
+    "date_range_filter",
+    "in_list_filter",
+    "null_check_filter",
     # Connection
     "init",
     "close",
