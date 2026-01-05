@@ -47,6 +47,12 @@ from . import http
 from . import postgres
 from . import test
 
+# Import KV module if available (feature-gated)
+try:
+    from . import kv
+except ImportError:
+    kv = None  # KV feature not enabled
+
 # Re-export commonly used classes from mongodb for convenience/backward compatibility
 from .mongodb import (
     Document, Settings, EmbeddedDocument,
@@ -79,6 +85,7 @@ __all__ = [
     "http",
     "postgres",
     "test",
+    "kv",
     # Connection
     "init",
     "is_connected",
@@ -156,3 +163,10 @@ __all__ = [
     "Email",
     "Url",
 ]
+
+# Re-export KvClient if available
+try:
+    from .kv import KvClient
+    __all__.append("KvClient")
+except ImportError:
+    pass  # KV feature not enabled

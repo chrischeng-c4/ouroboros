@@ -462,6 +462,37 @@ Beanie compatibility maintained
 
 ---
 
+<crate-todos>
+## Crate-Level Todo Tracking
+
+Each crate maintains its own `todos.md` file for tracking implementation progress.
+
+**Location**: `crates/{crate-name}/todos.md`
+
+**Update Frequency**:
+- Update todos.md after EVERY significant change
+- Mark completed items with ✅
+- Add new discovered tasks immediately
+
+**Format**:
+```markdown
+# {Crate Name} - Implementation Todos
+
+## In Progress
+- [ ] Current task description
+
+## Pending
+- [ ] Future task
+
+## Completed
+- [x] ✅ Completed task (YYYY-MM-DD)
+```
+
+**Rule**: Before committing, ensure todos.md reflects current state.
+</crate-todos>
+
+---
+
 <output-structure>
 After each work session, report in this format:
 

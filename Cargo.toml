@@ -6,6 +6,9 @@ members = [
     "crates/data-bridge-http",
     "crates/data-bridge-test",
     "crates/data-bridge-common",
+    "crates/data-bridge-kv",
+    "crates/data-bridge-kv-server",
+    "crates/data-bridge-kv-client",
 ]
 resolver = "2"
 
@@ -60,6 +63,11 @@ regex = "1.11"
 rayon = "1.10"
 once_cell = "1.20"
 walkdir = "2.5"
+parking_lot = "0.12"
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
 
 [profile.release]
 opt-level = 3

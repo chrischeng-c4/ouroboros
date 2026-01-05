@@ -28,12 +28,14 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 pythonize.workspace = true
+rust_decimal.workspace = true
 
 # Optional feature-gated dependencies
 data-bridge-mongodb = { path = "../data-bridge-mongodb", optional = true }
 data-bridge-http = { path = "../data-bridge-http", optional = true }
 data-bridge-test = { path = "../data-bridge-test", optional = true }
 data-bridge-postgres = { path = "../data-bridge-postgres", optional = true }
+data-bridge-kv-client = { path = "../data-bridge-kv-client", optional = true }
 data-bridge-common = { path = "../data-bridge-common" }
 
 # Base64 encoding for binary data
@@ -48,6 +50,7 @@ mongodb = ["data-bridge-mongodb"]
 http = ["data-bridge-http"]
 test = ["data-bridge-test"]
 postgres = ["data-bridge-postgres", "sqlx"]
+kv = ["data-bridge-kv-client"]
 # Future features
 # redis = ["data-bridge-redis"]
 # rabbitmq = ["data-bridge-rabbitmq"]

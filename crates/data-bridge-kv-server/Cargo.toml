@@ -1,0 +1,32 @@
+[package]
+name = "data-bridge-kv-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High-performance KV store TCP server"
+
+[[bin]]
+name = "kv-server"
+path = "src/main.rs"
+
+[dependencies]
+# Core
+tokio.workspace = true
+thiserror.workspace = true
+
+# KV engine
+data-bridge-kv = { path = "../data-bridge-kv" }
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# High-precision numeric (for KvValue::Decimal)
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
