@@ -190,7 +190,13 @@ impl PyKvClient {
         ttl: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let kv_value = py_to_kv_value(value)?;
-        let duration = ttl.map(Duration::from_secs_f64);
+        let duration = match ttl {
+            Some(t) if t < 0.0 => {
+                return Err(PyValueError::new_err("TTL cannot be negative"));
+            }
+            Some(t) => Some(Duration::from_secs_f64(t)),
+            None => None,
+        };
         let client = self.client.clone();
 
         future_into_py(py, async move {
@@ -286,7 +292,13 @@ impl PyKvClient {
         ttl: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let kv_value = py_to_kv_value(value)?;
-        let duration = ttl.map(Duration::from_secs_f64);
+        let duration = match ttl {
+            Some(t) if t < 0.0 => {
+                return Err(PyValueError::new_err("TTL cannot be negative"));
+            }
+            Some(t) => Some(Duration::from_secs_f64(t)),
+            None => None,
+        };
         let client = self.client.clone();
 
         future_into_py(py, async move {
@@ -304,6 +316,9 @@ impl PyKvClient {
         owner: String,
         ttl: f64,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if ttl < 0.0 {
+            return Err(PyValueError::new_err("TTL cannot be negative"));
+        }
         let duration = Duration::from_secs_f64(ttl);
         let client = self.client.clone();
 
@@ -332,6 +347,9 @@ impl PyKvClient {
         owner: String,
         ttl: f64,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if ttl < 0.0 {
+            return Err(PyValueError::new_err("TTL cannot be negative"));
+        }
         let duration = Duration::from_secs_f64(ttl);
         let client = self.client.clone();
 
@@ -366,8 +384,14 @@ pub struct PyPoolConfig {
 impl PyPoolConfig {
     #[new]
     #[pyo3(signature = (addr, min_size=2, max_size=10, idle_timeout=300.0, acquire_timeout=5.0))]
-    fn new(addr: String, min_size: usize, max_size: usize, idle_timeout: f64, acquire_timeout: f64) -> Self {
-        Self {
+    fn new(addr: String, min_size: usize, max_size: usize, idle_timeout: f64, acquire_timeout: f64) -> PyResult<Self> {
+        if idle_timeout < 0.0 {
+            return Err(PyValueError::new_err("idle_timeout cannot be negative"));
+        }
+        if acquire_timeout < 0.0 {
+            return Err(PyValueError::new_err("acquire_timeout cannot be negative"));
+        }
+        Ok(Self {
             inner: PoolConfig {
                 addr,
                 min_size,
@@ -375,7 +399,7 @@ impl PyPoolConfig {
                 idle_timeout: Duration::from_secs_f64(idle_timeout),
                 acquire_timeout: Duration::from_secs_f64(acquire_timeout),
             },
-        }
+        })
     }
 }
 
@@ -461,7 +485,13 @@ impl PyKvPool {
         ttl: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let kv_value = py_to_kv_value(value)?;
-        let duration = ttl.map(Duration::from_secs_f64);
+        let duration = match ttl {
+            Some(t) if t < 0.0 => {
+                return Err(PyValueError::new_err("TTL cannot be negative"));
+            }
+            Some(t) => Some(Duration::from_secs_f64(t)),
+            None => None,
+        };
         let pool = self.pool.clone();
 
         future_into_py(py, async move {
@@ -528,7 +558,13 @@ impl PyKvPool {
         ttl: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let kv_value = py_to_kv_value(value)?;
-        let duration = ttl.map(Duration::from_secs_f64);
+        let duration = match ttl {
+            Some(t) if t < 0.0 => {
+                return Err(PyValueError::new_err("TTL cannot be negative"));
+            }
+            Some(t) => Some(Duration::from_secs_f64(t)),
+            None => None,
+        };
         let pool = self.pool.clone();
 
         future_into_py(py, async move {
@@ -546,6 +582,9 @@ impl PyKvPool {
         owner: String,
         ttl: f64,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if ttl < 0.0 {
+            return Err(PyValueError::new_err("TTL cannot be negative"));
+        }
         let duration = Duration::from_secs_f64(ttl);
         let pool = self.pool.clone();
 
@@ -574,6 +613,9 @@ impl PyKvPool {
         owner: String,
         ttl: f64,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if ttl < 0.0 {
+            return Err(PyValueError::new_err("TTL cannot be negative"));
+        }
         let duration = Duration::from_secs_f64(ttl);
         let pool = self.pool.clone();
 

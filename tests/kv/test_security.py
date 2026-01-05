@@ -580,22 +580,10 @@ class TestEdgeCases:
         assert result is None, "Key with tiny TTL should expire quickly"
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Negative TTL causes Rust panic that needs proper error handling - tracked as bug")
     async def test_negative_ttl_rejected(self, kv_client):
-        """Negative TTL should be rejected with proper error (currently panics)."""
-        # TODO: Fix panic in Rust code - Duration::from_secs_f64 panics on negative values
-        # Should validate TTL >= 0 before calling Duration::from_secs_f64
-        # Expected behavior: raise ValueError for negative TTL
-        try:
+        """Negative TTL should be rejected with proper error."""
+        with pytest.raises(ValueError, match="TTL cannot be negative"):
             await kv_client.set("negative_ttl", "value", ttl=-1.0)
-            pytest.fail("Should have raised an exception for negative TTL")
-        except ValueError as e:
-            # Once fixed, should raise ValueError
-            assert "negative" in str(e).lower() or "ttl" in str(e).lower()
-        except Exception as e:
-            # Currently raises pyo3_runtime.PanicException
-            error_msg = str(e).lower()
-            assert "negative" in error_msg or "duration" in error_msg
 
     @pytest.mark.asyncio
     async def test_very_long_ttl(self, kv_client):
