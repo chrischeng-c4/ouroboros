@@ -392,7 +392,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-QUERY-05 | Query composition | Reusable query fragments |
 | P5-QUERY-06 | aliased() | For self-joins and multiple refs |
 
-### P5-VALID: ORM-Level Validation
+### P5-VALID: ORM-Level Validation (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|

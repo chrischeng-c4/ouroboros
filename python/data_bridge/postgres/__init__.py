@@ -50,6 +50,18 @@ from .computed import (
     HybridPropertyDescriptor, HybridMethodDescriptor,
     ColumnPropertyDescriptor, ComputedColumn
 )
+from .validation import (
+    validates, validates_many,
+    TypeDecorator,
+    coerce_int, coerce_float, coerce_str, coerce_bool, coerce_datetime, coerce_date, coerce_decimal,
+    ValidationError,
+    ValidatorRegistry,
+    AutoCoerceMixin,
+    validate_not_empty, validate_email, validate_url,
+    validate_min_length, validate_max_length, validate_regex,
+    validate_range, validate_min_value, validate_max_value,
+    validate_in_list, validate_positive, validate_non_negative
+)
 
 __all__ = [
     # Base class
@@ -180,4 +192,30 @@ __all__ = [
     "HybridMethodDescriptor",
     "ColumnPropertyDescriptor",
     "ComputedColumn",
+    # Validation
+    "validates",
+    "validates_many",
+    "TypeDecorator",
+    "coerce_int",
+    "coerce_float",
+    "coerce_str",
+    "coerce_bool",
+    "coerce_datetime",
+    "coerce_date",
+    "coerce_decimal",
+    "ValidationError",
+    "ValidatorRegistry",
+    "AutoCoerceMixin",
+    "validate_not_empty",
+    "validate_email",
+    "validate_url",
+    "validate_min_length",
+    "validate_max_length",
+    "validate_regex",
+    "validate_range",
+    "validate_min_value",
+    "validate_max_value",
+    "validate_in_list",
+    "validate_positive",
+    "validate_non_negative",
 ]
