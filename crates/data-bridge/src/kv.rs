@@ -119,6 +119,7 @@ fn client_error_to_py(e: ClientError) -> PyErr {
 #[pyclass(name = "KvClient")]
 pub struct PyKvClient {
     client: Arc<Mutex<KvClient>>,
+    namespace: Option<String>,
 }
 
 #[pymethods]
@@ -134,8 +135,10 @@ impl PyKvClient {
     fn connect(py: Python<'_>, addr: String) -> PyResult<Bound<'_, PyAny>> {
         future_into_py(py, async move {
             let client = KvClient::connect(&addr).await.map_err(client_error_to_py)?;
+            let namespace = client.namespace().map(|s| s.to_string());
             Ok(PyKvClient {
                 client: Arc::new(Mutex::new(client)),
+                namespace,
             })
         })
     }
@@ -335,6 +338,15 @@ impl PyKvClient {
             let mut guard = client.lock().await;
             guard.extend_lock(&key, &owner, duration).await.map_err(client_error_to_py)
         })
+    }
+
+    /// Get the namespace for this client
+    ///
+    /// Returns:
+    ///     The namespace if configured, None otherwise
+    #[getter]
+    fn namespace(&self) -> Option<String> {
+        self.namespace.clone()
     }
 
     fn __repr__(&self) -> String {

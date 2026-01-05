@@ -28,14 +28,41 @@ pub enum ClientError {
 /// KV Store client
 pub struct KvClient {
     stream: TcpStream,
+    namespace: Option<String>,
 }
 
 impl KvClient {
     /// Connect to a KV server
+    ///
+    /// Supports namespace via connection string:
+    /// - `127.0.0.1:6380` → no namespace
+    /// - `127.0.0.1:6380/tasks` → namespace "tasks"
+    /// - `127.0.0.1:6380/prod/cache` → namespace "prod/cache"
     pub async fn connect(addr: &str) -> Result<Self, ClientError> {
-        let stream = TcpStream::connect(addr).await?;
+        // Parse: "host:port/namespace" or "host:port"
+        let (host_port, namespace) = if let Some(idx) = addr.find('/') {
+            let (hp, ns) = addr.split_at(idx);
+            (hp, Some(ns[1..].to_string()))  // skip the '/'
+        } else {
+            (addr, None)
+        };
+
+        let stream = TcpStream::connect(host_port).await?;
         stream.set_nodelay(true)?;
-        Ok(Self { stream })
+        Ok(Self { stream, namespace })
+    }
+
+    /// Prefix a key with namespace if configured
+    fn prefix_key(&self, key: &str) -> String {
+        match &self.namespace {
+            Some(ns) => format!("{}:{}", ns, key),
+            None => key.to_string(),
+        }
+    }
+
+    /// Get the namespace if configured
+    pub fn namespace(&self) -> Option<&str> {
+        self.namespace.as_deref()
     }
 
     /// Send a request and read the response
@@ -85,7 +112,8 @@ impl KvClient {
 
     /// Get a value by key
     pub async fn get(&mut self, key: &str) -> Result<Option<KvValue>, ClientError> {
-        let (status, payload) = self.request(Command::Get, key.as_bytes()).await?;
+        let prefixed_key = self.prefix_key(key);
+        let (status, payload) = self.request(Command::Get, prefixed_key.as_bytes()).await?;
 
         if status == Status::Null {
             return Ok(None);
@@ -97,11 +125,12 @@ impl KvClient {
 
     /// Set a value
     pub async fn set(&mut self, key: &str, value: KvValue, ttl: Option<Duration>) -> Result<(), ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
 
         // key_len (2 bytes) + key
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
 
         // ttl in ms (8 bytes)
         let ttl_ms = ttl.map(|d| d.as_millis() as u64).unwrap_or(0);
@@ -116,21 +145,24 @@ impl KvClient {
 
     /// Delete a key
     pub async fn delete(&mut self, key: &str) -> Result<bool, ClientError> {
-        let (_, payload) = self.request(Command::Del, key.as_bytes()).await?;
+        let prefixed_key = self.prefix_key(key);
+        let (_, payload) = self.request(Command::Del, prefixed_key.as_bytes()).await?;
         Ok(payload.first() == Some(&1))
     }
 
     /// Check if key exists
     pub async fn exists(&mut self, key: &str) -> Result<bool, ClientError> {
-        let (_, payload) = self.request(Command::Exists, key.as_bytes()).await?;
+        let prefixed_key = self.prefix_key(key);
+        let (_, payload) = self.request(Command::Exists, prefixed_key.as_bytes()).await?;
         Ok(payload.first() == Some(&1))
     }
 
     /// Increment an integer value
     pub async fn incr(&mut self, key: &str, delta: i64) -> Result<i64, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
         payload.extend_from_slice(&delta.to_be_bytes());
 
         let (_, resp) = self.request(Command::Incr, &payload).await?;
@@ -143,9 +175,10 @@ impl KvClient {
 
     /// Decrement an integer value
     pub async fn decr(&mut self, key: &str, delta: i64) -> Result<i64, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
         payload.extend_from_slice(&delta.to_be_bytes());
 
         let (_, resp) = self.request(Command::Decr, &payload).await?;
@@ -164,11 +197,12 @@ impl KvClient {
 
     /// Set if not exists (atomic)
     pub async fn setnx(&mut self, key: &str, value: KvValue, ttl: Option<Duration>) -> Result<bool, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
 
         // key_len (2 bytes) + key
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
 
         // ttl in ms (8 bytes)
         let ttl_ms = ttl.map(|d| d.as_millis() as u64).unwrap_or(0);
@@ -183,11 +217,12 @@ impl KvClient {
 
     /// Acquire a distributed lock
     pub async fn lock(&mut self, key: &str, owner: &str, ttl: Duration) -> Result<bool, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
 
         // key_len (2 bytes) + key
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
 
         // owner_len (2 bytes) + owner
         payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
@@ -203,11 +238,12 @@ impl KvClient {
 
     /// Release a distributed lock
     pub async fn unlock(&mut self, key: &str, owner: &str) -> Result<bool, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
 
         // key_len (2 bytes) + key
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
 
         // owner_len (2 bytes) + owner
         payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
@@ -219,11 +255,12 @@ impl KvClient {
 
     /// Extend lock TTL
     pub async fn extend_lock(&mut self, key: &str, owner: &str, ttl: Duration) -> Result<bool, ClientError> {
+        let prefixed_key = self.prefix_key(key);
         let mut payload = Vec::new();
 
         // key_len (2 bytes) + key
-        payload.extend_from_slice(&(key.len() as u16).to_be_bytes());
-        payload.extend_from_slice(key.as_bytes());
+        payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+        payload.extend_from_slice(prefixed_key.as_bytes());
 
         // owner_len (2 bytes) + owner
         payload.extend_from_slice(&(owner.len() as u16).to_be_bytes());
@@ -241,6 +278,69 @@ impl KvClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_namespace_parsing() {
+        // Test without namespace
+        let addr = "127.0.0.1:6380";
+        let (host_port, namespace) = if let Some(idx) = addr.find('/') {
+            let (hp, ns) = addr.split_at(idx);
+            (hp, Some(ns[1..].to_string()))
+        } else {
+            (addr, None)
+        };
+        assert_eq!(host_port, "127.0.0.1:6380");
+        assert_eq!(namespace, None);
+
+        // Test with simple namespace
+        let addr = "127.0.0.1:6380/tasks";
+        let (host_port, namespace) = if let Some(idx) = addr.find('/') {
+            let (hp, ns) = addr.split_at(idx);
+            (hp, Some(ns[1..].to_string()))
+        } else {
+            (addr, None)
+        };
+        assert_eq!(host_port, "127.0.0.1:6380");
+        assert_eq!(namespace, Some("tasks".to_string()));
+
+        // Test with nested namespace
+        let addr = "127.0.0.1:6380/prod/cache";
+        let (host_port, namespace) = if let Some(idx) = addr.find('/') {
+            let (hp, ns) = addr.split_at(idx);
+            (hp, Some(ns[1..].to_string()))
+        } else {
+            (addr, None)
+        };
+        assert_eq!(host_port, "127.0.0.1:6380");
+        assert_eq!(namespace, Some("prod/cache".to_string()));
+    }
+
+    #[test]
+    fn test_prefix_key_logic() {
+        // Test without namespace
+        let namespace: Option<String> = None;
+        let key = match &namespace {
+            Some(ns) => format!("{}:{}", ns, "mykey"),
+            None => "mykey".to_string(),
+        };
+        assert_eq!(key, "mykey");
+
+        // Test with namespace
+        let namespace = Some("tasks".to_string());
+        let key = match &namespace {
+            Some(ns) => format!("{}:{}", ns, "mykey"),
+            None => "mykey".to_string(),
+        };
+        assert_eq!(key, "tasks:mykey");
+
+        // Test with nested namespace
+        let namespace = Some("prod/cache".to_string());
+        let key = match &namespace {
+            Some(ns) => format!("{}:{}", ns, "mykey"),
+            None => "mykey".to_string(),
+        };
+        assert_eq!(key, "prod/cache:mykey");
+    }
 
     // Integration tests require a running server
     // Run: cargo run -p data-bridge-kv-server
@@ -326,5 +426,51 @@ mod tests {
         // Should be expired
         let result = client.get("ttl_key").await.unwrap();
         assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_namespace() {
+        // Connect with namespace
+        let mut client1 = KvClient::connect("127.0.0.1:6380/test_ns").await.unwrap();
+        assert_eq!(client1.namespace(), Some("test_ns"));
+
+        // Connect without namespace
+        let mut client2 = KvClient::connect("127.0.0.1:6380").await.unwrap();
+        assert_eq!(client2.namespace(), None);
+
+        // Set value in namespace
+        client1.set("key1", KvValue::String("value1".to_string()), None).await.unwrap();
+
+        // Should be able to read from same namespace
+        let result = client1.get("key1").await.unwrap();
+        assert_eq!(result, Some(KvValue::String("value1".to_string())));
+
+        // Should NOT be visible from non-namespaced client
+        let result = client2.get("key1").await.unwrap();
+        assert_eq!(result, None);
+
+        // Can access with manual prefix
+        let result = client2.get("test_ns:key1").await.unwrap();
+        assert_eq!(result, Some(KvValue::String("value1".to_string())));
+
+        // Clean up
+        client1.delete("key1").await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_nested_namespace() {
+        // Connect with nested namespace
+        let mut client = KvClient::connect("127.0.0.1:6380/prod/cache").await.unwrap();
+        assert_eq!(client.namespace(), Some("prod/cache"));
+
+        // Set and get with nested namespace
+        client.set("session", KvValue::String("data".to_string()), None).await.unwrap();
+        let result = client.get("session").await.unwrap();
+        assert_eq!(result, Some(KvValue::String("data".to_string())));
+
+        // Clean up
+        client.delete("session").await.unwrap();
     }
 }

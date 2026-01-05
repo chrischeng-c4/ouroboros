@@ -55,7 +55,11 @@ class KvClient:
         Connect to a KV server.
 
         Args:
-            addr: Server address in "host:port" format.
+            addr: Server address in format "host:port" or "host:port/namespace"
+                  Examples:
+                  - "127.0.0.1:6380" - no namespace
+                  - "127.0.0.1:6380/tasks" - namespace "tasks"
+                  - "127.0.0.1:6380/prod/cache" - nested namespace
                   Defaults to "127.0.0.1:6380".
 
         Returns:
@@ -66,6 +70,7 @@ class KvClient:
 
         Example:
             >>> client = await KvClient.connect("localhost:6380")
+            >>> client_with_ns = await KvClient.connect("localhost:6380/tasks")
         """
         if _KvClient is None:
             raise ImportError(
@@ -83,6 +88,25 @@ class KvClient:
         """Async context manager exit."""
         # Connection cleanup handled by Rust
         pass
+
+    @property
+    def namespace(self) -> Optional[str]:
+        """
+        Get the namespace for this client, or None if not configured.
+
+        Returns:
+            The namespace string if configured, None otherwise.
+
+        Example:
+            >>> client = await KvClient.connect("localhost:6380/tasks")
+            >>> print(client.namespace)
+            'tasks'
+            >>>
+            >>> client2 = await KvClient.connect("localhost:6380")
+            >>> print(client2.namespace)
+            None
+        """
+        return self._client.namespace
 
     async def ping(self) -> str:
         """
