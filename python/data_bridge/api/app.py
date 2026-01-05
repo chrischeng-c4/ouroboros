@@ -4,11 +4,12 @@ Main App class for the API framework.
 
 from typing import (
     Any, Callable, Dict, List, Optional, Type, TypeVar, Union,
-    get_type_hints, get_origin, get_args, Annotated
+    get_type_hints, get_origin, get_args, Annotated, AsyncGenerator
 )
 import inspect
 import functools
 import asyncio
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 from .types import Path, Query, Body, Header, Depends
@@ -22,6 +23,7 @@ from .dependencies import (
 from .openapi import generate_openapi, get_swagger_ui_html, get_redoc_html
 from .http_integration import HttpClientProvider
 from .health import HealthManager
+from .middleware import MiddlewareStack, BaseMiddleware
 
 # Import Rust bindings
 try:
@@ -30,6 +32,26 @@ except ImportError:
     _api = None
 
 T = TypeVar('T')
+
+class AppState:
+    """Simple state container for lifespan-scoped data.
+
+    Allows storing arbitrary attributes that persist for the application's lifetime.
+    This is useful for storing database connections, caches, or other resources
+    that should be initialized during startup and cleaned up during shutdown.
+
+    Example:
+        @asynccontextmanager
+        async def lifespan(app: App):
+            # Startup
+            app.state.db = await connect_db()
+            app.state.cache = Redis()
+            yield
+            # Shutdown
+            await app.state.db.close()
+            await app.state.cache.close()
+    """
+    pass
 
 @dataclass
 class RouteInfo:
@@ -66,6 +88,7 @@ class App:
         redoc_url: str = "/redoc",
         openapi_url: str = "/openapi.json",
         shutdown_timeout: float = 30.0,
+        lifespan: Optional[Callable[["App"], AsyncGenerator]] = None,
     ):
         self.title = title
         self.version = version
@@ -83,6 +106,9 @@ class App:
         self._http_provider = HttpClientProvider()
         self._shutdown_timeout = shutdown_timeout
         self.is_shutting_down = False
+        self._middleware_stack = MiddlewareStack()
+        self._lifespan = lifespan
+        self.state = AppState()
 
         # Health management
         self._health_manager = HealthManager()
@@ -627,6 +653,77 @@ class App:
         # - Close database connections
         # - Flush logs
         # - etc.
+
+    def add_middleware(self, middleware: BaseMiddleware) -> None:
+        """Add middleware to the application.
+
+        Middleware will be executed in LIFO order (last added runs first).
+
+        Args:
+            middleware: Middleware instance to add to the stack
+
+        Example:
+            from data_bridge.api import App, TimingMiddleware, LoggingMiddleware
+
+            app = App()
+            app.add_middleware(TimingMiddleware())
+            app.add_middleware(LoggingMiddleware())
+        """
+        self._middleware_stack.add(middleware)
+
+    @asynccontextmanager
+    async def lifespan_context(self) -> AsyncGenerator[None, None]:
+        """Context manager for application lifespan.
+
+        Manages the complete application lifecycle including startup hooks,
+        custom lifespan logic, and shutdown hooks.
+
+        This follows the ASGI lifespan pattern, similar to FastAPI's
+        @asynccontextmanager lifespan.
+
+        Usage:
+            async with app.lifespan_context():
+                # Application is running
+                # Do work here
+                pass
+            # Application is fully shut down
+
+        Example:
+            from contextlib import asynccontextmanager
+            from data_bridge.api import App
+
+            @asynccontextmanager
+            async def lifespan(app: App):
+                # Startup
+                db = await connect_db()
+                app.state.db = db
+                yield
+                # Shutdown
+                await db.close()
+
+            app = App(lifespan=lifespan)
+
+            async with app.lifespan_context():
+                # Application is ready, db is connected
+                response = await app.state.db.query("SELECT 1")
+            # Database is closed
+
+        Yields:
+            None: Control is yielded while the application is running
+        """
+        # Run startup hooks
+        await self.startup()
+
+        try:
+            # Run custom lifespan if provided
+            if self._lifespan:
+                async with self._lifespan(self):
+                    yield
+            else:
+                yield
+        finally:
+            # Run shutdown hooks
+            await self.shutdown()
 
 
 def setup_signal_handlers(app: "App") -> None:
