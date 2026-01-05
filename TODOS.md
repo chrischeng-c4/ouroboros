@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2026-01-04 (data-bridge-api Phases 1-6 completed, P5 SQLAlchemy parity complete)
+**Last Updated**: 2026-01-05 (data-bridge-api Phases 1-6 completed, Phase 7 in progress, P5 SQLAlchemy parity complete)
 **Branch**: `feature/data-bridge-api`
 
 **P5 SQLAlchemy Parity Status**: 43/43 complete (2025-01-05)
@@ -192,8 +192,10 @@ Atomic, testable tasks organized by priority and component.
 | Phase 4 | OpenAPI (3.1 spec, Swagger UI, ReDoc) | ✅ DONE |
 | Phase 5 | API Models & HTTP Client Integration | ✅ DONE (2026-01-04) |
 | Phase 6 | Type Consolidation (data-bridge-api ↔ data-bridge-http) | ✅ DONE (2026-01-04) |
+| Phase 7 | FastAPI Parity (uvicorn, orjson, middleware, lifespan) | 📋 PLANNED |
 
 **Total Tests**: 276 (71 Rust + 142 Python unit + 63 API)
+**Next Phase**: Phase 7 - FastAPI Parity
 
 ### P2-API: API Models & HTTP Client Integration ✅ COMPLETED
 
@@ -267,6 +269,240 @@ Atomic, testable tasks organized by priority and component.
 
 - [x] P2-API-TYPE-07: Add trait implementation tests (14 tests) (2026-01-04)
 - [x] P2-API-TYPE-08: Add base class inheritance tests (in existing test suite) (2026-01-04)
+
+---
+
+## Phase 7: FastAPI Parity
+
+**Goal**: Match uvicorn+FastAPI+orjson+uvloop feature set for production readiness
+
+**Design Philosophy**: Container-native, K8s-first design
+- Works with K8s process management (SIGTERM/SIGKILL)
+- No built-in worker management (use K8s replicas instead)
+- SSL/TLS at ingress, not app level
+- Designed for horizontal scaling
+- Health checks for K8s liveness/readiness probes
+
+### P7-0: Critical (Production Blockers - K8s Native)
+
+- [ ] P7-0-01: Graceful Shutdown (SIGTERM handling)
+  - **Files**:
+    - `crates/data-bridge-api/src/server.rs` (signal handling)
+    - `python/data_bridge/api/app.py` (shutdown coordination)
+  - **Implementation**:
+    - Register SIGTERM handler in Rust
+    - Drain active connections (configurable timeout: 30s default)
+    - Close DB connections gracefully
+    - Trigger lifespan shutdown events
+  - **Test**: Send SIGTERM, verify no dropped requests
+  - **Benefit**: Zero-downtime K8s rolling updates
+
+- [ ] P7-0-02: Health Endpoints (/health, /ready, /live)
+  - **File**: `python/data_bridge/api/app.py`
+  - **Implementation**:
+    - `GET /health` - Overall health status (JSON)
+    - `GET /ready` - K8s readiness probe (200 if ready for traffic)
+    - `GET /live` - K8s liveness probe (200 if alive, restart if 500)
+    - Configurable health checks (DB ping, external service check)
+  - **Test**: Health endpoints return correct status codes
+  - **Benefit**: K8s orchestration, automated restart/scaling
+
+- [ ] P7-0-03: orjson Integration
+  - **Files**: `python/data_bridge/api/response.py`
+  - **Implementation**:
+    - Replace `json.dumps` with `orjson.dumps`
+    - Handle orjson-specific types (bytes return)
+    - Add orjson to dependencies
+  - **Test**: JSON serialization benchmark
+  - **Benefit**: 2x JSON serialization speed
+
+### P7-1: High Priority (Common Patterns)
+
+- [ ] P7-1-01: Lifespan Events (Startup/Shutdown Hooks)
+  - **File**: `python/data_bridge/api/app.py`
+  - **Implementation**:
+    - `@app.on_event("startup")` decorator
+    - `@app.on_event("shutdown")` decorator
+    - Hook execution before first request / after last request
+    - Critical for DB connection pools, cache warmup
+  - **Test**: Startup/shutdown hooks execute correctly
+  - **Benefit**: Resource initialization/cleanup (DB, cache, etc.)
+
+- [ ] P7-1-02: Structured Logging (JSON format)
+  - **Files**:
+    - `crates/data-bridge-api/src/logging.rs` (Rust logger)
+    - `python/data_bridge/api/logging.py` (Python API)
+  - **Implementation**:
+    - JSON-formatted logs (for log aggregation systems)
+    - Request ID tracking (trace across services)
+    - Log levels: DEBUG, INFO, WARN, ERROR, CRITICAL
+    - Configurable output (stdout for containers)
+  - **Test**: Logs are valid JSON, contain request_id
+  - **Benefit**: Cloud-native observability (ELK, Datadog, CloudWatch)
+
+- [ ] P7-1-03: Middleware System
+  - **Files**:
+    - `crates/data-bridge-api/src/middleware.rs` (Rust trait)
+    - `python/data_bridge/api/middleware.py` (Python base class)
+  - **Implementation**:
+    - `Middleware` trait with `before_request()` and `after_response()`
+    - `app.add_middleware()` method
+    - Middleware execution order (LIFO for response)
+  - **Test**: Custom middleware modifies request/response
+  - **Benefit**: Request/response interception
+
+- [ ] P7-1-04: CORS Middleware
+  - **File**: `python/data_bridge/api/middleware.py`
+  - **Implementation**:
+    - `CORSMiddleware` class
+    - Configurable origins, methods, headers
+    - Preflight OPTIONS handling
+  - **Test**: Cross-origin requests allowed
+  - **Benefit**: Easy CORS configuration
+
+### P7-2: Medium Priority (Local Development)
+
+- [ ] P7-2-01: Local Development Server (app.run())
+  - **File**: `python/data_bridge/api/app.py`
+  - **Implementation**:
+    - Add `app.run(host, port, reload)` method
+    - Spawn uvicorn internally via subprocess
+    - Pass ASGI application to uvicorn
+    - **Note**: For local dev only, use K8s/Docker in production
+  - **Test**: `app.run()` starts server on specified port
+  - **Benefit**: Quick local testing without uvicorn CLI
+
+- [ ] P7-2-02: Background Tasks
+  - **Files**:
+    - `crates/data-bridge-api/src/background.rs` (Tokio task spawning)
+    - `python/data_bridge/api/background.py` (Python API)
+  - **Implementation**:
+    - `BackgroundTasks` dependency
+    - `background_tasks.add_task(func, *args, **kwargs)`
+    - Tasks run after response sent
+  - **Test**: Background task executes after response
+  - **Benefit**: Async task execution (emails, logging)
+
+- [ ] P7-2-03: Form Data Handling
+  - **File**: `crates/data-bridge-api/src/extract.rs`
+  - **Implementation**:
+    - `Form[T]` extractor for `application/x-www-form-urlencoded`
+    - Parse form data into typed models
+  - **Test**: Form submission with nested fields
+  - **Benefit**: HTML form support
+
+### P7-3: Lower Priority (File & Advanced Features)
+
+- [ ] P7-3-01: File Upload (UploadFile)
+  - **Files**:
+    - `crates/data-bridge-api/src/upload.rs` (multipart parsing)
+    - `python/data_bridge/api/upload.py` (UploadFile class)
+  - **Implementation**:
+    - `UploadFile` class with `.read()`, `.save()` methods
+    - Multipart form-data parsing
+    - Streaming file upload support
+  - **Test**: Upload 10MB file, verify content
+  - **Benefit**: File upload support
+
+- [ ] P7-3-02: WebSocket Support
+  - **Files**:
+    - `crates/data-bridge-api/src/websocket.rs` (WebSocket handler)
+    - `python/data_bridge/api/websocket.py` (Python API)
+  - **Implementation**:
+    - `@app.websocket("/ws")` decorator
+    - `await websocket.accept()`, `send_text()`, `receive_text()`
+    - Upgrade HTTP → WebSocket
+  - **Test**: Bidirectional WebSocket communication
+  - **Benefit**: Real-time communication
+
+- [ ] P7-3-03: Server-Sent Events (SSE)
+  - **File**: `python/data_bridge/api/response.py`
+  - **Implementation**:
+    - `EventSourceResponse` class
+    - Streaming response with `text/event-stream`
+  - **Test**: Stream events to client
+  - **Benefit**: Server-push notifications
+
+### P7-4: Tests
+
+- [ ] P7-4-01: Graceful shutdown tests (5 tests)
+  - Test SIGTERM handler registered
+  - Test connection draining (no dropped requests)
+  - Test shutdown timeout (30s default)
+  - Test DB connections closed gracefully
+  - Test lifespan shutdown events triggered
+
+- [ ] P7-4-02: Health endpoint tests (6 tests)
+  - Test /health returns JSON status
+  - Test /ready returns 200 when ready
+  - Test /ready returns 503 when not ready (DB down)
+  - Test /live returns 200 when alive
+  - Test /live returns 500 on critical failure
+  - Test custom health check registration
+
+- [ ] P7-4-03: orjson serialization tests (3 tests)
+  - Benchmark vs json.dumps
+  - Test datetime serialization
+  - Test nested object serialization
+
+- [ ] P7-4-04: Lifespan events tests (4 tests)
+  - Test startup event executes before first request
+  - Test shutdown event executes after last request
+  - Test event execution order (multiple handlers)
+  - Test exception in startup event blocks server start
+
+- [ ] P7-4-05: Structured logging tests (5 tests)
+  - Test JSON format output
+  - Test request_id in logs
+  - Test log levels (DEBUG, INFO, WARN, ERROR)
+  - Test log context propagation
+  - Test stdout output (container-friendly)
+
+- [ ] P7-4-06: Middleware tests (8 tests)
+  - Test middleware execution order
+  - Test middleware modifies request
+  - Test middleware modifies response
+  - Test middleware error handling
+  - Test CORS preflight
+  - Test CORS actual request
+  - Test multiple middleware stack
+  - Test middleware short-circuit
+
+- [ ] P7-4-07: Background tasks tests (4 tests)
+  - Test task executes after response
+  - Test multiple tasks
+  - Test task with exception (no crash)
+  - Test task receives correct arguments
+
+- [ ] P7-4-08: Local dev server tests (3 tests)
+  - Test app.run() starts server on specified port
+  - Test hot reload on file change
+  - Test graceful shutdown via Ctrl+C
+
+- [ ] P7-4-09: Form data tests (3 tests)
+  - Test simple form data
+  - Test nested form data
+  - Test form validation errors
+
+- [ ] P7-4-10: File upload tests (5 tests)
+  - Test single file upload
+  - Test multiple file upload
+  - Test large file streaming
+  - Test file size limit
+  - Test invalid content-type rejection
+
+- [ ] P7-4-11: WebSocket tests (4 tests)
+  - Test WebSocket connection
+  - Test send/receive text
+  - Test send/receive JSON
+  - Test WebSocket disconnect
+
+- [ ] P7-4-12: SSE tests (2 tests)
+  - Test event stream
+  - Test stream termination
+
+**Total New Tests**: 52 tests (Rust + Python integration)
+**Focus**: K8s-native features prioritized (graceful shutdown, health checks, structured logging)
 
 ---
 

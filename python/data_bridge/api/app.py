@@ -8,6 +8,7 @@ from typing import (
 )
 import inspect
 import functools
+import asyncio
 from dataclasses import dataclass, field
 
 from .types import Path, Query, Body, Header, Depends
@@ -20,6 +21,7 @@ from .dependencies import (
 )
 from .openapi import generate_openapi, get_swagger_ui_html, get_redoc_html
 from .http_integration import HttpClientProvider
+from .health import HealthManager
 
 # Import Rust bindings
 try:
@@ -63,6 +65,7 @@ class App:
         docs_url: str = "/docs",
         redoc_url: str = "/redoc",
         openapi_url: str = "/openapi.json",
+        shutdown_timeout: float = 30.0,
     ):
         self.title = title
         self.version = version
@@ -78,6 +81,17 @@ class App:
         self._global_deps: Dict[int, str] = {}  # Track factory id -> registered name
         self._docs_setup = False
         self._http_provider = HttpClientProvider()
+        self._shutdown_timeout = shutdown_timeout
+        self.is_shutting_down = False
+
+        # Health management
+        self._health_manager = HealthManager()
+        self._startup_hooks: List[Callable] = []
+        self._shutdown_hooks: List[Callable] = []
+
+        # Auto-register health hooks
+        self._startup_hooks.append(lambda: self._health_manager.set_ready(True))
+        self._shutdown_hooks.append(lambda: self._health_manager.set_ready(False))
 
         # Initialize Rust app if available
         if _api is not None:
@@ -482,3 +496,146 @@ class App:
             response = await app.http_client.get("/data")
         """
         return self._http_provider.get_client()
+
+    @property
+    def health(self) -> HealthManager:
+        """Get the health manager.
+
+        Returns:
+            HealthManager instance for registering health checks
+
+        Example:
+            app.health.add_check("database", lambda: db.is_connected())
+        """
+        return self._health_manager
+
+    def include_health_routes(self, prefix: str = "") -> None:
+        """Add K8s health check endpoints.
+
+        Args:
+            prefix: URL prefix for health endpoints (default: "")
+
+        Registers:
+            - GET {prefix}/health - Overall health status
+            - GET {prefix}/live - Liveness probe (always 200 if running)
+            - GET {prefix}/ready - Readiness probe (503 if not ready)
+
+        Example:
+            app.include_health_routes()  # /health, /live, /ready
+            app.include_health_routes("/api")  # /api/health, /api/live, /api/ready
+        """
+        @self.get(f"{prefix}/health", tags=["health"])
+        async def health_check() -> dict:
+            """Health check endpoint."""
+            status = await self._health_manager.check_health()
+            return status.to_dict()
+
+        @self.get(f"{prefix}/live", tags=["health"])
+        async def liveness() -> dict:
+            """Liveness probe endpoint."""
+            return {"status": "alive"}
+
+        @self.get(f"{prefix}/ready", tags=["health"])
+        async def readiness():
+            """Readiness probe endpoint."""
+            is_ready = await self._health_manager.is_ready()
+            if is_ready:
+                return JSONResponse({"status": "ready"}, status_code=200)
+            else:
+                return JSONResponse({"status": "not_ready"}, status_code=503)
+
+    async def startup(self) -> None:
+        """Run all startup hooks.
+
+        Called when the application starts to initialize resources
+        and set readiness state.
+        """
+        for hook in self._startup_hooks:
+            if asyncio.iscoroutinefunction(hook):
+                await hook()
+            else:
+                hook()
+
+    def on_startup(self, func: Callable) -> Callable:
+        """Register a startup hook.
+
+        Args:
+            func: Function to run on startup (can be sync or async)
+
+        Returns:
+            The original function (decorator pattern)
+
+        Example:
+            @app.on_startup
+            async def init_db():
+                await db.connect()
+        """
+        self._startup_hooks.append(func)
+        return func
+
+    def on_shutdown(self, func: Callable) -> Callable:
+        """Register a shutdown hook.
+
+        Args:
+            func: Function to run on shutdown (can be sync or async)
+
+        Returns:
+            The original function (decorator pattern)
+
+        Example:
+            @app.on_shutdown
+            async def close_db():
+                await db.close()
+        """
+        self._shutdown_hooks.append(func)
+        return func
+
+    async def shutdown(self, timeout: Optional[float] = None) -> None:
+        """Gracefully shutdown the application.
+
+        Closes all resources including HTTP client connections and
+        cleans up the dependency container.
+
+        Args:
+            timeout: Timeout in seconds for each shutdown hook
+                    (default: uses shutdown_timeout from __init__)
+        """
+        self.is_shutting_down = True
+
+        if timeout is None:
+            timeout = self._shutdown_timeout
+
+        # Run shutdown hooks in LIFO (reverse) order
+        for hook in reversed(self._shutdown_hooks):
+            try:
+                if asyncio.iscoroutinefunction(hook):
+                    await asyncio.wait_for(hook(), timeout=timeout)
+                else:
+                    hook()
+            except asyncio.TimeoutError:
+                pass  # Hook timed out, continue with others
+            except Exception:
+                pass  # Best effort cleanup
+
+        # Close HTTP client if configured
+        try:
+            await self._http_provider.close()
+        except Exception:
+            pass  # Best effort cleanup
+
+        # Additional cleanup can be added here
+        # - Close database connections
+        # - Flush logs
+        # - etc.
+
+
+def setup_signal_handlers(app: "App") -> None:
+    """Setup SIGTERM/SIGINT handlers for graceful shutdown in K8s."""
+    import signal
+    import asyncio
+
+    def handle_signal(signum, frame):
+        asyncio.create_task(app.shutdown())
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)

@@ -114,11 +114,14 @@ impl SerializableResponse {
     }
 
     /// Serialize body to bytes (GIL-free operation)
+    ///
+    /// Uses sonic-rs for JSON serialization (3-7x faster than serde_json)
     pub fn body_bytes(&self) -> Vec<u8> {
         match &self.body {
             ResponseBody::Empty => Vec::new(),
             ResponseBody::Json(value) => {
-                serde_json::to_vec(&value.to_json()).unwrap_or_default()
+                // Use sonic-rs for 3-7x faster JSON serialization
+                sonic_rs::to_vec(&value.to_json()).unwrap_or_default()
             }
             ResponseBody::Bytes(b) => b.clone(),
             ResponseBody::Text(s) => s.as_bytes().to_vec(),
@@ -126,11 +129,13 @@ impl SerializableResponse {
     }
 
     /// Get content length in bytes
+    ///
+    /// Uses sonic-rs for JSON serialization (3-7x faster than serde_json)
     pub fn content_length(&self) -> usize {
         match &self.body {
             ResponseBody::Empty => 0,
             ResponseBody::Json(value) => {
-                serde_json::to_string(&value.to_json())
+                sonic_rs::to_string(&value.to_json())
                     .map(|s| s.len())
                     .unwrap_or(0)
             }

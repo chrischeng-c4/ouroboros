@@ -13,7 +13,7 @@ Example:
         return await User.get(user_id)
 """
 
-from .app import App
+from .app import App, setup_signal_handlers
 from .types import Path, Query, Body, Header, Depends
 from .dependencies import Scope
 from .response import Response, JSONResponse, HTMLResponse, PlainTextResponse
@@ -21,10 +21,12 @@ from .exceptions import HTTPException
 from .models import BaseModel, Field
 from .context import RequestContext
 from .http_integration import HttpClientProvider, create_http_client
+from .health import HealthManager, HealthCheck, HealthStatus
 
 __all__ = [
     # Core
     "App",
+    "setup_signal_handlers",
     # Types
     "Path",
     "Query",
@@ -47,4 +49,8 @@ __all__ = [
     # HTTP Integration
     "HttpClientProvider",
     "create_http_client",
+    # Health
+    "HealthManager",
+    "HealthCheck",
+    "HealthStatus",
 ]

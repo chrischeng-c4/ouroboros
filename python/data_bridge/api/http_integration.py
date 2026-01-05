@@ -89,3 +89,14 @@ class HttpClientProvider:
             Configured HttpClient instance
         """
         return self.get_client()
+
+    async def close(self) -> None:
+        """Close the HTTP client and release resources.
+
+        This should be called during application shutdown to properly
+        clean up HTTP connections.
+        """
+        if self._client is not None:
+            # HttpClient cleanup - no explicit close needed as Rust handles it
+            # Just clear the reference
+            self._client = None
