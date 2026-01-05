@@ -400,7 +400,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-VALID-02 | Custom types | User-defined type classes |
 | P5-VALID-03 | Auto-coercion | Auto-convert on assignment |
 
-### P5-ASYNC: Async Enhancements
+### P5-ASYNC: Async Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|

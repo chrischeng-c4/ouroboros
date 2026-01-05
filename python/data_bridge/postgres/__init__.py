@@ -62,6 +62,15 @@ from .validation import (
     validate_range, validate_min_value, validate_max_value,
     validate_in_list, validate_positive, validate_non_negative
 )
+from .async_utils import (
+    AsyncSession, AsyncSessionFactory,
+    run_sync, async_wrap,
+    AsyncScoped, get_async_session,
+    async_load, async_refresh, async_expire,
+    async_stream, AsyncResultIterator,
+    greenlet_spawn, AsyncGreenlet, GREENLET_AVAILABLE,
+    AsyncEngine
+)
 
 __all__ = [
     # Base class
@@ -218,4 +227,20 @@ __all__ = [
     "validate_in_list",
     "validate_positive",
     "validate_non_negative",
+    # Async Utilities
+    "AsyncSession",
+    "AsyncSessionFactory",
+    "run_sync",
+    "async_wrap",
+    "AsyncScoped",
+    "get_async_session",
+    "async_load",
+    "async_refresh",
+    "async_expire",
+    "async_stream",
+    "AsyncResultIterator",
+    "greenlet_spawn",
+    "AsyncGreenlet",
+    "GREENLET_AVAILABLE",
+    "AsyncEngine",
 ]
