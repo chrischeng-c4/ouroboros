@@ -18,22 +18,17 @@ Redis-comparable in-memory KV store with:
 ---
 
 ## In Progress
-- [ ] Integration testing (server + client + Python)
+- [ ] Distributed cache features (MGET/MSET, CAS)
 
 ## Pending
-
-### Testing & Validation
-- [ ] End-to-end integration tests
-- [ ] Benchmark vs Redis
-- [ ] Memory usage profiling
-- [ ] Connection pooling (client)
 
 ### Future Enhancements
 - [ ] CAS (Compare-And-Swap) command
 - [ ] MGET/MSET batch operations
-- [ ] Connection pooling
 - [ ] Authentication (AUTH command)
 - [ ] TLS support
+- [ ] Memory usage profiling
+- [ ] Cluster mode (multi-node)
 
 ## Completed
 
@@ -91,6 +86,20 @@ Redis-comparable in-memory KV store with:
 - [x] ✅ Namespace isolation (keys, locks)
 - [x] ✅ Python namespace property
 - [x] ✅ 19 integration tests
+
+### Phase 8: Connection Pooling ✅ (2025-01-05)
+- [x] ✅ PoolConfig (min/max size, timeouts)
+- [x] ✅ KvPool with RAII PooledClient
+- [x] ✅ Idle connection cleanup
+- [x] ✅ Pool statistics (idle, active, max)
+- [x] ✅ PyO3 bindings (_KvPool, _PoolConfig)
+- [x] ✅ Python wrapper (KvPool, PoolConfig)
+
+### Phase 9: Testing Suite ✅ (2025-01-05)
+- [x] ✅ Performance benchmarks (13 tests)
+- [x] ✅ Security tests (30 tests)
+- [x] ✅ Redis comparison (1.4-1.7x faster)
+- [x] ✅ Latency metrics (P50/P95/P99)
 
 ## Crate Summary
 

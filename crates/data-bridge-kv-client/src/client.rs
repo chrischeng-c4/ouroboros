@@ -23,6 +23,9 @@ pub enum ClientError {
 
     #[error("Key not found")]
     KeyNotFound,
+
+    #[error("Connection pool timeout")]
+    Timeout,
 }
 
 /// KV Store client

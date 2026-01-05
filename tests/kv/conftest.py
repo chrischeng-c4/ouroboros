@@ -136,13 +136,36 @@ async def cleanup_keys(kv_client):
         "lock:extend",
         "lock:nested:1",
         "lock:nested:2",
+        # Benchmark test keys
+        "warmup:pool",
+        "bench:counter",
+    ]
+
+    # Key prefixes to clean up (for bulk operations)
+    key_prefixes = [
+        "warmup:set:",
+        "bench:set:",
+        "bench:get:",
+        "bench:mixed:",
+        "pool:set:",
+        "pool:mixed:",
+        "single:",
+        "pool:",
+        "cmp:db:",
+        "cmp:redis:",
+        "latency:set:",
+        "latency:get:",
     ]
 
     yield
 
-    # Cleanup after test
+    # Cleanup after test - single keys
     for key in test_keys:
         try:
             await kv_client.delete(key)
         except Exception:
             pass  # Ignore errors during cleanup
+
+    # Note: Bulk prefix cleanup would require a KEYS/SCAN command
+    # which is not yet implemented in the KV server.
+    # For now, benchmark tests handle their own cleanup.

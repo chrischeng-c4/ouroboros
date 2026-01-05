@@ -2,7 +2,7 @@
 //!
 //! Exposes the TCP client for connecting to kv-server.
 
-use data_bridge_kv_client::{ClientError, KvClient, KvValue};
+use data_bridge_kv_client::{ClientError, KvClient, KvPool, KvValue, PoolConfig};
 use pyo3::exceptions::{PyConnectionError, PyKeyError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyFloat, PyInt, PyList, PyString};
@@ -112,6 +112,7 @@ fn client_error_to_py(e: ClientError) -> PyErr {
         ClientError::Protocol(e) => PyRuntimeError::new_err(format!("Protocol error: {}", e)),
         ClientError::Server(msg) => PyRuntimeError::new_err(format!("Server error: {}", msg)),
         ClientError::KeyNotFound => PyKeyError::new_err("Key not found"),
+        ClientError::Timeout => PyRuntimeError::new_err("Connection pool timeout"),
     }
 }
 
@@ -354,9 +355,245 @@ impl PyKvClient {
     }
 }
 
+/// Python pool configuration
+#[pyclass(name = "_PoolConfig")]
+#[derive(Clone)]
+pub struct PyPoolConfig {
+    inner: PoolConfig,
+}
+
+#[pymethods]
+impl PyPoolConfig {
+    #[new]
+    #[pyo3(signature = (addr, min_size=2, max_size=10, idle_timeout=300.0, acquire_timeout=5.0))]
+    fn new(addr: String, min_size: usize, max_size: usize, idle_timeout: f64, acquire_timeout: f64) -> Self {
+        Self {
+            inner: PoolConfig {
+                addr,
+                min_size,
+                max_size,
+                idle_timeout: Duration::from_secs_f64(idle_timeout),
+                acquire_timeout: Duration::from_secs_f64(acquire_timeout),
+            },
+        }
+    }
+}
+
+/// Python pool stats
+#[pyclass(name = "_PoolStats")]
+pub struct PyPoolStats {
+    #[pyo3(get)]
+    idle: usize,
+    #[pyo3(get)]
+    active: usize,
+    #[pyo3(get)]
+    max_size: usize,
+}
+
+/// Python KV pool
+#[pyclass(name = "_KvPool")]
+pub struct PyKvPool {
+    pool: Arc<KvPool>,
+    namespace: Option<String>,
+}
+
+#[pymethods]
+impl PyKvPool {
+    /// Connect to a KV server with pooling
+    #[staticmethod]
+    fn connect(py: Python<'_>, config: PyPoolConfig) -> PyResult<Bound<'_, PyAny>> {
+        let namespace = config.inner.addr.find('/').map(|i| config.inner.addr[i+1..].to_string());
+        future_into_py(py, async move {
+            let pool = KvPool::connect(config.inner).await
+                .map_err(client_error_to_py)?;
+            Ok(PyKvPool { pool, namespace })
+        })
+    }
+
+    /// Get the namespace for this pool
+    #[getter]
+    fn namespace(&self) -> Option<String> {
+        self.namespace.clone()
+    }
+
+    /// Get pool statistics
+    fn stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let stats = pool.stats().await;
+            Ok(PyPoolStats {
+                idle: stats.idle,
+                active: stats.active,
+                max_size: stats.max_size,
+            })
+        })
+    }
+
+    /// Ping the server
+    fn ping<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().ping().await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Get a value by key
+    fn get<'py>(&self, py: Python<'py>, key: String) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            let result = conn.client().get(&key).await.map_err(client_error_to_py)?;
+            Python::with_gil(|py| match result {
+                Some(value) => kv_value_to_py(py, value),
+                None => Ok(py.None()),
+            })
+        })
+    }
+
+    /// Set a value
+    #[pyo3(signature = (key, value, ttl = None))]
+    fn set<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        value: &Bound<'py, PyAny>,
+        ttl: Option<f64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kv_value = py_to_kv_value(value)?;
+        let duration = ttl.map(Duration::from_secs_f64);
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().set(&key, kv_value, duration).await.map_err(client_error_to_py)?;
+            Ok(())
+        })
+    }
+
+    /// Delete a key
+    fn delete<'py>(&self, py: Python<'py>, key: String) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().delete(&key).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Check if a key exists
+    fn exists<'py>(&self, py: Python<'py>, key: String) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().exists(&key).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Atomically increment an integer value
+    #[pyo3(signature = (key, delta = 1))]
+    fn incr<'py>(&self, py: Python<'py>, key: String, delta: i64) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().incr(&key, delta).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Atomically decrement an integer value
+    #[pyo3(signature = (key, delta = 1))]
+    fn decr<'py>(&self, py: Python<'py>, key: String, delta: i64) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().decr(&key, delta).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Get server info
+    fn info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().info().await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Set if not exists (atomic)
+    #[pyo3(signature = (key, value, ttl = None))]
+    fn setnx<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        value: &Bound<'py, PyAny>,
+        ttl: Option<f64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kv_value = py_to_kv_value(value)?;
+        let duration = ttl.map(Duration::from_secs_f64);
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().setnx(&key, kv_value, duration).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Acquire a distributed lock
+    #[pyo3(signature = (key, owner, ttl = 30.0))]
+    fn lock<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        owner: String,
+        ttl: f64,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let duration = Duration::from_secs_f64(ttl);
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().lock(&key, &owner, duration).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Release a distributed lock
+    fn unlock<'py>(&self, py: Python<'py>, key: String, owner: String) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().unlock(&key, &owner).await.map_err(client_error_to_py)
+        })
+    }
+
+    /// Extend lock TTL
+    #[pyo3(signature = (key, owner, ttl = 30.0))]
+    fn extend_lock<'py>(
+        &self,
+        py: Python<'py>,
+        key: String,
+        owner: String,
+        ttl: f64,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let duration = Duration::from_secs_f64(ttl);
+        let pool = self.pool.clone();
+
+        future_into_py(py, async move {
+            let mut conn = pool.acquire().await.map_err(client_error_to_py)?;
+            conn.client().extend_lock(&key, &owner, duration).await.map_err(client_error_to_py)
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("KvPool(namespace={:?})", self.namespace)
+    }
+}
+
 /// Register the KV module
 pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyKvClient>()?;
+    m.add_class::<PyPoolConfig>()?;
+    m.add_class::<PyPoolStats>()?;
+    m.add_class::<PyKvPool>()?;
     m.add("__doc__", "KV store client for connecting to kv-server via TCP")?;
     Ok(())
 }

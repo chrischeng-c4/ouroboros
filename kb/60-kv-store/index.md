@@ -108,6 +108,9 @@ The system employs a **Hybrid Tiered Storage Architecture** optimized for Kubern
 
 - **[Architecture Design](./01-architecture.md)**: Sharding, Tiered Storage, and Persistence details.
 - **[Data Types & API](./02-data-types-and-api.md)**: Supported types and Python/Rust API references.
+- **[KV Server](./03-kv-server.md)**: TCP server implementation with async request handling.
+- **[Connection Pool](./04-connection-pool.md)**: Thread-safe connection pooling for high-concurrency scenarios.
+- **[Protocol](./protocol.md)**: Binary wire protocol specification.
 
 ## Implementation Roadmap
 
