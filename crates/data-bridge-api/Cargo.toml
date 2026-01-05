@@ -39,6 +39,11 @@ tracing = { workspace = true }
 regex = "1"
 once_cell = "1"
 
+# Form data parsing
+multer = { workspace = true }
+urlencoding = { workspace = true }
+futures-util = { workspace = true }
+
 # Internal
 data-bridge-common = { path = "../data-bridge-common" }
 

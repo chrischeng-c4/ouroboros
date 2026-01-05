@@ -34,6 +34,32 @@ pub use data_bridge_common::http::HttpMethod;
 // Core Types
 // ============================================================================
 
+/// File uploaded in multipart form
+///
+/// All fields are `Send + Sync` for GIL-free processing.
+#[derive(Debug, Clone)]
+pub struct SerializableFile {
+    /// Field name in the form
+    pub field_name: String,
+    /// Original filename (if provided)
+    pub filename: String,
+    /// Content-Type (MIME type)
+    pub content_type: String,
+    /// File data (binary)
+    pub data: Vec<u8>,
+}
+
+/// Form data (multipart or url-encoded)
+///
+/// All fields are `Send + Sync` for GIL-free processing.
+#[derive(Debug, Clone)]
+pub struct SerializableFormData {
+    /// Simple text fields
+    pub fields: HashMap<String, String>,
+    /// File uploads
+    pub files: Vec<SerializableFile>,
+}
+
 /// Intermediate representation for request values
 ///
 /// All variants are `Send + Sync`, enabling GIL-free processing.
@@ -142,6 +168,8 @@ pub struct SerializableRequest {
     pub body: Option<SerializableValue>,
     /// Content-Type header value
     pub content_type: Option<String>,
+    /// Form data (multipart or url-encoded)
+    pub form_data: Option<SerializableFormData>,
 }
 
 impl SerializableRequest {
@@ -156,6 +184,7 @@ impl SerializableRequest {
             headers: HashMap::new(),
             body: None,
             content_type: None,
+            form_data: None,
         }
     }
 
@@ -300,12 +329,124 @@ impl Request {
     pub fn body_json(&self) -> Option<serde_json::Value> {
         self.inner.body_json()
     }
+
+    /// Get form data
+    pub fn form_data(&self) -> Option<&SerializableFormData> {
+        self.inner.form_data.as_ref()
+    }
 }
 
 impl From<SerializableRequest> for Request {
     fn from(inner: SerializableRequest) -> Self {
         Self::new(inner)
     }
+}
+
+// ============================================================================
+// Form Data Parsing
+// ============================================================================
+
+/// Parse multipart form data
+///
+/// This function processes multipart/form-data requests, extracting both
+/// text fields and file uploads. Designed for GIL-free processing.
+///
+/// # Arguments
+/// * `boundary` - Multipart boundary string (from Content-Type header)
+/// * `body_bytes` - Raw request body bytes
+///
+/// # Returns
+/// `SerializableFormData` with text fields and files
+///
+/// # Example
+/// ```rust,no_run
+/// use data_bridge_api::request::parse_multipart;
+///
+/// # async fn example() -> Result<(), String> {
+/// let boundary = "----WebKitFormBoundary".to_string();
+/// let body = b"------WebKitFormBoundary\r\n...".to_vec();
+/// let form_data = parse_multipart(boundary, body).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn parse_multipart(
+    boundary: String,
+    body_bytes: Vec<u8>,
+) -> Result<SerializableFormData, String> {
+    let stream = futures_util::stream::once(async move {
+        Ok::<_, std::io::Error>(body_bytes)
+    });
+
+    let mut multipart = multer::Multipart::new(stream, boundary);
+
+    let mut fields = HashMap::new();
+    let mut files = Vec::new();
+
+    while let Some(field) = multipart.next_field().await.map_err(|e| e.to_string())? {
+        let name = field.name()
+            .ok_or("Missing field name")?
+            .to_string();
+
+        if let Some(filename) = field.file_name() {
+            // File field - clone filename before consuming field
+            let filename = filename.to_string();
+            let content_type = field.content_type()
+                .map(|m| m.to_string())
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let data = field.bytes().await.map_err(|e| e.to_string())?;
+
+            files.push(SerializableFile {
+                field_name: name,
+                filename,
+                content_type,
+                data: data.to_vec(),
+            });
+        } else {
+            // Text field
+            let value = field.text().await.map_err(|e| e.to_string())?;
+            fields.insert(name, value);
+        }
+    }
+
+    Ok(SerializableFormData { fields, files })
+}
+
+/// Parse application/x-www-form-urlencoded data
+///
+/// This function decodes URL-encoded form data into key-value pairs.
+/// Designed for GIL-free processing.
+///
+/// # Arguments
+/// * `body` - Raw request body bytes
+///
+/// # Returns
+/// HashMap with decoded field names and values
+///
+/// # Example
+/// ```rust
+/// use data_bridge_api::request::parse_urlencoded;
+///
+/// # fn example() -> Result<(), String> {
+/// let body = b"name=Alice&age=30&city=New%20York";
+/// let fields = parse_urlencoded(body)?;
+/// assert_eq!(fields.get("name"), Some(&"Alice".to_string()));
+/// assert_eq!(fields.get("city"), Some(&"New York".to_string()));
+/// # Ok(())
+/// # }
+/// ```
+pub fn parse_urlencoded(body: &[u8]) -> Result<HashMap<String, String>, String> {
+    let text = std::str::from_utf8(body).map_err(|e| e.to_string())?;
+    let mut fields = HashMap::new();
+
+    for pair in text.split('&') {
+        if let Some((key, value)) = pair.split_once('=') {
+            let key = urlencoding::decode(key).map_err(|e| e.to_string())?.to_string();
+            let value = urlencoding::decode(value).map_err(|e| e.to_string())?.to_string();
+            fields.insert(key, value);
+        }
+    }
+
+    Ok(fields)
 }
 
 #[cfg(test)]
@@ -428,5 +569,210 @@ mod tests {
         use base64::Engine;
         let decoded = base64::engine::general_purpose::STANDARD.decode(encoded).unwrap();
         assert_eq!(decoded, bytes);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_basic() {
+        let body = b"name=Alice&age=30&city=New%20York";
+        let fields = parse_urlencoded(body).unwrap();
+
+        assert_eq!(fields.get("name"), Some(&"Alice".to_string()));
+        assert_eq!(fields.get("age"), Some(&"30".to_string()));
+        assert_eq!(fields.get("city"), Some(&"New York".to_string()));
+    }
+
+    #[test]
+    fn test_parse_urlencoded_empty() {
+        let body = b"";
+        let fields = parse_urlencoded(body).unwrap();
+        assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn test_parse_urlencoded_special_chars() {
+        let body = b"email=test%40example.com&message=Hello%21%20World";
+        let fields = parse_urlencoded(body).unwrap();
+
+        assert_eq!(fields.get("email"), Some(&"test@example.com".to_string()));
+        assert_eq!(fields.get("message"), Some(&"Hello! World".to_string()));
+    }
+
+    #[test]
+    fn test_parse_urlencoded_invalid_utf8() {
+        let body = &[0xFF, 0xFE, 0xFD];
+        let result = parse_urlencoded(body);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_parse_multipart_text_fields() {
+        let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+        let body = b"\
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"name\"\r
+\r
+Alice\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"age\"\r
+\r
+30\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW--\r
+";
+
+        let form_data = parse_multipart(boundary.to_string(), body.to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(form_data.fields.get("name"), Some(&"Alice".to_string()));
+        assert_eq!(form_data.fields.get("age"), Some(&"30".to_string()));
+        assert!(form_data.files.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_parse_multipart_file_upload() {
+        let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+        let body = b"\
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"document\"; filename=\"test.txt\"\r
+Content-Type: text/plain\r
+\r
+Hello, World!\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW--\r
+";
+
+        let form_data = parse_multipart(boundary.to_string(), body.to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(form_data.files.len(), 1);
+        assert!(form_data.fields.is_empty());
+
+        let file = &form_data.files[0];
+        assert_eq!(file.field_name, "document");
+        assert_eq!(file.filename, "test.txt");
+        assert_eq!(file.content_type, "text/plain");
+        assert_eq!(file.data, b"Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_parse_multipart_mixed_fields_and_files() {
+        let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+        let body = b"\
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"title\"\r
+\r
+My Document\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"file\"; filename=\"data.bin\"\r
+Content-Type: application/octet-stream\r
+\r
+\x00\x01\x02\x03\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"description\"\r
+\r
+Important file\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW--\r
+";
+
+        let form_data = parse_multipart(boundary.to_string(), body.to_vec())
+            .await
+            .unwrap();
+
+        // Check text fields
+        assert_eq!(form_data.fields.get("title"), Some(&"My Document".to_string()));
+        assert_eq!(form_data.fields.get("description"), Some(&"Important file".to_string()));
+
+        // Check file
+        assert_eq!(form_data.files.len(), 1);
+        let file = &form_data.files[0];
+        assert_eq!(file.field_name, "file");
+        assert_eq!(file.filename, "data.bin");
+        assert_eq!(file.content_type, "application/octet-stream");
+        assert_eq!(file.data, vec![0, 1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_parse_multipart_multiple_files() {
+        let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+        let body = b"\
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"file1\"; filename=\"a.txt\"\r
+Content-Type: text/plain\r
+\r
+Content A\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"file2\"; filename=\"b.txt\"\r
+Content-Type: text/plain\r
+\r
+Content B\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW--\r
+";
+
+        let form_data = parse_multipart(boundary.to_string(), body.to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(form_data.files.len(), 2);
+        assert!(form_data.fields.is_empty());
+
+        // Files should be in order
+        assert_eq!(form_data.files[0].filename, "a.txt");
+        assert_eq!(form_data.files[0].data, b"Content A");
+        assert_eq!(form_data.files[1].filename, "b.txt");
+        assert_eq!(form_data.files[1].data, b"Content B");
+    }
+
+    #[tokio::test]
+    async fn test_parse_multipart_file_without_content_type() {
+        let boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+        let body = b"\
+------WebKitFormBoundary7MA4YWxkTrZu0gW\r
+Content-Disposition: form-data; name=\"upload\"; filename=\"file.dat\"\r
+\r
+Binary data\r
+------WebKitFormBoundary7MA4YWxkTrZu0gW--\r
+";
+
+        let form_data = parse_multipart(boundary.to_string(), body.to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(form_data.files.len(), 1);
+        let file = &form_data.files[0];
+        // Should default to application/octet-stream
+        assert_eq!(file.content_type, "application/octet-stream");
+    }
+
+    #[test]
+    fn test_serializable_file_is_send_sync() {
+        // Compile-time check that SerializableFile is Send + Sync
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SerializableFile>();
+    }
+
+    #[test]
+    fn test_serializable_form_data_is_send_sync() {
+        // Compile-time check that SerializableFormData is Send + Sync
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SerializableFormData>();
+    }
+
+    #[test]
+    fn test_request_with_form_data() {
+        let form_data = SerializableFormData {
+            fields: {
+                let mut map = HashMap::new();
+                map.insert("name".to_string(), "Alice".to_string());
+                map
+            },
+            files: vec![],
+        };
+
+        let mut req = SerializableRequest::new(HttpMethod::Post, "/api/upload");
+        req.form_data = Some(form_data);
+
+        let request = Request::new(req);
+        let retrieved_form = request.form_data().unwrap();
+        assert_eq!(retrieved_form.fields.get("name"), Some(&"Alice".to_string()));
     }
 }

@@ -24,6 +24,7 @@ from .openapi import generate_openapi, get_swagger_ui_html, get_redoc_html
 from .http_integration import HttpClientProvider
 from .health import HealthManager
 from .middleware import MiddlewareStack, BaseMiddleware
+from .forms import FormMarker, FileMarker, UploadFile
 
 # Import Rust bindings
 try:
@@ -76,6 +77,9 @@ class App:
         @app.get("/users/{user_id}")
         async def get_user(user_id: str) -> User:
             return await User.get(user_id)
+
+        # Run the app (for local development)
+        app.run(host="0.0.0.0", port=8000)
     """
 
     def __init__(
@@ -671,6 +675,112 @@ class App:
         """
         self._middleware_stack.add(middleware)
 
+    async def _parse_form_data(self, request: Any) -> Optional[Dict[str, Any]]:
+        """Parse form data from request (delegated to Rust).
+
+        This method will be called by the Rust engine when processing
+        multipart/form-data or application/x-www-form-urlencoded requests.
+
+        Args:
+            request: Request object from Rust engine
+
+        Returns:
+            Dictionary containing:
+                - fields: Dict[str, str] for text fields
+                - files: List[Dict] for uploaded files, each with:
+                    - field_name: Form field name
+                    - filename: Original filename
+                    - content_type: MIME type
+                    - data: File contents as bytes
+
+        Note:
+            This is a stub implementation. The actual parsing will be
+            implemented in the Rust layer for performance.
+
+        Example:
+            form_data = await app._parse_form_data(request)
+            if form_data:
+                name = form_data["fields"].get("name")
+                files = form_data["files"]
+        """
+        # TODO: Call Rust engine to parse multipart/urlencoded
+        # For now, return None (will implement Rust binding later)
+        return None
+
+    def _resolve_form_parameters(
+        self,
+        handler: Callable,
+        form_fields: Dict[str, str],
+        uploaded_files: Dict[str, UploadFile],
+    ) -> Dict[str, Any]:
+        """Resolve form field and file upload parameters for a handler.
+
+        Inspects the handler signature for Form and File markers and
+        extracts the corresponding values from form data.
+
+        Args:
+            handler: Handler function to resolve parameters for
+            form_fields: Text form fields (name -> value)
+            uploaded_files: Uploaded files (field_name -> UploadFile)
+
+        Returns:
+            Dictionary mapping parameter names to resolved values
+
+        Example:
+            kwargs = app._resolve_form_parameters(
+                handler,
+                {"name": "John", "email": "john@example.com"},
+                {"avatar": UploadFile(...)}
+            )
+            # kwargs = {"name": "John", "email": "john@example.com", "avatar": UploadFile(...)}
+        """
+        sig = inspect.signature(handler)
+        kwargs: Dict[str, Any] = {}
+
+        for param_name, param in sig.parameters.items():
+            # Check for Form marker
+            if isinstance(param.default, FormMarker):
+                if param_name in form_fields:
+                    # Type conversion based on annotation
+                    value = form_fields[param_name]
+                    if param.annotation != inspect.Parameter.empty:
+                        # Try to convert to the annotated type
+                        try:
+                            # Handle Optional types
+                            origin = get_origin(param.annotation)
+                            if origin is Union:
+                                # Get the non-None type from Optional
+                                args = get_args(param.annotation)
+                                target_type = next(
+                                    (arg for arg in args if arg is not type(None)),
+                                    str
+                                )
+                            else:
+                                target_type = param.annotation
+
+                            # Convert string to target type
+                            if target_type in (int, float, bool):
+                                value = target_type(value)
+                        except (ValueError, TypeError):
+                            # Keep as string if conversion fails
+                            pass
+                    kwargs[param_name] = value
+                elif param.default.default is not ...:
+                    # Use default value
+                    kwargs[param_name] = param.default.default
+                # else: required field missing, will be caught by handler
+
+            # Check for File marker
+            elif isinstance(param.default, FileMarker):
+                if param_name in uploaded_files:
+                    kwargs[param_name] = uploaded_files[param_name]
+                elif param.default.default is not ...:
+                    # Use default value
+                    kwargs[param_name] = param.default.default
+                # else: required file missing, will be caught by handler
+
+        return kwargs
+
     @asynccontextmanager
     async def lifespan_context(self) -> AsyncGenerator[None, None]:
         """Context manager for application lifespan.
@@ -724,6 +834,62 @@ class App:
         finally:
             # Run shutdown hooks
             await self.shutdown()
+
+    def run(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8000,
+        reload: bool = False,
+        workers: int = 1,
+        log_level: str = "info",
+        access_log: bool = True,
+        **kwargs
+    ) -> None:
+        """Run the application using uvicorn (for local development).
+
+        This is a convenience method for local development. In production,
+        run the app directly with uvicorn CLI or use a process manager.
+
+        Args:
+            host: Bind host (default: 127.0.0.1)
+            port: Bind port (default: 8000)
+            reload: Enable auto-reload on code changes (default: False)
+            workers: Number of worker processes (default: 1)
+            log_level: Logging level (default: "info")
+            access_log: Enable access logging (default: True)
+            **kwargs: Additional uvicorn config options
+
+        Example:
+            >>> app = App(title="My API")
+            >>> app.run(host="0.0.0.0", port=3000, reload=True)
+
+        Note:
+            In K8s/container environments, prefer running uvicorn directly:
+            $ uvicorn app:app --host 0.0.0.0 --port 8000
+        """
+        try:
+            import uvicorn
+        except ImportError:
+            raise ImportError(
+                "uvicorn is required to run the app. Install with: pip install uvicorn"
+            )
+
+        # Setup signal handlers for graceful shutdown
+        setup_signal_handlers(self)
+
+        # Build uvicorn config
+        config = {
+            "host": host,
+            "port": port,
+            "reload": reload,
+            "workers": workers,
+            "log_level": log_level,
+            "access_log": access_log,
+            **kwargs
+        }
+
+        # Run with uvicorn
+        uvicorn.run(self, **config)
 
 
 def setup_signal_handlers(app: "App") -> None:

@@ -24,6 +24,7 @@ from .http_integration import HttpClientProvider, create_http_client
 from .health import HealthManager, HealthCheck, HealthStatus
 from .middleware import BaseMiddleware, MiddlewareStack, TimingMiddleware, LoggingMiddleware, CORSMiddleware, CORSConfig
 from .background import BackgroundTasks, get_background_tasks
+from .forms import Form, File, UploadFile, FormMarker, FileMarker
 
 __all__ = [
     # Core
@@ -66,4 +67,10 @@ __all__ = [
     # Background Tasks
     "BackgroundTasks",
     "get_background_tasks",
+    # Forms and File Uploads
+    "Form",
+    "File",
+    "UploadFile",
+    "FormMarker",
+    "FileMarker",
 ]
