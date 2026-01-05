@@ -246,6 +246,21 @@ class Table(metaclass=TableMeta):
         if name.startswith("_") or name == "id":
             super().__setattr__(name, value)
         else:
+            # Check if this is a descriptor with __set__ method
+            # This allows hybrid_property setters, computed columns to raise errors, etc.
+            # We need to check __dict__ directly to avoid calling __get__ which may
+            # return a SQL expression for hybrid properties
+            for cls in type(self).__mro__:
+                if name in cls.__dict__:
+                    descriptor = cls.__dict__[name]
+                    if hasattr(descriptor, "__set__"):
+                        # Call the descriptor's __set__ method
+                        # If it raises an error, let it propagate
+                        descriptor.__set__(self, value)
+                        return
+                    break
+
+            # Normal attribute - store in _data
             if "_data" not in self.__dict__:
                 self.__dict__["_data"] = {}
             self._data[name] = value

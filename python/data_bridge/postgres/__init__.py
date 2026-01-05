@@ -39,6 +39,12 @@ from .inheritance import (
     get_inheritance_type, get_discriminator_column, get_discriminator_value,
     register_polymorphic_class, get_polymorphic_map
 )
+from .computed import (
+    hybrid_property, hybrid_method, column_property, Computed,
+    default_factory,
+    HybridPropertyDescriptor, HybridMethodDescriptor,
+    ColumnPropertyDescriptor, ComputedColumn
+)
 
 __all__ = [
     # Base class
@@ -144,4 +150,14 @@ __all__ = [
     "get_discriminator_value",
     "register_polymorphic_class",
     "get_polymorphic_map",
+    # Computed Attributes
+    "hybrid_property",
+    "hybrid_method",
+    "column_property",
+    "Computed",
+    "default_factory",
+    "HybridPropertyDescriptor",
+    "HybridMethodDescriptor",
+    "ColumnPropertyDescriptor",
+    "ComputedColumn",
 ]

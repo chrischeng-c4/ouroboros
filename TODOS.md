@@ -372,7 +372,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-INHERIT-04 | Polymorphic loading | Load mixed types from one query |
 | P5-INHERIT-05 | Discriminator column | `type` column for class discrimination |
 
-### P5-COMPUTED: Computed Attributes
+### P5-COMPUTED: Computed Attributes (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
