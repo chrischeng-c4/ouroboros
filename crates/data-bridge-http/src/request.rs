@@ -32,7 +32,7 @@ impl HttpMethod {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> HttpResult<Self> {
+    pub fn parse_method(s: &str) -> HttpResult<Self> {
         match s.to_uppercase().as_str() {
             "GET" => Ok(HttpMethod::Get),
             "POST" => Ok(HttpMethod::Post),
@@ -324,9 +324,9 @@ mod tests {
 
     #[test]
     fn test_http_method_from_str() {
-        assert_eq!(HttpMethod::from_str("GET").unwrap(), HttpMethod::Get);
-        assert_eq!(HttpMethod::from_str("post").unwrap(), HttpMethod::Post);
-        assert!(HttpMethod::from_str("INVALID").is_err());
+        assert_eq!(HttpMethod::parse_method("GET").unwrap(), HttpMethod::Get);
+        assert_eq!(HttpMethod::parse_method("post").unwrap(), HttpMethod::Post);
+        assert!(HttpMethod::parse_method("INVALID").is_err());
     }
 
     #[test]
