@@ -11,7 +11,44 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::io;
 use chrono::Utc;
-use crate::benchmark::{BenchmarkResult, BenchmarkEnvironment};
+use crate::benchmark::{BenchmarkResult, BenchmarkEnvironment, BenchmarkStats};
+
+/// Percentile to use for regression detection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PercentileType {
+    Mean,
+    P50,
+    P95,
+    P99,
+    P999,
+    P9999,
+}
+
+impl PercentileType {
+    /// Extract the specified percentile value from BenchmarkStats
+    pub fn extract_value(&self, stats: &BenchmarkStats) -> f64 {
+        match self {
+            PercentileType::Mean => stats.mean_ms,
+            PercentileType::P50 => stats.median_ms,
+            PercentileType::P95 => stats.p95_ms,
+            PercentileType::P99 => stats.p99_ms,
+            PercentileType::P999 => stats.p999_ms,
+            PercentileType::P9999 => stats.p9999_ms,
+        }
+    }
+
+    /// Get display name
+    pub fn name(&self) -> &'static str {
+        match self {
+            PercentileType::Mean => "Mean",
+            PercentileType::P50 => "P50",
+            PercentileType::P95 => "P95",
+            PercentileType::P99 => "P99",
+            PercentileType::P999 => "P999",
+            PercentileType::P9999 => "P9999",
+        }
+    }
+}
 
 /// Metadata for a baseline snapshot
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +96,8 @@ pub struct RegressionThresholds {
     pub ci_overlap_required: bool,
     /// Minimum number of samples required for comparison
     pub min_samples_for_comparison: u32,
+    /// Which percentile to compare (default: Mean)
+    pub percentile_type: PercentileType,
 }
 
 impl Default for RegressionThresholds {
@@ -68,7 +107,16 @@ impl Default for RegressionThresholds {
             failure_threshold_percent: 15.0,
             ci_overlap_required: false,
             min_samples_for_comparison: 3,
+            percentile_type: PercentileType::Mean,
         }
+    }
+}
+
+impl RegressionThresholds {
+    /// Set which percentile to use for regression detection
+    pub fn with_percentile(mut self, percentile: PercentileType) -> Self {
+        self.percentile_type = percentile;
+        self
     }
 }
 
@@ -88,10 +136,12 @@ pub enum RegressionSeverity {
 pub struct Regression {
     /// Name of the benchmark
     pub name: String,
-    /// Baseline mean time in milliseconds
-    pub baseline_mean_ms: f64,
-    /// Current mean time in milliseconds
-    pub current_mean_ms: f64,
+    /// Which percentile was used for comparison
+    pub percentile_type: PercentileType,
+    /// Baseline value in milliseconds
+    pub baseline_value_ms: f64,
+    /// Current value in milliseconds
+    pub current_value_ms: f64,
     /// Percentage change (positive = slower)
     pub percent_change: f64,
     /// Whether confidence intervals overlap
@@ -330,13 +380,19 @@ impl RegressionDetector {
             if let Some(baseline_result) =
                 baseline.benchmarks.iter().find(|b| b.name == current_result.name) {
 
-                let baseline_mean = baseline_result.stats.mean_ms;
-                let current_mean = current_result.stats.mean_ms;
-                let percent_change = ((current_mean - baseline_mean) / baseline_mean) * 100.0;
+                // Extract values using configured percentile
+                let baseline_value = thresholds.percentile_type.extract_value(&baseline_result.stats);
+                let current_value = thresholds.percentile_type.extract_value(&current_result.stats);
 
-                // Check CI overlap
-                let ci_overlap = !(baseline_result.stats.ci_upper_ms < current_result.stats.ci_lower_ms
-                    || baseline_result.stats.ci_lower_ms > current_result.stats.ci_upper_ms);
+                let percent_change = ((current_value - baseline_value) / baseline_value) * 100.0;
+
+                // Check CI overlap (only applicable for mean/p50 that have CI)
+                let ci_overlap = if matches!(thresholds.percentile_type, PercentileType::Mean | PercentileType::P50) {
+                    !(baseline_result.stats.ci_upper_ms < current_result.stats.ci_lower_ms
+                        || baseline_result.stats.ci_lower_ms > current_result.stats.ci_upper_ms)
+                } else {
+                    false  // No CI for high percentiles
+                };
 
                 if percent_change > thresholds.warning_threshold_percent {
                     if !ci_overlap || !thresholds.ci_overlap_required {
@@ -350,8 +406,9 @@ impl RegressionDetector {
 
                         regressions.push(Regression {
                             name: current_result.name.clone(),
-                            baseline_mean_ms: baseline_mean,
-                            current_mean_ms: current_mean,
+                            percentile_type: thresholds.percentile_type,
+                            baseline_value_ms: baseline_value,
+                            current_value_ms: current_value,
                             percent_change,
                             ci_overlap,
                             severity,
@@ -362,8 +419,8 @@ impl RegressionDetector {
                 } else if percent_change < -2.0 {
                     improvements.push(Improvement {
                         name: current_result.name.clone(),
-                        baseline_mean_ms: baseline_mean,
-                        current_mean_ms: current_mean,
+                        baseline_mean_ms: baseline_value,
+                        current_mean_ms: current_value,
                         percent_change,
                     });
                 } else {
@@ -410,6 +467,49 @@ mod tests {
                 p75_ms: mean_ms * 1.05,
                 p95_ms: mean_ms * 1.08,
                 p99_ms: mean_ms * 1.10,
+                p999_ms: mean_ms * 1.11,
+                p9999_ms: mean_ms * 1.12,
+                tail_latency_ratio: 1.10 / 1.0, // p99/p50
+                histogram: vec![],
+                iqr_ms: mean_ms * 0.1,
+                outliers: 0,
+                outliers_low: 0,
+                outliers_high: 0,
+                std_error_ms: std_dev / 10f64.sqrt(),
+                ci_lower_ms: mean_ms - 1.96 * std_dev / 10f64.sqrt(),
+                ci_upper_ms: mean_ms + 1.96 * std_dev / 10f64.sqrt(),
+                all_times_ms: vec![mean_ms; 10],
+                adaptive_stopped_early: false,
+                adaptive_reason: None,
+                adaptive_iterations_used: 10,
+            },
+            success: true,
+            error: None,
+        }
+    }
+
+    fn create_test_result_with_percentiles(name: &str, mean_ms: f64, std_dev: f64, p95_ms: f64, p99_ms: f64) -> BenchmarkResult {
+        BenchmarkResult {
+            name: name.to_string(),
+            stats: BenchmarkStats {
+                iterations: 10,
+                rounds: 1,
+                warmup: 0,
+                total_runs: 10,
+                mean_ms,
+                min_ms: mean_ms * 0.9,
+                max_ms: mean_ms * 1.1,
+                stddev_ms: std_dev,
+                median_ms: mean_ms,
+                total_ms: mean_ms * 10.0,
+                p25_ms: mean_ms * 0.95,
+                p75_ms: mean_ms * 1.05,
+                p95_ms,
+                p99_ms,
+                p999_ms: p99_ms * 1.01,
+                p9999_ms: p99_ms * 1.02,
+                tail_latency_ratio: p99_ms / mean_ms,
+                histogram: vec![],
                 iqr_ms: mean_ms * 0.1,
                 outliers: 0,
                 outliers_low: 0,
@@ -486,5 +586,62 @@ mod tests {
     fn test_baseline_store_default() {
         let store = FileBaselineStore::default_store();
         assert_eq!(store.base_dir, PathBuf::from(".baselines"));
+    }
+
+    #[test]
+    fn test_percentile_regression_detection() {
+        let baseline = BaselineSnapshot {
+            metadata: BaselineMetadata {
+                version: "1.0".to_string(),
+                timestamp: "2026-01-01T00:00:00Z".to_string(),
+                git_metadata: None,
+                environment: BenchmarkEnvironment::default(),
+            },
+            benchmarks: vec![
+                create_test_result_with_percentiles("test1", 10.0, 1.0, 15.0, 20.0),  // mean=10, p95=15, p99=20
+            ],
+        };
+
+        // P99 regressed significantly (20 → 30 = 50% increase)
+        // Mean stayed same (10 → 10 = 0%)
+        let current = vec![create_test_result_with_percentiles("test1", 10.0, 1.0, 15.0, 30.0)];
+
+        // Test mean-based: no regression
+        let mean_thresholds = RegressionThresholds::default()
+            .with_percentile(PercentileType::Mean);
+        let mean_report = RegressionDetector::detect_regressions(&baseline, &current, &mean_thresholds);
+        assert_eq!(mean_report.regressions.len(), 0);
+
+        // Test p99-based: regression detected
+        let p99_thresholds = RegressionThresholds::default()
+            .with_percentile(PercentileType::P99);
+        let p99_report = RegressionDetector::detect_regressions(&baseline, &current, &p99_thresholds);
+        assert_eq!(p99_report.regressions.len(), 1);
+        assert_eq!(p99_report.regressions[0].severity, RegressionSeverity::Severe);
+        assert_eq!(p99_report.regressions[0].percentile_type, PercentileType::P99);
+        assert!((p99_report.regressions[0].baseline_value_ms - 20.0).abs() < 0.01);
+        assert!((p99_report.regressions[0].current_value_ms - 30.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_percentile_type_extraction() {
+        let result = create_test_result_with_percentiles("test", 10.0, 1.0, 15.0, 20.0);
+
+        assert!((PercentileType::Mean.extract_value(&result.stats) - 10.0).abs() < 0.01);
+        assert!((PercentileType::P50.extract_value(&result.stats) - 10.0).abs() < 0.01);
+        assert!((PercentileType::P95.extract_value(&result.stats) - 15.0).abs() < 0.01);
+        assert!((PercentileType::P99.extract_value(&result.stats) - 20.0).abs() < 0.01);
+        assert!((PercentileType::P999.extract_value(&result.stats) - 20.2).abs() < 0.01);
+        assert!((PercentileType::P9999.extract_value(&result.stats) - 20.4).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_percentile_type_names() {
+        assert_eq!(PercentileType::Mean.name(), "Mean");
+        assert_eq!(PercentileType::P50.name(), "P50");
+        assert_eq!(PercentileType::P95.name(), "P95");
+        assert_eq!(PercentileType::P99.name(), "P99");
+        assert_eq!(PercentileType::P999.name(), "P999");
+        assert_eq!(PercentileType::P9999.name(), "P9999");
     }
 }

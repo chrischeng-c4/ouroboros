@@ -33,7 +33,7 @@ pub mod security;
 pub use assertions::{expect, Expectation, AssertionError, AssertionResult};
 pub use baseline::{
     BaselineMetadata, BaselineSnapshot, FileBaselineStore, GitMetadata,
-    Improvement, Regression, RegressionDetector, RegressionReport,
+    Improvement, PercentileType, Regression, RegressionDetector, RegressionReport,
     RegressionSeverity, RegressionSummary, RegressionThresholds,
 };
 pub use benchmark::{

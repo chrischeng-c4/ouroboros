@@ -1,5 +1,5 @@
 use data_bridge_test::baseline::{
-    FileBaselineStore, RegressionDetector, RegressionThresholds,
+    FileBaselineStore, RegressionDetector, RegressionThresholds, PercentileType,
 };
 use data_bridge_test::benchmark::{Benchmarker, BenchmarkEnvironment, AdaptiveBenchmarkConfig};
 use std::thread;
@@ -66,6 +66,8 @@ fn main() {
     println!("Comparing against baseline...");
     match store.load_baseline("demo", "latest") {
         Ok(baseline) => {
+            // Mean-based regression detection
+            println!("\n=== Mean-based Regression Report ===");
             let thresholds = RegressionThresholds::default();
             let report = RegressionDetector::detect_regressions(
                 &baseline,
@@ -73,7 +75,6 @@ fn main() {
                 &thresholds,
             );
 
-            println!("\n=== Regression Report ===");
             println!("Total benchmarks: {}", report.summary.total_benchmarks);
             println!("Regressions found: {}", report.summary.regressions_found);
             println!("Improvements found: {}", report.summary.improvements_found);
@@ -85,8 +86,8 @@ fn main() {
                     println!("  - {} ({:?}): {:.1}ms → {:.1}ms ({:+.1}%)",
                         reg.name,
                         reg.severity,
-                        reg.baseline_mean_ms,
-                        reg.current_mean_ms,
+                        reg.baseline_value_ms,
+                        reg.current_value_ms,
                         reg.percent_change
                     );
                 }
@@ -103,6 +104,59 @@ fn main() {
                         imp.percent_change.abs()
                     );
                 }
+                println!();
+            }
+
+            // P99-based regression detection
+            println!("=== P99 Regression Detection ===");
+            let p99_thresholds = RegressionThresholds::default()
+                .with_percentile(PercentileType::P99);
+
+            let p99_report = RegressionDetector::detect_regressions(
+                &baseline,
+                &new_results,
+                &p99_thresholds,
+            );
+
+            println!("Checking P99 latencies...");
+            if !p99_report.regressions.is_empty() {
+                println!("⚠️  P99 Regressions:");
+                for reg in &p99_report.regressions {
+                    println!("  - {}: {:.1}ms → {:.1}ms ({:+.1}%)",
+                        reg.name,
+                        reg.baseline_value_ms,
+                        reg.current_value_ms,
+                        reg.percent_change
+                    );
+                }
+            } else {
+                println!("✅ No P99 regressions detected");
+            }
+
+            // P95-based regression detection
+            println!("\n=== P95 Regression Detection ===");
+            let p95_thresholds = RegressionThresholds::default()
+                .with_percentile(PercentileType::P95);
+
+            let p95_report = RegressionDetector::detect_regressions(
+                &baseline,
+                &new_results,
+                &p95_thresholds,
+            );
+
+            println!("Checking P95 latencies...");
+            if !p95_report.regressions.is_empty() {
+                println!("⚠️  P95 Regressions:");
+                for reg in &p95_report.regressions {
+                    println!("  - {}: {:.1}ms → {:.1}ms ({:+.1}%)",
+                        reg.name,
+                        reg.baseline_value_ms,
+                        reg.current_value_ms,
+                        reg.percent_change
+                    );
+                }
+            } else {
+                println!("✅ No P95 regressions detected");
             }
         }
         Err(e) => eprintln!("❌ Failed to load baseline: {}", e),
