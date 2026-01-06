@@ -2,14 +2,14 @@
 
 **Component**: PostgreSQL Solution
 **Status**: Planning & Implementation
-**Total Documentation**: 3,792 lines across 12 files
+**Total Documentation**: 4,242 lines across 13 files
 **Last Updated**: 2026-01-06
 
 ---
 
 ## Overview
 
-This knowledge base contains comprehensive documentation for the data-bridge PostgreSQL solution - a high-performance, SQLAlchemy-compatible ORM backed by a Rust engine. The documentation covers architecture, implementation, security, operations, and safety guidelines following the proven patterns from the MongoDB implementation.
+This knowledge base contains comprehensive documentation for the data-bridge PostgreSQL solution - a high-performance, SQLAlchemy-compatible ORM backed by a Rust engine. The documentation covers architecture, implementation, security, operations, observability, and safety guidelines following the proven patterns from the MongoDB implementation.
 
 **Key Principles**:
 - Zero Python Byte Handling: All SQL execution in Rust
@@ -29,8 +29,9 @@ This knowledge base contains comprehensive documentation for the data-bridge Pos
 - [Core Engine Index](./01-core-engine/index.md) - Rust engine overview
 - [Python API Index](./02-python-api/index.md) - Python layer documentation
 
-### Operations & Safety
+### Operations & Observability
 - [Logging](./operations/LOGGING.md) - Audit trail implementation
+- [OpenTelemetry](./operations/OPENTELEMETRY.md) - Distributed tracing guide
 - [Panic Safety](./safety/PANIC_SAFETY.md) - FFI boundary protection
 
 ### Security
@@ -181,6 +182,29 @@ Comprehensive logging strategy using the `tracing` crate:
 - Security audit trail
 - No sensitive data leakage
 
+#### [operations/OPENTELEMETRY.md](./operations/OPENTELEMETRY.md)
+**Lines**: 450 | **Purpose**: OpenTelemetry distributed tracing integration
+
+Built-in OpenTelemetry support for observability:
+- Automatic instrumentation (queries, sessions, relationships)
+- N+1 query detection patterns
+- OTLP backend integration (Jaeger, Grafana, DataDog)
+- Zero overhead when disabled
+- Production-ready configuration examples
+
+**Instrumented Operations**:
+- Queries: find(), count(), aggregate(), exists(), first()
+- Sessions: flush(), commit(), rollback()
+- Relationships: Lazy and eager loading
+- Connection pool metrics
+
+**Features**:
+- Quick 5-minute setup guide
+- Sampling strategies by traffic volume
+- Performance considerations (~1-2ms overhead)
+- Troubleshooting common issues
+- FastAPI integration example
+
 ---
 
 ### 4. Safety
@@ -322,7 +346,8 @@ kb/40-postgres/
 │   └── index.md                      # Python API overview (408 lines)
 │
 ├── operations/                       # Operational documentation
-│   └── LOGGING.md                    # Logging implementation (139 lines)
+│   ├── LOGGING.md                    # Logging implementation (139 lines)
+│   └── OPENTELEMETRY.md              # OpenTelemetry integration (450 lines)
 │
 ├── safety/                           # Safety and reliability
 │   └── PANIC_SAFETY.md               # FFI panic protection (209 lines)
@@ -333,7 +358,7 @@ kb/40-postgres/
     └── SQL_INJECTION_AUDIT.md        # Security audit (283 lines)
 ```
 
-**Total**: 3,792 lines across 12 files
+**Total**: 4,242 lines across 13 files
 
 ---
 
@@ -351,6 +376,7 @@ kb/40-postgres/
 
 ### For DevOps
 - **Logging**: [operations/LOGGING.md](./operations/LOGGING.md) → Audit trail setup
+- **Tracing**: [operations/OPENTELEMETRY.md](./operations/OPENTELEMETRY.md) → Distributed tracing
 - **Passwords**: [security/PASSWORD_SECURITY.md](./security/PASSWORD_SECURITY.md) → Secret management
 - **Error Messages**: [security/SECURITY_ERROR_MESSAGES.md](./security/SECURITY_ERROR_MESSAGES.md) → Production config
 
@@ -367,10 +393,10 @@ kb/40-postgres/
 |----------|-------|-------|--------|
 | Planning | 2 | 912 | In Progress |
 | Architecture | 5 | 2,060 | Planning |
-| Operations | 1 | 139 | Implemented |
+| Operations | 2 | 589 | Implemented |
 | Safety | 1 | 209 | Implemented |
 | Security | 3 | 686 | Implemented |
-| **Total** | **12** | **3,792** | **Active** |
+| **Total** | **13** | **4,242** | **Active** |
 
 ---
 
