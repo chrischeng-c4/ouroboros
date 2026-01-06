@@ -31,6 +31,14 @@ from .events import (
     before_flush, after_commit,
     AttributeEvents
 )
+from .telemetry import (
+    is_tracing_enabled, get_tracer, get_meter,
+    SpanAttributes, MetricNames,
+    create_query_span, create_session_span, create_relationship_span,
+    add_exception, set_span_result,
+    instrument_span, instrument_query, instrument_session,
+    ConnectionPoolMetrics, get_connection_pool_metrics
+)
 
 __all__ = [
     # Base class
@@ -123,4 +131,20 @@ __all__ = [
     "Point",
     "GeoQuery",
     "ArrayOps",
+    # OpenTelemetry Integration
+    "is_tracing_enabled",
+    "get_tracer",
+    "get_meter",
+    "SpanAttributes",
+    "MetricNames",
+    "create_query_span",
+    "create_session_span",
+    "create_relationship_span",
+    "add_exception",
+    "set_span_result",
+    "instrument_span",
+    "instrument_query",
+    "instrument_session",
+    "ConnectionPoolMetrics",
+    "get_connection_pool_metrics",
 ]
