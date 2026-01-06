@@ -233,6 +233,18 @@ impl Shard {
             _ => Ok(false), // Lock not held or expired
         }
     }
+
+    /// Export all entries (for persistence/snapshots)
+    pub fn export_all(&self) -> HashMap<String, Entry> {
+        let guard = self.data.read();
+        guard.clone()
+    }
+
+    /// Import entries (for recovery from snapshots)
+    pub fn import_all(&self, entries: HashMap<String, Entry>) {
+        let mut guard = self.data.write();
+        guard.extend(entries);
+    }
 }
 
 impl Default for Shard {
@@ -245,6 +257,8 @@ impl Default for Shard {
 pub struct KvEngine {
     shards: Vec<Shard>,
     num_shards: usize,
+    /// Optional persistence handle for WAL and snapshots
+    persistence: Option<std::sync::Arc<crate::persistence::handle::PersistenceHandle>>,
 }
 
 impl KvEngine {
@@ -256,7 +270,30 @@ impl KvEngine {
     /// Create a new KV engine with specified number of shards
     pub fn with_shards(num_shards: usize) -> Self {
         let shards = (0..num_shards).map(|_| Shard::new()).collect();
-        Self { shards, num_shards }
+        Self {
+            shards,
+            num_shards,
+            persistence: None,
+        }
+    }
+
+    /// Enable persistence on this engine
+    ///
+    /// This should be called immediately after creation and before any operations.
+    /// Sets up WAL logging and periodic snapshots.
+    pub fn enable_persistence(
+        &mut self,
+        persistence_handle: crate::persistence::handle::PersistenceHandle,
+    ) {
+        self.persistence = Some(std::sync::Arc::new(persistence_handle));
+    }
+
+    /// Log an operation to WAL (if persistence is enabled)
+    #[inline]
+    fn log_wal(&self, op: crate::persistence::format::WalOp) {
+        if let Some(ref persistence) = self.persistence {
+            persistence.log_operation(op);
+        }
     }
 
     /// Get the shard for a given key
@@ -285,12 +322,25 @@ impl KvEngine {
 
     /// Set a value with optional TTL
     pub fn set(&self, key: &KvKey, value: KvValue, ttl: Option<Duration>) {
+        // Log to WAL first (non-blocking)
+        self.log_wal(crate::persistence::format::WalOp::Set {
+            key: key.as_str().to_string(),
+            value: value.clone(),
+            ttl,
+        });
+
+        // Apply to in-memory store
         self.shard_for_key(key.as_str())
             .set(key.as_str().to_string(), value, ttl);
     }
 
     /// Delete a key
     pub fn delete(&self, key: &KvKey) -> bool {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::Delete {
+            key: key.as_str().to_string(),
+        });
+
         self.shard_for_key(key.as_str())
             .delete(key.as_str())
             .is_some()
@@ -303,12 +353,25 @@ impl KvEngine {
 
     /// Atomic increment
     pub fn incr(&self, key: &KvKey, delta: i64) -> Result<i64, KvError> {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::Incr {
+            key: key.as_str().to_string(),
+            delta,
+        });
+
         self.shard_for_key(key.as_str()).incr(key.as_str(), delta)
     }
 
     /// Atomic decrement (convenience wrapper)
     pub fn decr(&self, key: &KvKey, delta: i64) -> Result<i64, KvError> {
-        self.incr(key, -delta)
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::Decr {
+            key: key.as_str().to_string(),
+            delta,
+        });
+
+        // Call shard directly to avoid double-logging
+        self.shard_for_key(key.as_str()).incr(key.as_str(), -delta)
     }
 
     /// Compare-And-Swap
@@ -339,24 +402,51 @@ impl KvEngine {
 
     /// Set if not exists
     pub fn setnx(&self, key: &KvKey, value: KvValue, ttl: Option<Duration>) -> bool {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::SetNx {
+            key: key.as_str().to_string(),
+            value: value.clone(),
+            ttl,
+        });
+
         self.shard_for_key(key.as_str())
             .setnx(key.as_str().to_string(), value, ttl)
     }
 
     /// Acquire a lock
     pub fn lock(&self, key: &KvKey, owner: &str, ttl: Duration) -> bool {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::Lock {
+            key: key.as_str().to_string(),
+            owner: owner.to_string(),
+            ttl,
+        });
+
         self.shard_for_key(key.as_str())
             .lock(key.as_str().to_string(), owner.to_string(), ttl)
     }
 
     /// Release a lock
     pub fn unlock(&self, key: &KvKey, owner: &str) -> Result<bool, KvError> {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::Unlock {
+            key: key.as_str().to_string(),
+            owner: owner.to_string(),
+        });
+
         self.shard_for_key(key.as_str())
             .unlock(key.as_str(), owner)
     }
 
     /// Extend lock TTL
     pub fn extend_lock(&self, key: &KvKey, owner: &str, ttl: Duration) -> Result<bool, KvError> {
+        // Log to WAL
+        self.log_wal(crate::persistence::format::WalOp::ExtendLock {
+            key: key.as_str().to_string(),
+            owner: owner.to_string(),
+            ttl,
+        });
+
         self.shard_for_key(key.as_str())
             .extend_lock(key.as_str(), owner, ttl)
     }
@@ -427,8 +517,21 @@ impl KvEngine {
     /// assert_eq!(engine.get(&key2), Some(KvValue::Int(42)));
     /// ```
     pub fn mset(&self, pairs: &[(&KvKey, KvValue)], ttl: Option<Duration>) {
+        // Log single batch operation to WAL
+        let wal_pairs: Vec<(String, KvValue)> = pairs
+            .iter()
+            .map(|(key, value)| (key.as_str().to_string(), value.clone()))
+            .collect();
+
+        self.log_wal(crate::persistence::format::WalOp::MSet {
+            pairs: wal_pairs,
+            ttl,
+        });
+
+        // Apply to in-memory shards
         for (key, value) in pairs {
-            self.set(key, value.clone(), ttl);
+            self.shard_for_key(key.as_str())
+                .set(key.as_str().to_string(), value.clone(), ttl);
         }
     }
 
@@ -457,8 +560,23 @@ impl KvEngine {
     /// assert_eq!(deleted, 2); // key1 and key2 deleted, key3 didn't exist
     /// ```
     pub fn mdel(&self, keys: &[&KvKey]) -> usize {
+        // Log single batch operation to WAL
+        let wal_keys: Vec<String> = keys
+            .iter()
+            .map(|key| key.as_str().to_string())
+            .collect();
+
+        self.log_wal(crate::persistence::format::WalOp::MDel {
+            keys: wal_keys,
+        });
+
+        // Apply to in-memory shards
         keys.iter()
-            .filter(|key| self.delete(key))
+            .filter(|key| {
+                self.shard_for_key(key.as_str())
+                    .delete(key.as_str())
+                    .is_some()
+            })
             .count()
     }
 
@@ -485,6 +603,25 @@ impl KvEngine {
         keys.iter()
             .map(|key| self.exists(key))
             .collect()
+    }
+
+    // ==================== Persistence Support ====================
+
+    /// Export all entries from a specific shard (for persistence/snapshots)
+    pub fn export_shard(&self, shard_id: usize) -> Option<HashMap<String, Entry>> {
+        if shard_id >= self.num_shards {
+            return None;
+        }
+        Some(self.shards[shard_id].export_all())
+    }
+
+    /// Import entries into a specific shard (for recovery from snapshots)
+    pub fn import_shard(&self, shard_id: usize, entries: HashMap<String, Entry>) -> bool {
+        if shard_id >= self.num_shards {
+            return false;
+        }
+        self.shards[shard_id].import_all(entries);
+        true
     }
 }
 
