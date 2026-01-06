@@ -1,5 +1,6 @@
 # Benchmark results
 .benchmarks/
+.baselines/
 tests/benchmarks/results/
 benchmark_report*
 

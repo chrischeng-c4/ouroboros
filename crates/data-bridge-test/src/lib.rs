@@ -20,6 +20,7 @@
 //! ```
 
 pub mod assertions;
+pub mod baseline;
 pub mod benchmark;
 pub mod discovery;
 pub mod http_server;
@@ -30,6 +31,11 @@ pub mod security;
 
 // Re-export main types
 pub use assertions::{expect, Expectation, AssertionError, AssertionResult};
+pub use baseline::{
+    BaselineMetadata, BaselineSnapshot, FileBaselineStore, GitMetadata,
+    Improvement, Regression, RegressionDetector, RegressionReport,
+    RegressionSeverity, RegressionSummary, RegressionThresholds,
+};
 pub use benchmark::{
     BenchmarkConfig, BenchmarkResult, BenchmarkStats, Benchmarker, compare_results,
     print_comparison_table, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
