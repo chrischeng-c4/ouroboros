@@ -62,6 +62,7 @@ from .columns import SqlExpr
 if TYPE_CHECKING:
     from .table import Table
     from .columns import ColumnProxy
+    from .options import QueryOption
 
 # Import from Rust engine when available
 try:
@@ -157,6 +158,7 @@ class QueryBuilder(Generic[T]):
         _windows: Optional[List[tuple]] = None,
         _set_operations: Optional[List[tuple]] = None,
         _returning: Optional[List[str]] = None,
+        _options: Optional[List['QueryOption']] = None,
     ) -> None:
         """
         Initialize query builder.
@@ -178,6 +180,7 @@ class QueryBuilder(Generic[T]):
             _windows: Window functions [(func_type, column, offset, default, partition_by, order_by, alias), ...]
             _set_operations: Set operations [(op_type, sql, params), ...]
             _returning: Columns to return from UPDATE/DELETE operations
+            _options: Query options for eager loading relationships
         """
         self._model = model
         self._filters = filters
@@ -196,6 +199,7 @@ class QueryBuilder(Generic[T]):
         self._set_operations: list[tuple[str, str, list[Any]]] = _set_operations or []  # (op_type, sql, params)
         self._returning: list[str] = _returning or []  # Columns to return from UPDATE/DELETE
         self._json_conditions: list[tuple[str, str, Any]] = []  # (operator_type, column, value)
+        self._options: list['QueryOption'] = _options or []  # Query options for eager loading
 
     def _clone(self, **kwargs: Any) -> "QueryBuilder[T]":
         """Create a copy of this builder with updated values."""
@@ -216,6 +220,7 @@ class QueryBuilder(Generic[T]):
             _windows=kwargs.get("_windows", self._windows.copy()),
             _set_operations=kwargs.get("_set_operations", self._set_operations.copy()),
             _returning=kwargs.get("_returning", self._returning.copy()),
+            _options=kwargs.get("_options", self._options.copy()),
         )
         cloned._json_conditions = kwargs.get("_json_conditions", self._json_conditions.copy())
         return cloned
@@ -1353,6 +1358,109 @@ class QueryBuilder(Generic[T]):
         new_qb._returning.append("*")
         return new_qb
 
+    def jsonb_contains(self, column: str, value: dict) -> 'QueryBuilder[T]':
+        """Filter by JSONB contains (@> operator).
+
+        Args:
+            column: JSONB column name
+            value: Dict to check containment
+
+        Returns:
+            Self for chaining
+
+        Example:
+            >>> users = await User.find().jsonb_contains("metadata", {"role": "admin"}).to_list()
+        """
+        import json
+        json_str = json.dumps(value).replace("'", "''")
+        return self.where_json_contains(column, json_str)
+
+    def jsonb_contained_by(self, column: str, value: dict) -> 'QueryBuilder[T]':
+        """Filter by JSONB contained by (<@ operator).
+
+        Args:
+            column: JSONB column name
+            value: Dict to check containment
+
+        Returns:
+            Self for chaining
+        """
+        import json
+        json_str = json.dumps(value).replace("'", "''")
+        return self.where_json_contained_by(column, json_str)
+
+    def jsonb_has_key(self, column: str, key: str) -> 'QueryBuilder[T]':
+        """Filter by JSONB has key (? operator).
+
+        Args:
+            column: JSONB column name
+            key: Key to check existence
+
+        Returns:
+            Self for chaining
+
+        Example:
+            >>> users = await User.find().jsonb_has_key("settings", "theme").to_list()
+        """
+        return self.where_json_key_exists(column, key)
+
+    def jsonb_has_any_key(self, column: str, keys: list) -> 'QueryBuilder[T]':
+        """Filter by JSONB has any of the keys (?| operator).
+
+        Args:
+            column: JSONB column name
+            keys: List of keys to check
+
+        Returns:
+            Self for chaining
+        """
+        return self.where_json_any_key_exists(column, keys)
+
+    def jsonb_has_all_keys(self, column: str, keys: list) -> 'QueryBuilder[T]':
+        """Filter by JSONB has all keys (?& operator).
+
+        Args:
+            column: JSONB column name
+            keys: List of keys that must all exist
+
+        Returns:
+            Self for chaining
+        """
+        return self.where_json_all_keys_exist(column, keys)
+
+    def options(self, *options: 'QueryOption') -> "QueryBuilder[T]":
+        """Specify eager loading options for relationships.
+
+        This allows you to control how relationships are loaded,
+        preventing N+1 query problems by batch loading related objects.
+
+        Args:
+            *options: QueryOption instances (selectinload, joinedload, noload, etc.)
+
+        Returns:
+            New QueryBuilder with eager loading options applied
+
+        Example:
+            >>> from data_bridge.postgres import selectinload
+            >>>
+            >>> # Load posts with their authors in 2 queries (instead of N+1)
+            >>> posts = await Post.find().options(selectinload("author")).to_list()
+            >>>
+            >>> # All authors already loaded
+            >>> for post in posts:
+            ...     author = await post.author  # No additional query
+            ...     print(f"{post.title} by {author.name}")
+            >>>
+            >>> # Load multiple relationships
+            >>> posts = await Post.find().options(
+            ...     selectinload("author"),
+            ...     selectinload("comments")
+            ... ).to_list()
+        """
+        new_options = self._options.copy()
+        new_options.extend(options)
+        return self._clone(_options=new_options)
+
     def _build_sql(self) -> tuple[str, List[Any]]:
         """
         Build SQL and params from current QueryBuilder state (for CTE usage).
@@ -1490,6 +1598,12 @@ class QueryBuilder(Generic[T]):
             >>> users = await User.find(User.age > 25).to_list()
             >>> for user in users:
             ...     print(user.name)
+            >>>
+            >>> # With eager loading
+            >>> from data_bridge.postgres import selectinload
+            >>> posts = await Post.find().options(selectinload("author")).to_list()
+            >>> for post in posts:
+            ...     author = await post.author  # Already loaded, no query
         """
         if _engine is None:
             raise RuntimeError(
@@ -1522,7 +1636,13 @@ class QueryBuilder(Generic[T]):
         )
 
         # Convert to model instances
-        return [self._model(**row) for row in rows]
+        instances = [self._model(**row) for row in rows]
+
+        # Apply eager loading options
+        for option in self._options:
+            await option.apply(instances)
+
+        return instances
 
     async def first(self) -> Optional[T]:
         """
