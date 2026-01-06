@@ -50,7 +50,7 @@ Validate correctness, coverage, and quality gates for all test scenarios.
 **Priority**: HIGH | **Timeline**: Q1 2026 | **Goal**: Feature-complete testing for common scenarios
 
 #### 🛡️ Security Testing (Phase 1)
-- [ ] **Async Fuzzer** - Refactor `Fuzzer` to support `async` target functions for network endpoint fuzzing
+- [x] ✅ **Async Fuzzer** - Refactor `Fuzzer` to support `async` target functions for network endpoint fuzzing (2026-01-06)
 - [ ] **Expanded Payload DB** - Add security categories:
   - [ ] NoSQL Injection (MongoDB-specific operators)
   - [ ] Path Traversal attacks
@@ -228,7 +228,7 @@ crates/data-bridge-test/
 
 ### Phase 1 Complete
 - [ ] 5+ security payload categories with 50+ payloads
-- [ ] Async fuzzing supports network endpoints
+- [x] Async fuzzing supports network endpoints (2026-01-06)
 - [x] Parallel test discovery <100ms for typical codebase
 - [ ] JUnit XML reporter integrated with CI/CD
 - [x] PyO3 boundary tracing operational

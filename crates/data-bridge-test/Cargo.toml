@@ -38,6 +38,9 @@ inferno = "0.12"
 axum.workspace = true
 tower.workspace = true
 
+# HTTP client (for async fuzzer HTTP endpoint testing)
+reqwest.workspace = true
+
 # Optional: HTTP client for API testing
 data-bridge-http = { path = "../data-bridge-http", optional = true }
 
