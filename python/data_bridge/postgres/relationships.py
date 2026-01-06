@@ -37,8 +37,16 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Optional, Type, TYPE_CHECKING
 
+from .telemetry import (
+    create_relationship_span,
+    set_span_result,
+    add_exception,
+    is_tracing_enabled,
+)
+
 if TYPE_CHECKING:
     from .table import Table
+    from .session import Session
 
 
 __all__ = [
@@ -224,26 +232,69 @@ class RelationshipLoader:
         if self._is_loaded:
             return self._loaded_value
 
-        # 2. Handle NULL FK early
-        fk_value = self.ref  # Uses the .ref property
-        if fk_value is None:
-            self._loaded_value = None
+        # Fast path: no tracing overhead when disabled
+        if not is_tracing_enabled():
+            # Original logic without spans
+            fk_value = self.ref
+            if fk_value is None:
+                self._loaded_value = None
+                self._is_loaded = True
+                return None
+
+            from .session import Session
+            session = Session.get_current()
+
+            if session is not None:
+                value = await self._load_via_session(session, fk_value)
+            else:
+                value = await self._load_standalone(fk_value)
+
+            self._loaded_value = value
             self._is_loaded = True
-            return None
+            return value
 
-        # 3. Try to use session if available
-        from .session import Session
-        session = Session.get_current()
+        # Instrumented path: create span for relationship loading
+        relationship_name = self._descriptor._name or "unknown"
+        target_model_name = self._descriptor._target_model.__name__
 
-        if session is not None:
-            value = await self._load_via_session(session, fk_value)
-        else:
-            value = await self._load_standalone(fk_value)
+        with create_relationship_span(
+            name=relationship_name,
+            target_model=target_model_name,
+            strategy=self._descriptor._lazy,
+            fk_column=self._descriptor._foreign_key_column,
+        ) as span:
+            try:
+                # 2. Handle NULL FK early
+                fk_value = self.ref  # Uses the .ref property
+                if fk_value is None:
+                    self._loaded_value = None
+                    self._is_loaded = True
+                    set_span_result(span, count=0, cache_hit=False)
+                    return None
 
-        # 4. Cache result
-        self._loaded_value = value
-        self._is_loaded = True
-        return value
+                # 3. Try to use session if available
+                from .session import Session
+                session = Session.get_current()
+
+                if session is not None:
+                    value = await self._load_via_session(session, fk_value)
+                    cache_hit = True
+                else:
+                    value = await self._load_standalone(fk_value)
+                    cache_hit = False
+
+                # 4. Cache result
+                self._loaded_value = value
+                self._is_loaded = True
+
+                # Set span result
+                result_count = 1 if value is not None else 0
+                set_span_result(span, count=result_count, cache_hit=cache_hit)
+
+                return value
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def _load_standalone(self, fk_value: Any) -> Optional[Any]:
         """

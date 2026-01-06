@@ -19,7 +19,14 @@ Example:
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, List
+
+from .telemetry import (
+    create_relationship_span,
+    set_span_result,
+    add_exception,
+    is_tracing_enabled,
+)
 
 if TYPE_CHECKING:
     from .table import Table
@@ -103,51 +110,105 @@ class SelectInLoad(QueryOption):
             )
 
         descriptor = model_class._relationships[self.relationship_name]
+        target_model = descriptor._target_model
+        target_model_name = target_model.__name__
 
-        # Collect all FK values
-        fk_values = []
-        for instance in instances:
-            fk_value = instance._data.get(descriptor._foreign_key_column)
-            if fk_value is not None:
-                fk_values.append(fk_value)
+        # Fast path: no tracing overhead when disabled
+        if not is_tracing_enabled():
+            # Original logic without spans
+            fk_values = []
+            for instance in instances:
+                fk_value = instance._data.get(descriptor._foreign_key_column)
+                if fk_value is not None:
+                    fk_values.append(fk_value)
 
-        if not fk_values:
-            # All FKs are NULL, nothing to load
+            if not fk_values:
+                return
+
+            seen = set()
+            unique_fk_values = []
+            for fk in fk_values:
+                if fk not in seen:
+                    seen.add(fk)
+                    unique_fk_values.append(fk)
+
+            related_objects = await target_model.find(
+                target_model.id.in_(unique_fk_values)
+            ).to_list()
+
+            lookup = {obj.id: obj for obj in related_objects}
+
+            for instance in instances:
+                fk_value = instance._data.get(descriptor._foreign_key_column)
+                if fk_value is not None:
+                    related_obj = lookup.get(fk_value)
+                    loader = descriptor.__get__(instance, type(instance))
+                    loader._loaded_value = related_obj
+                    loader._is_loaded = True
+                else:
+                    loader = descriptor.__get__(instance, type(instance))
+                    loader._loaded_value = None
+                    loader._is_loaded = True
             return
 
-        # Remove duplicates while preserving order
-        seen = set()
-        unique_fk_values = []
-        for fk in fk_values:
-            if fk not in seen:
-                seen.add(fk)
-                unique_fk_values.append(fk)
+        # Instrumented path: create span for batch loading
+        with create_relationship_span(
+            name=self.relationship_name,
+            target_model=target_model_name,
+            strategy="selectinload",
+            fk_column=descriptor._foreign_key_column,
+            batch_count=len(instances),
+        ) as span:
+            try:
+                # Collect all FK values
+                fk_values = []
+                for instance in instances:
+                    fk_value = instance._data.get(descriptor._foreign_key_column)
+                    if fk_value is not None:
+                        fk_values.append(fk_value)
 
-        # Load all related objects in one query
-        target_model = descriptor._target_model
+                if not fk_values:
+                    # All FKs are NULL, nothing to load
+                    set_span_result(span, count=0)
+                    return
 
-        # Use find with IN clause
-        related_objects = await target_model.find(
-            target_model.id.in_(unique_fk_values)
-        ).to_list()
+                # Remove duplicates while preserving order
+                seen = set()
+                unique_fk_values = []
+                for fk in fk_values:
+                    if fk not in seen:
+                        seen.add(fk)
+                        unique_fk_values.append(fk)
 
-        # Create lookup dict for O(1) access
-        lookup = {obj.id: obj for obj in related_objects}
+                # Load all related objects in one query
+                # Use find with IN clause (this will trigger query spans)
+                related_objects = await target_model.find(
+                    target_model.id.in_(unique_fk_values)
+                ).to_list()
 
-        # Populate relationships on all instances
-        for instance in instances:
-            fk_value = instance._data.get(descriptor._foreign_key_column)
-            if fk_value is not None:
-                related_obj = lookup.get(fk_value)
-                # Set the loaded value on the loader
-                loader = descriptor.__get__(instance, type(instance))
-                loader._loaded_value = related_obj
-                loader._is_loaded = True
-            else:
-                # FK is NULL, mark as loaded with None
-                loader = descriptor.__get__(instance, type(instance))
-                loader._loaded_value = None
-                loader._is_loaded = True
+                # Create lookup dict for O(1) access
+                lookup = {obj.id: obj for obj in related_objects}
+
+                # Populate relationships on all instances
+                for instance in instances:
+                    fk_value = instance._data.get(descriptor._foreign_key_column)
+                    if fk_value is not None:
+                        related_obj = lookup.get(fk_value)
+                        # Set the loaded value on the loader
+                        loader = descriptor.__get__(instance, type(instance))
+                        loader._loaded_value = related_obj
+                        loader._is_loaded = True
+                    else:
+                        # FK is NULL, mark as loaded with None
+                        loader = descriptor.__get__(instance, type(instance))
+                        loader._loaded_value = None
+                        loader._is_loaded = True
+
+                # Set span result
+                set_span_result(span, count=len(related_objects))
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
 
 class JoinedLoad(QueryOption):
