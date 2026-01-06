@@ -360,6 +360,132 @@ impl KvEngine {
         self.shard_for_key(key.as_str())
             .extend_lock(key.as_str(), owner, ttl)
     }
+
+    // ==================== Batch Operations ====================
+
+    /// Get multiple values by keys (MGET)
+    ///
+    /// Returns a vector of Option<KvValue> in the same order as the input keys.
+    /// Missing or expired keys return None.
+    ///
+    /// # Performance
+    /// This is more efficient than multiple GET calls as it:
+    /// - Reduces function call overhead
+    /// - Allows better CPU cache utilization
+    /// - Can be optimized by the compiler
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_kv::engine::KvEngine;
+    /// use data_bridge_kv::types::{KvKey, KvValue};
+    ///
+    /// let engine = KvEngine::new();
+    /// let key1 = KvKey::new("key1").unwrap();
+    /// let key2 = KvKey::new("key2").unwrap();
+    /// let key3 = KvKey::new("key3").unwrap();
+    ///
+    /// engine.set(&key1, KvValue::String("value1".to_string()), None);
+    /// engine.set(&key2, KvValue::String("value2".to_string()), None);
+    ///
+    /// let keys = vec![&key1, &key2, &key3];
+    /// let values = engine.mget(&keys);
+    /// assert_eq!(values.len(), 3);
+    /// assert!(values[0].is_some());
+    /// assert!(values[1].is_some());
+    /// assert!(values[2].is_none()); // key3 doesn't exist
+    /// ```
+    pub fn mget(&self, keys: &[&KvKey]) -> Vec<Option<KvValue>> {
+        keys.iter()
+            .map(|key| self.get(key))
+            .collect()
+    }
+
+    /// Set multiple key-value pairs (MSET)
+    ///
+    /// Sets multiple keys in a single operation. All keys will have the same TTL.
+    ///
+    /// # Performance
+    /// This is more efficient than multiple SET calls for the same reasons as MGET.
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_kv::engine::KvEngine;
+    /// use data_bridge_kv::types::{KvKey, KvValue};
+    ///
+    /// let engine = KvEngine::new();
+    /// let key1 = KvKey::new("key1").unwrap();
+    /// let key2 = KvKey::new("key2").unwrap();
+    ///
+    /// let pairs = vec![
+    ///     (&key1, KvValue::String("value1".to_string())),
+    ///     (&key2, KvValue::Int(42)),
+    /// ];
+    ///
+    /// engine.mset(&pairs, None);
+    ///
+    /// assert_eq!(engine.get(&key1), Some(KvValue::String("value1".to_string())));
+    /// assert_eq!(engine.get(&key2), Some(KvValue::Int(42)));
+    /// ```
+    pub fn mset(&self, pairs: &[(&KvKey, KvValue)], ttl: Option<Duration>) {
+        for (key, value) in pairs {
+            self.set(key, value.clone(), ttl);
+        }
+    }
+
+    /// Delete multiple keys (MDEL)
+    ///
+    /// Deletes multiple keys in a single operation.
+    ///
+    /// # Returns
+    /// The number of keys that were actually deleted (existed before deletion).
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_kv::engine::KvEngine;
+    /// use data_bridge_kv::types::{KvKey, KvValue};
+    ///
+    /// let engine = KvEngine::new();
+    /// let key1 = KvKey::new("key1").unwrap();
+    /// let key2 = KvKey::new("key2").unwrap();
+    /// let key3 = KvKey::new("key3").unwrap();
+    ///
+    /// engine.set(&key1, KvValue::Int(1), None);
+    /// engine.set(&key2, KvValue::Int(2), None);
+    ///
+    /// let keys = vec![&key1, &key2, &key3];
+    /// let deleted = engine.mdel(&keys);
+    /// assert_eq!(deleted, 2); // key1 and key2 deleted, key3 didn't exist
+    /// ```
+    pub fn mdel(&self, keys: &[&KvKey]) -> usize {
+        keys.iter()
+            .filter(|key| self.delete(key))
+            .count()
+    }
+
+    /// Check if multiple keys exist (MEXISTS)
+    ///
+    /// Returns a vector of booleans indicating whether each key exists.
+    ///
+    /// # Example
+    /// ```
+    /// use data_bridge_kv::engine::KvEngine;
+    /// use data_bridge_kv::types::{KvKey, KvValue};
+    ///
+    /// let engine = KvEngine::new();
+    /// let key1 = KvKey::new("key1").unwrap();
+    /// let key2 = KvKey::new("key2").unwrap();
+    ///
+    /// engine.set(&key1, KvValue::Int(1), None);
+    ///
+    /// let keys = vec![&key1, &key2];
+    /// let exists = engine.mexists(&keys);
+    /// assert_eq!(exists, vec![true, false]);
+    /// ```
+    pub fn mexists(&self, keys: &[&KvKey]) -> Vec<bool> {
+        keys.iter()
+            .map(|key| self.exists(key))
+            .collect()
+    }
 }
 
 impl Default for KvEngine {

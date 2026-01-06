@@ -23,7 +23,14 @@ data-bridge-common = { path = "../data-bridge-common" }
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = "0.5"
+data-bridge-test = { path = "../data-bridge-test" }
+num_cpus = "1.16"
+hostname = "0.4"
 
 [[bench]]
 name = "kv_bench"
+harness = false
+
+[[bench]]
+name = "kv_benchmark"
 harness = false
