@@ -3,6 +3,11 @@
 from .table import Table
 from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery, ManyToMany, ManyToManyQuery, create_m2m_join_table
 from .query import QueryBuilder
+from .relationships import relationship, LoadingStrategy, RelationshipDescriptor
+from .options import QueryOption, selectinload, joinedload, noload, raiseload
+from .fulltext import FullTextSearch, fts
+from .postgis import Point, GeoQuery
+from .arrays import ArrayOps
 from .connection import (
     init, close, is_connected, execute, query_aggregate, query_with_cte,
     insert_one, insert_many,
@@ -39,6 +44,16 @@ __all__ = [
     "ManyToMany",
     "ManyToManyQuery",
     "create_m2m_join_table",
+    # Relationships (Lazy Loading)
+    "relationship",
+    "LoadingStrategy",
+    "RelationshipDescriptor",
+    # Query Options (Eager Loading)
+    "QueryOption",
+    "selectinload",
+    "joinedload",
+    "noload",
+    "raiseload",
     # Query
     "QueryBuilder",
     # Connection
@@ -102,4 +117,10 @@ __all__ = [
     "before_flush",
     "after_commit",
     "AttributeEvents",
+    # PostgreSQL Extensions
+    "FullTextSearch",
+    "fts",
+    "Point",
+    "GeoQuery",
+    "ArrayOps",
 ]

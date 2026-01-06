@@ -31,6 +31,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Type, TypeVar, Union
 
 from .columns import ColumnProxy, SqlExpr
 from .query import QueryBuilder
+from .relationships import RelationshipDescriptor
 
 # Import from Rust engine when available
 try:
@@ -111,6 +112,9 @@ class TableMeta(type):
         # Store default values before replacing with ColumnProxy
         cls._column_defaults: Dict[str, Any] = {}
 
+        # Store relationships for lazy loading
+        cls._relationships: Dict[str, RelationshipDescriptor] = {}
+
         # Create ColumnProxy for each column annotation
         for column_name, column_type in annotations.items():
             # Skip private attributes and ClassVar
@@ -124,12 +128,27 @@ class TableMeta(type):
 
             # Capture default value BEFORE replacing with ColumnProxy
             current_value = getattr(cls, column_name, None)
+
+            # Skip if it's a RelationshipDescriptor (lazy loading)
+            if isinstance(current_value, RelationshipDescriptor):
+                continue
+
             if current_value is not None and not isinstance(current_value, ColumnProxy):
                 cls._column_defaults[column_name] = current_value
 
             # Create ColumnProxy only if not already set (allows override)
             if not isinstance(current_value, ColumnProxy):
                 setattr(cls, column_name, ColumnProxy(column_name, cls))
+
+        # Register RelationshipDescriptor instances
+        for attr_name in dir(cls):
+            # Skip private attributes and methods
+            if attr_name.startswith("_"):
+                continue
+
+            attr_value = getattr(cls, attr_name)
+            if isinstance(attr_value, RelationshipDescriptor):
+                cls._relationships[attr_name] = attr_value
 
         # Process Settings class
         settings_cls = namespace.get("Settings", Settings)
@@ -191,6 +210,7 @@ class Table(metaclass=TableMeta):
     # Class-level attributes (set by metaclass)
     _columns: ClassVar[Dict[str, type]] = {}
     _column_defaults: ClassVar[Dict[str, Any]] = {}
+    _relationships: ClassVar[Dict[str, RelationshipDescriptor]] = {}
     _settings: ClassVar[Type[Settings]] = Settings
     _table_name: ClassVar[str] = ""
     _schema: ClassVar[str] = "public"

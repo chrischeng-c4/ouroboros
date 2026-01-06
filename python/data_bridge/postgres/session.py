@@ -293,6 +293,7 @@ class Session:
         self._unit_of_work = UnitOfWork()
         self._transaction_started = False
         self._closed = False
+        self._loaded_relationships: Dict[Tuple[Any, str], Any] = {}
 
     @classmethod
     def get_current(cls) -> Optional['Session']:
@@ -479,6 +480,7 @@ class Session:
         self._closed = True
         self._unit_of_work.clear()
         self._identity_map.clear()
+        self._loaded_relationships.clear()
 
     def expunge(self, obj: T) -> None:
         """Remove object from session without deleting from database."""
@@ -501,6 +503,43 @@ class Session:
     def is_modified(self, obj: T) -> bool:
         """Check if object has uncommitted changes."""
         return self._unit_of_work.is_dirty(obj) or obj in self._unit_of_work._new
+
+    def _track_relationship(self, instance: 'Table', relationship_name: str, loaded_value: Any) -> None:
+        """
+        Track a loaded relationship.
+
+        This allows the session to keep track of which relationships have been
+        loaded for which instances, enabling future optimizations.
+
+        Args:
+            instance: The Table instance that owns the relationship
+            relationship_name: Name of the relationship attribute
+            loaded_value: The loaded related object(s)
+
+        Note:
+            This is preparation for Phase 3 optimizations.
+        """
+        instance_id = id(instance)
+        key = (instance_id, relationship_name)
+        self._loaded_relationships[key] = loaded_value
+
+    def _get_tracked_relationship(self, instance: 'Table', relationship_name: str) -> Optional[Any]:
+        """
+        Get a tracked relationship if it exists.
+
+        Args:
+            instance: The Table instance
+            relationship_name: Name of the relationship attribute
+
+        Returns:
+            The tracked relationship value, or None if not tracked
+
+        Note:
+            This is preparation for Phase 3 optimizations.
+        """
+        instance_id = id(instance)
+        key = (instance_id, relationship_name)
+        return self._loaded_relationships.get(key)
 
     # Helper methods
     def _get_pk(self, obj: Any) -> Any:
