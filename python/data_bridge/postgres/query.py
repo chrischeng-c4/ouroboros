@@ -58,6 +58,12 @@ from __future__ import annotations
 from typing import Any, Generic, List, Optional, Type, TypeVar, TYPE_CHECKING, Union
 
 from .columns import SqlExpr
+from .telemetry import (
+    create_query_span,
+    set_span_result,
+    add_exception,
+    is_tracing_enabled,
+)
 
 if TYPE_CHECKING:
     from .table import Table
@@ -1570,22 +1576,58 @@ class QueryBuilder(Generic[T]):
         for op_type, column, value in self._json_conditions:
             where_conditions.append((column, op_type, value))
 
-        # Execute aggregate query
-        return await _engine.query_aggregate(
+        # Fast-path: no tracing overhead if disabled
+        if not is_tracing_enabled():
+            return await _engine.query_aggregate(
+                table=table_name,
+                aggregates=self._aggregates_spec,
+                group_by=self._group_by_cols if self._group_by_cols else None,
+                having=self._having_conditions if self._having_conditions else None,
+                where_conditions=where_conditions if where_conditions else None,
+                order_by=self._order_by_spec if self._order_by_spec else None,
+                limit=self._limit_val if self._limit_val > 0 else None,
+                distinct=self._distinct if self._distinct else None,
+                distinct_on=self._distinct_on_cols if self._distinct_on_cols else None,
+                ctes=self._ctes if self._ctes else None,
+                subqueries=self._subqueries if self._subqueries else None,
+                windows=self._windows if self._windows else None,
+                set_operations=self._set_operations if self._set_operations else None,
+            )
+
+        # Create span with aggregate-specific attributes
+        aggregates_info = ", ".join(f"{agg[0]}({agg[1] or '*'})" for agg in self._aggregates_spec)
+        with create_query_span(
+            operation="aggregate",
             table=table_name,
-            aggregates=self._aggregates_spec,
-            group_by=self._group_by_cols if self._group_by_cols else None,
-            having=self._having_conditions if self._having_conditions else None,
-            where_conditions=where_conditions if where_conditions else None,
-            order_by=self._order_by_spec if self._order_by_spec else None,
+            filters_count=len(where_conditions) if where_conditions else 0,
             limit=self._limit_val if self._limit_val > 0 else None,
-            distinct=self._distinct if self._distinct else None,
-            distinct_on=self._distinct_on_cols if self._distinct_on_cols else None,
-            ctes=self._ctes if self._ctes else None,
-            subqueries=self._subqueries if self._subqueries else None,
-            windows=self._windows if self._windows else None,
-            set_operations=self._set_operations if self._set_operations else None,
-        )
+            aggregates=aggregates_info,
+            group_by_count=len(self._group_by_cols) if self._group_by_cols else 0,
+        ) as span:
+            try:
+                # Execute aggregate query
+                result = await _engine.query_aggregate(
+                    table=table_name,
+                    aggregates=self._aggregates_spec,
+                    group_by=self._group_by_cols if self._group_by_cols else None,
+                    having=self._having_conditions if self._having_conditions else None,
+                    where_conditions=where_conditions if where_conditions else None,
+                    order_by=self._order_by_spec if self._order_by_spec else None,
+                    limit=self._limit_val if self._limit_val > 0 else None,
+                    distinct=self._distinct if self._distinct else None,
+                    distinct_on=self._distinct_on_cols if self._distinct_on_cols else None,
+                    ctes=self._ctes if self._ctes else None,
+                    subqueries=self._subqueries if self._subqueries else None,
+                    windows=self._windows if self._windows else None,
+                    set_operations=self._set_operations if self._set_operations else None,
+                )
+
+                # Record result count
+                set_span_result(span, count=len(result))
+                return result
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def to_list(self) -> List[T]:
         """
@@ -1622,27 +1664,70 @@ class QueryBuilder(Generic[T]):
         # Build SQL query
         where_clause, params = self._build_where_clause()
 
-        # Execute query
-        rows = await _engine.find_many(
-            table_name,
-            where_clause,
-            params,
-            self._order_by_spec,
-            self._offset_val,
-            self._limit_val,
-            self._select_cols,
-            self._distinct if self._distinct else None,
-            self._distinct_on_cols if self._distinct_on_cols else None,
-        )
+        # Fast-path: no tracing overhead if disabled
+        if not is_tracing_enabled():
+            rows = await _engine.find_many(
+                table_name,
+                where_clause,
+                params,
+                self._order_by_spec,
+                self._offset_val,
+                self._limit_val,
+                self._select_cols,
+                self._distinct if self._distinct else None,
+                self._distinct_on_cols if self._distinct_on_cols else None,
+            )
 
-        # Convert to model instances
-        instances = [self._model(**row) for row in rows]
+            # Convert to model instances
+            instances = [self._model(**row) for row in rows]
 
-        # Apply eager loading options
-        for option in self._options:
-            await option.apply(instances)
+            # Apply eager loading options
+            for option in self._options:
+                await option.apply(instances)
 
-        return instances
+            return instances
+
+        # Create span with query attributes
+        filters_count = len(self._filters) if self._filters else 0
+        order_by_str = None
+        if self._order_by_spec:
+            order_by_str = ", ".join(f"{col} {direction}" for col, direction in self._order_by_spec)
+
+        with create_query_span(
+            operation="find",
+            table=table_name,
+            filters_count=filters_count,
+            limit=self._limit_val if self._limit_val > 0 else None,
+            offset=self._offset_val if self._offset_val > 0 else None,
+            order_by=order_by_str,
+        ) as span:
+            try:
+                # Execute query
+                rows = await _engine.find_many(
+                    table_name,
+                    where_clause,
+                    params,
+                    self._order_by_spec,
+                    self._offset_val,
+                    self._limit_val,
+                    self._select_cols,
+                    self._distinct if self._distinct else None,
+                    self._distinct_on_cols if self._distinct_on_cols else None,
+                )
+
+                # Convert to model instances
+                instances = [self._model(**row) for row in rows]
+
+                # Apply eager loading options
+                for option in self._options:
+                    await option.apply(instances)
+
+                # Record result count
+                set_span_result(span, count=len(instances))
+                return instances
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def first(self) -> Optional[T]:
         """
@@ -1656,9 +1741,32 @@ class QueryBuilder(Generic[T]):
             >>> if user:
             ...     print(user.name)
         """
-        # Use limit(1) and return first result
-        result = await self._clone(_limit=1).to_list()
-        return result[0] if result else None
+        # Fast-path: no tracing overhead if disabled
+        if not is_tracing_enabled():
+            result = await self._clone(_limit=1).to_list()
+            return result[0] if result else None
+
+        # Create span for find_one operation
+        table_name = self._model.__table_name__()
+        filters_count = len(self._filters) if self._filters else 0
+
+        with create_query_span(
+            operation="find_one",
+            table=table_name,
+            filters_count=filters_count,
+            limit=1,
+        ) as span:
+            try:
+                # Use limit(1) and return first result
+                result = await self._clone(_limit=1).to_list()
+                found = result[0] if result else None
+
+                # Record whether a result was found
+                set_span_result(span, count=1 if found else 0)
+                return found
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def count(self) -> int:
         """
@@ -1681,8 +1789,28 @@ class QueryBuilder(Generic[T]):
         # Build SQL query
         where_clause, params = self._build_where_clause()
 
-        # Execute count query
-        return await _engine.count(table_name, where_clause, params)
+        # Fast-path: no tracing overhead if disabled
+        if not is_tracing_enabled():
+            return await _engine.count(table_name, where_clause, params)
+
+        # Create span for count operation
+        filters_count = len(self._filters) if self._filters else 0
+
+        with create_query_span(
+            operation="count",
+            table=table_name,
+            filters_count=filters_count,
+        ) as span:
+            try:
+                # Execute count query
+                result = await _engine.count(table_name, where_clause, params)
+
+                # Record count result
+                set_span_result(span, count=result)
+                return result
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def exists(self) -> bool:
         """
@@ -1696,8 +1824,30 @@ class QueryBuilder(Generic[T]):
             >>> if exists:
             ...     print("Email already registered")
         """
-        count = await self.count()
-        return count > 0
+        # Fast-path: no tracing overhead if disabled
+        if not is_tracing_enabled():
+            count = await self.count()
+            return count > 0
+
+        # Create span for exists operation
+        table_name = self._model.__table_name__()
+        filters_count = len(self._filters) if self._filters else 0
+
+        with create_query_span(
+            operation="exists",
+            table=table_name,
+            filters_count=filters_count,
+        ) as span:
+            try:
+                count = await self.count()
+                result = count > 0
+
+                # Record whether any rows exist
+                set_span_result(span, count=1 if result else 0)
+                return result
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     def _build_where_clause(self) -> tuple[str, list[Any]]:
         """
