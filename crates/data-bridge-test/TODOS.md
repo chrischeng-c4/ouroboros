@@ -51,12 +51,12 @@ Validate correctness, coverage, and quality gates for all test scenarios.
 
 #### 🛡️ Security Testing (Phase 1)
 - [x] ✅ **Async Fuzzer** - Refactor `Fuzzer` to support `async` target functions for network endpoint fuzzing (2026-01-06)
-- [ ] **Expanded Payload DB** - Add security categories:
-  - [ ] NoSQL Injection (MongoDB-specific operators)
-  - [ ] Path Traversal attacks
-  - [ ] Command Injection payloads
-  - [ ] LDAP Injection
-  - [ ] Template Injection
+- [x] ✅ **Expanded Payload DB** - Add security categories (2026-01-06):
+  - [x] ✅ NoSQL Injection (MongoDB-specific operators) - 29 payloads
+  - [x] ✅ Path Traversal attacks - 34 payloads
+  - [x] ✅ Command Injection payloads - 40 payloads
+  - [x] ✅ LDAP Injection - 25 payloads
+  - [x] ✅ Template Injection - 27 payloads
 - [ ] **PyO3 Boundary Security** - Validate data flow at Rust/Python boundary
 
 #### ⚡ Performance Testing (Phase 1)
@@ -227,11 +227,11 @@ crates/data-bridge-test/
 ## 📊 Success Criteria
 
 ### Phase 1 Complete
-- [ ] 5+ security payload categories with 50+ payloads
+- [x] ✅ 5+ security payload categories with 50+ payloads (265 total payloads across 9 categories) (2026-01-06)
 - [x] Async fuzzing supports network endpoints (2026-01-06)
-- [x] Parallel test discovery <100ms for typical codebase
+- [x] Parallel test discovery <100ms for typical codebase (2026-01-06)
 - [ ] JUnit XML reporter integrated with CI/CD
-- [x] PyO3 boundary tracing operational
+- [x] PyO3 boundary tracing operational (2026-01-06)
 
 ### Phase 2 Complete
 - [ ] Structural fuzzing with BSON/JSON awareness
