@@ -111,7 +111,7 @@ fn sanitize_error_message(msg: &str) -> String {
             .expect("valid regex")
     });
     let auth_header_re = AUTH_HEADER_RE.get_or_init(|| {
-        Regex::new(r"(?i)(authorization|bearer|api[_-]?key|token)\s*[:=]\s*\S+")
+        Regex::new(r"(?i)(authorization:\s*bearer|bearer|api[_-]?key|token)\s*[:=]?\s*\S+")
             .expect("valid regex")
     });
 
@@ -147,5 +147,22 @@ mod tests {
         let msg = "Request failed with Authorization: Bearer secret-token-123";
         let sanitized = sanitize_error_message(msg);
         assert!(!sanitized.contains("secret-token-123"));
+        assert!(sanitized.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_sanitize_bearer_token() {
+        let msg = "Bearer abc123xyz";
+        let sanitized = sanitize_error_message(msg);
+        assert!(!sanitized.contains("abc123xyz"));
+        assert!(sanitized.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_sanitize_token_param() {
+        let msg = "Request with token=secret123";
+        let sanitized = sanitize_error_message(msg);
+        assert!(!sanitized.contains("secret123"));
+        assert!(sanitized.contains("[REDACTED]"));
     }
 }

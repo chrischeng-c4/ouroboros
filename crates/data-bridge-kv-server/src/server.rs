@@ -1,10 +1,11 @@
 //! TCP server implementation
 
 use crate::protocol::{
-    encode_value, parse_incr_payload, parse_key, parse_lock_payload, parse_set_payload,
-    read_request, write_response, Command, ProtocolError, Status,
+    encode_mget_response, encode_value, parse_incr_payload, parse_key, parse_lock_payload,
+    parse_mget_payload, parse_mset_payload, parse_set_payload, read_request, write_response,
+    Command, ProtocolError, Status,
 };
-use data_bridge_kv::{KvEngine, KvKey};
+use data_bridge_kv::{KvEngine, KvKey, KvValue};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -229,6 +230,57 @@ fn process_request(data: &[u8], engine: &KvEngine) -> Result<Vec<u8>, ProtocolEr
                     Ok(write_response(Status::Error, e.to_string().as_bytes()))
                 }
             }
+        }
+        Command::MGet => {
+            let keys = parse_mget_payload(&payload)?;
+            let kv_keys: Result<Vec<_>, _> = keys.iter()
+                .map(|k| KvKey::new(k))
+                .collect();
+
+            let kv_keys = kv_keys.map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+
+            let key_refs: Vec<&KvKey> = kv_keys.iter().collect();
+            let values = engine.mget(&key_refs);
+
+            let encoded = encode_mget_response(&values);
+            Ok(write_response(Status::Ok, &encoded))
+        }
+        Command::MSet => {
+            let (pairs, ttl_ms) = parse_mset_payload(&payload)?;
+            let ttl = ttl_ms.map(Duration::from_millis);
+
+            let kv_pairs: Result<Vec<_>, _> = pairs.iter()
+                .map(|(k, v)| KvKey::new(k).map(|key| (key, v.clone())))
+                .collect();
+
+            let kv_pairs = kv_pairs.map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+
+            let pair_refs: Vec<(&KvKey, KvValue)> = kv_pairs.iter()
+                .map(|(k, v)| (k, v.clone()))
+                .collect();
+
+            engine.mset(&pair_refs, ttl);
+            Ok(write_response(Status::Ok, &[]))
+        }
+        Command::MDel => {
+            let keys = parse_mget_payload(&payload)?; // Same format as MGET
+            let kv_keys: Result<Vec<_>, _> = keys.iter()
+                .map(|k| KvKey::new(k))
+                .collect();
+
+            let kv_keys = kv_keys.map_err(|e| ProtocolError::Io(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string())
+            ))?;
+
+            let key_refs: Vec<&KvKey> = kv_keys.iter().collect();
+            let deleted = engine.mdel(&key_refs);
+
+            // Return count as u32 big-endian
+            Ok(write_response(Status::Ok, &(deleted as u32).to_be_bytes()))
         }
         Command::Info => {
             let info = format!(

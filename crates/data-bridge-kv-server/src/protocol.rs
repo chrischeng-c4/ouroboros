@@ -47,6 +47,10 @@ pub enum Command {
     Lock = 0x0B,
     Unlock = 0x0C,
     ExtendLock = 0x0D,
+    // Batch commands
+    MGet = 0x0E,
+    MSet = 0x0F,
+    MDel = 0x10,
 }
 
 impl TryFrom<u8> for Command {
@@ -67,6 +71,9 @@ impl TryFrom<u8> for Command {
             0x0B => Ok(Command::Lock),
             0x0C => Ok(Command::Unlock),
             0x0D => Ok(Command::ExtendLock),
+            0x0E => Ok(Command::MGet),
+            0x0F => Ok(Command::MSet),
+            0x10 => Ok(Command::MDel),
             _ => Err(ProtocolError::InvalidCommand(byte)),
         }
     }
@@ -393,6 +400,87 @@ pub fn parse_lock_payload(payload: &[u8], with_ttl: bool) -> Result<(String, Str
     };
 
     Ok((key, owner, ttl))
+}
+
+/// Parse MGET/MDEL payload: count(2) + [key_len(2) + key]...
+pub fn parse_mget_payload(payload: &[u8]) -> Result<Vec<String>, ProtocolError> {
+    if payload.len() < 2 {
+        return Err(ProtocolError::UnexpectedEof);
+    }
+
+    let count = u16::from_be_bytes(payload[0..2].try_into().unwrap()) as usize;
+    let mut pos = 2;
+    let mut keys = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        if payload.len() < pos + 2 {
+            return Err(ProtocolError::UnexpectedEof);
+        }
+        let key_len = u16::from_be_bytes(payload[pos..pos + 2].try_into().unwrap()) as usize;
+        pos += 2;
+
+        if payload.len() < pos + key_len {
+            return Err(ProtocolError::UnexpectedEof);
+        }
+        let key = std::str::from_utf8(&payload[pos..pos + key_len])
+            .map_err(|_| ProtocolError::InvalidUtf8)?
+            .to_string();
+        pos += key_len;
+        keys.push(key);
+    }
+
+    Ok(keys)
+}
+
+/// Parse MSET payload: count(2) + ttl(8) + [key_len(2) + key + value]...
+pub fn parse_mset_payload(payload: &[u8]) -> Result<(Vec<(String, KvValue)>, Option<u64>), ProtocolError> {
+    if payload.len() < 10 { // count(2) + ttl(8)
+        return Err(ProtocolError::UnexpectedEof);
+    }
+
+    let count = u16::from_be_bytes(payload[0..2].try_into().unwrap()) as usize;
+    let ttl_ms = u64::from_be_bytes(payload[2..10].try_into().unwrap());
+    let ttl = if ttl_ms == 0 { None } else { Some(ttl_ms) };
+
+    let mut pos = 10;
+    let mut pairs = Vec::with_capacity(count);
+
+    for _ in 0..count {
+        if payload.len() < pos + 2 {
+            return Err(ProtocolError::UnexpectedEof);
+        }
+        let key_len = u16::from_be_bytes(payload[pos..pos + 2].try_into().unwrap()) as usize;
+        pos += 2;
+
+        if payload.len() < pos + key_len {
+            return Err(ProtocolError::UnexpectedEof);
+        }
+        let key = std::str::from_utf8(&payload[pos..pos + key_len])
+            .map_err(|_| ProtocolError::InvalidUtf8)?
+            .to_string();
+        pos += key_len;
+
+        let (value, consumed) = decode_value(&payload[pos..])?;
+        pos += consumed;
+        pairs.push((key, value));
+    }
+
+    Ok((pairs, ttl))
+}
+
+/// Encode MGET response: count(2) + [value_or_null]...
+pub fn encode_mget_response(values: &[Option<KvValue>]) -> Vec<u8> {
+    let mut buf = Vec::new();
+    buf.extend_from_slice(&(values.len() as u16).to_be_bytes());
+
+    for value_opt in values {
+        match value_opt {
+            Some(value) => encode_value_into(&mut buf, value),
+            None => buf.push(ValueType::Null as u8),
+        }
+    }
+
+    buf
 }
 
 #[cfg(test)]

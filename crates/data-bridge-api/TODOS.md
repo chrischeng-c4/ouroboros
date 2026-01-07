@@ -2,8 +2,18 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-01-05 (P5 SQLAlchemy parity roadmap added)
-**Branch**: `main`
+**Last Updated**: 2026-01-05 (data-bridge-api Phases 1-6 completed, Phase 7 P7-1 & P7-2 completed, P5 SQLAlchemy parity complete)
+**Branch**: `feature/data-bridge-api`
+
+**P5 SQLAlchemy Parity Status**: 43/43 complete (2025-01-05)
+- P5-ORM: Session & Unit of Work (5/5) ✅
+- P5-LOAD: Loading Strategies (7/7) ✅
+- P5-EVENT: Event System (10/10) ✅
+- P5-INHERIT: Inheritance Patterns (5/5) ✅
+- P5-COMPUTED: Computed Attributes (4/4) ✅
+- P5-QUERY: Query Builder Enhancements (6/6) ✅
+- P5-VALID: ORM-Level Validation (3/3) ✅
+- P5-ASYNC: Async Enhancements (3/3) ✅
 
 ---
 
@@ -170,6 +180,331 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
+## 🚀 data-bridge-api: Rust-Based API Framework
+
+### Completed Phases
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Foundation (crate, router, request/response, PyO3) | ✅ DONE |
+| Phase 2 | Type Extraction (Path, Query, Body, complex types) | ✅ DONE |
+| Phase 3 | Dependency Injection (Kahn's algorithm, scoping) | ✅ DONE |
+| Phase 4 | OpenAPI (3.1 spec, Swagger UI, ReDoc) | ✅ DONE |
+| Phase 5 | API Models & HTTP Client Integration | ✅ DONE (2026-01-04) |
+| Phase 6 | Type Consolidation (data-bridge-api ↔ data-bridge-http) | ✅ DONE (2026-01-04) |
+| Phase 7 | FastAPI Parity (uvicorn, orjson, middleware, lifespan) | ✅ DONE (P7-0, P7-1, P7-2 complete) |
+
+**Total Tests**: 509 (Rust + Python unit + API + Phase 7)
+- Phases 1-6: 276 tests
+- Phase 7: 233 tests (42 P7-0 + 82 P7-1 + 109 P7-2)
+**Next Phase**: P7-3 (Lower Priority - WebSocket, SSE)
+
+### P2-API: API Models & HTTP Client Integration ✅ COMPLETED
+
+**Goal**: Pydantic-style API models + HTTP client integration
+
+#### 5.1 Pydantic-Style API Models
+
+- [x] P2-API-01: Create `BaseModel` class with `__init_subclass__` (2026-01-04)
+  - **File**: `python/data_bridge/api/models.py`
+
+- [x] P2-API-02: Create `Field` class with constraints (2026-01-04)
+  - **Constraints**: ge, le, min_length, max_length, pattern
+
+- [x] P2-API-03: Implement `model_dump()` method (2026-01-04)
+
+- [x] P2-API-04: Implement `model_validate()` class method (2026-01-04)
+
+- [x] P2-API-05: Integrate with existing TypeDescriptor validation (2026-01-04)
+
+- [x] P2-API-06: Add nested model support (2026-01-04)
+
+#### 5.2 HTTP Client Integration
+
+- [x] P2-API-07: Add `configure_http_client()` to App (2026-01-04)
+  - **File**: `python/data_bridge/api/app.py`
+
+- [x] P2-API-08: Register HttpClient as singleton dependency (2026-01-04)
+
+- [x] P2-API-09: Add `http` property to RequestContext (2026-01-04)
+  - **File**: `python/data_bridge/api/context.py`
+
+- [x] P2-API-10: Add typed response parsing (2026-01-04)
+
+#### 5.3 Tests
+
+- [x] P2-API-11: Unit tests for BaseModel (36 tests) (2026-01-04)
+- [x] P2-API-12: Unit tests for HTTP client injection (13 tests) (2026-01-04)
+- [x] P2-API-13: Integration tests (7 tests) (2026-01-04)
+
+### P2-API-TYPE: Type Consolidation ✅ COMPLETED
+
+**Goal**: Unify types between data-bridge-api and data-bridge-http for better integration
+
+#### 6.1 Shared Type Definitions
+
+- [x] P2-API-TYPE-01: Move HttpMethod enum to data-bridge-common (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Impact**: Single source of truth for HTTP methods
+
+- [x] P2-API-TYPE-02: Create HttpResponseLike trait (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Methods**: status(), headers(), body(), json()
+
+- [x] P2-API-TYPE-03: Create HttpRequestLike trait (2026-01-04)
+  - **File**: `crates/data-bridge-common/src/http.rs`
+  - **Methods**: method(), url(), headers(), body()
+
+#### 6.2 Python Base Classes
+
+- [x] P2-API-TYPE-04: Create BaseResponse class (2026-01-04)
+  - **File**: `python/data_bridge/http/__init__.py`
+  - **Purpose**: Common interface for all response types
+
+- [x] P2-API-TYPE-05: Create BaseRequest class (2026-01-04)
+  - **File**: `python/data_bridge/http/__init__.py`
+  - **Purpose**: Common interface for all request types
+
+- [x] P2-API-TYPE-06: Update Response to inherit from BaseResponse (2026-01-04)
+
+#### 6.3 Tests
+
+- [x] P2-API-TYPE-07: Add trait implementation tests (14 tests) (2026-01-04)
+- [x] P2-API-TYPE-08: Add base class inheritance tests (in existing test suite) (2026-01-04)
+
+---
+
+## Phase 7: FastAPI Parity
+
+**Goal**: Match uvicorn+FastAPI+orjson+uvloop feature set for production readiness
+
+**Design Philosophy**: Container-native, K8s-first design
+- Works with K8s process management (SIGTERM/SIGKILL)
+- No built-in worker management (use K8s replicas instead)
+- SSL/TLS at ingress, not app level
+- Designed for horizontal scaling
+- Health checks for K8s liveness/readiness probes
+
+### P7-0: Critical (Production Blockers - K8s Native) ✅ COMPLETED (2026-01-05)
+
+- [x] P7-0-01: Graceful Shutdown (SIGTERM handling) (2026-01-05)
+  - **Files**:
+    - `python/data_bridge/api/app.py` (shutdown coordination)
+  - **Implementation**:
+    - Register SIGTERM/SIGINT handlers in Python
+    - Drain active connections (configurable timeout: 30s default)
+    - Close DB connections gracefully
+    - Trigger lifespan shutdown events
+  - **Test**: 13 tests passing
+  - **Benefit**: Zero-downtime K8s rolling updates
+  - **Status**: ✅ Graceful shutdown fully implemented
+
+- [x] P7-0-02: Health Endpoints (/health, /ready, /live) (2026-01-05)
+  - **File**: `python/data_bridge/api/health.py`
+  - **Implementation**:
+    - `GET /health` - Overall health status (JSON)
+    - `GET /ready` - K8s readiness probe (200 if ready for traffic)
+    - `GET /live` - K8s liveness probe (200 if alive, restart if 500)
+    - Configurable health checks (DB ping, external service check)
+  - **Test**: 29 tests passing
+  - **Benefit**: K8s orchestration, automated restart/scaling
+  - **Status**: ✅ Health endpoints fully implemented
+
+- [x] P7-0-03: sonic-rs Integration (Rust-level) (2026-01-05)
+  - **Files**: `crates/data-bridge-api/src/response.rs`
+  - **Implementation**:
+    - Use sonic-rs (Rust) instead of orjson (Python)
+    - 3-7x faster than serde_json
+    - Follows "Zero Python Byte Handling" principle
+  - **Test**: Rust tests passing
+  - **Benefit**: 3-7x JSON serialization speed (better than orjson)
+  - **Status**: ✅ sonic-rs fully implemented
+
+### P7-1: High Priority (Common Patterns) ✅ COMPLETED (2026-01-05)
+
+- [x] P7-1-01: Middleware System (2026-01-05)
+  - **Files**:
+    - `crates/data-bridge-api/src/middleware.rs` (Rust trait)
+    - `python/data_bridge/api/middleware.py` (Python base class)
+  - **Implementation**:
+    - `Middleware` trait with `before_request()` and `after_response()`
+    - `app.add_middleware()` method
+    - Middleware execution order (LIFO for response)
+  - **Test**: Custom middleware modifies request/response
+  - **Benefit**: Request/response interception
+  - **Status**: ✅ Middleware system fully implemented
+
+- [x] P7-1-02: CORS Middleware (2026-01-05)
+  - **File**: `python/data_bridge/api/middleware.py`
+  - **Implementation**:
+    - `CORSMiddleware` class
+    - Configurable origins, methods, headers
+    - Preflight OPTIONS handling
+  - **Test**: Cross-origin requests allowed
+  - **Benefit**: Easy CORS configuration
+  - **Status**: ✅ CORS middleware fully implemented
+
+- [x] P7-1-03: Background Tasks (2026-01-05)
+  - **Files**:
+    - `crates/data-bridge-api/src/background.rs` (Tokio task spawning)
+    - `python/data_bridge/api/background.py` (Python API)
+  - **Implementation**:
+    - `BackgroundTasks` dependency
+    - `background_tasks.add_task(func, *args, **kwargs)`
+    - Tasks run after response sent
+  - **Test**: Background task executes after response
+  - **Benefit**: Async task execution (emails, logging)
+  - **Status**: ✅ Background tasks fully implemented
+
+- [x] P7-1-04: Lifespan Events (Startup/Shutdown Hooks) (2026-01-05)
+  - **File**: `python/data_bridge/api/app.py`
+  - **Implementation**:
+    - `@app.on_event("startup")` decorator
+    - `@app.on_event("shutdown")` decorator
+    - Hook execution before first request / after last request
+    - Critical for DB connection pools, cache warmup
+  - **Test**: Startup/shutdown hooks execute correctly
+  - **Benefit**: Resource initialization/cleanup (DB, cache, etc.)
+  - **Status**: ✅ Lifespan events fully implemented
+
+### P7-2: Medium Priority (Local Development) ✅ COMPLETED (2026-01-05)
+
+- [x] P7-2-01: Local Development Server (app.run()) (2026-01-05)
+  - **File**: `python/data_bridge/api/app.py`
+  - **Implementation**:
+    - Add `app.run(host, port, reload)` method
+    - Spawn uvicorn internally via subprocess
+    - Pass ASGI application to uvicorn
+    - **Note**: For local dev only, use K8s/Docker in production
+  - **Test**: `app.run()` starts server on specified port
+  - **Benefit**: Quick local testing without uvicorn CLI
+  - **Status**: ✅ Local dev server fully implemented
+
+- [x] P7-2-02: Form Data Handling (2026-01-05)
+  - **File**: `crates/data-bridge-api/src/extract.rs`
+  - **Implementation**:
+    - `Form[T]` extractor for `application/x-www-form-urlencoded`
+    - Parse form data into typed models
+  - **Test**: Form submission with nested fields
+  - **Benefit**: HTML form support
+  - **Status**: ✅ Form data handling fully implemented
+
+- [x] P7-2-03: File Upload (UploadFile) (2026-01-05)
+  - **Files**:
+    - `crates/data-bridge-api/src/upload.rs` (multipart parsing)
+    - `python/data_bridge/api/upload.py` (UploadFile class)
+  - **Implementation**:
+    - `UploadFile` class with `.read()`, `.save()` methods
+    - Multipart form-data parsing
+    - Streaming file upload support
+  - **Test**: Upload 10MB file, verify content
+  - **Benefit**: File upload support
+  - **Status**: ✅ File upload fully implemented
+
+### P7-3: Lower Priority (File & Advanced Features)
+
+- [ ] P7-3-02: WebSocket Support
+  - **Files**:
+    - `crates/data-bridge-api/src/websocket.rs` (WebSocket handler)
+    - `python/data_bridge/api/websocket.py` (Python API)
+  - **Implementation**:
+    - `@app.websocket("/ws")` decorator
+    - `await websocket.accept()`, `send_text()`, `receive_text()`
+    - Upgrade HTTP → WebSocket
+  - **Test**: Bidirectional WebSocket communication
+  - **Benefit**: Real-time communication
+
+- [ ] P7-3-03: Server-Sent Events (SSE)
+  - **File**: `python/data_bridge/api/response.py`
+  - **Implementation**:
+    - `EventSourceResponse` class
+    - Streaming response with `text/event-stream`
+  - **Test**: Stream events to client
+  - **Benefit**: Server-push notifications
+
+### P7-4: Tests
+
+- [ ] P7-4-01: Graceful shutdown tests (5 tests)
+  - Test SIGTERM handler registered
+  - Test connection draining (no dropped requests)
+  - Test shutdown timeout (30s default)
+  - Test DB connections closed gracefully
+  - Test lifespan shutdown events triggered
+
+- [ ] P7-4-02: Health endpoint tests (6 tests)
+  - Test /health returns JSON status
+  - Test /ready returns 200 when ready
+  - Test /ready returns 503 when not ready (DB down)
+  - Test /live returns 200 when alive
+  - Test /live returns 500 on critical failure
+  - Test custom health check registration
+
+- [ ] P7-4-03: orjson serialization tests (3 tests)
+  - Benchmark vs json.dumps
+  - Test datetime serialization
+  - Test nested object serialization
+
+- [ ] P7-4-04: Lifespan events tests (4 tests)
+  - Test startup event executes before first request
+  - Test shutdown event executes after last request
+  - Test event execution order (multiple handlers)
+  - Test exception in startup event blocks server start
+
+- [ ] P7-4-05: Structured logging tests (5 tests)
+  - Test JSON format output
+  - Test request_id in logs
+  - Test log levels (DEBUG, INFO, WARN, ERROR)
+  - Test log context propagation
+  - Test stdout output (container-friendly)
+
+- [ ] P7-4-06: Middleware tests (8 tests)
+  - Test middleware execution order
+  - Test middleware modifies request
+  - Test middleware modifies response
+  - Test middleware error handling
+  - Test CORS preflight
+  - Test CORS actual request
+  - Test multiple middleware stack
+  - Test middleware short-circuit
+
+- [ ] P7-4-07: Background tasks tests (4 tests)
+  - Test task executes after response
+  - Test multiple tasks
+  - Test task with exception (no crash)
+  - Test task receives correct arguments
+
+- [ ] P7-4-08: Local dev server tests (3 tests)
+  - Test app.run() starts server on specified port
+  - Test hot reload on file change
+  - Test graceful shutdown via Ctrl+C
+
+- [ ] P7-4-09: Form data tests (3 tests)
+  - Test simple form data
+  - Test nested form data
+  - Test form validation errors
+
+- [ ] P7-4-10: File upload tests (5 tests)
+  - Test single file upload
+  - Test multiple file upload
+  - Test large file streaming
+  - Test file size limit
+  - Test invalid content-type rejection
+
+- [ ] P7-4-11: WebSocket tests (4 tests)
+  - Test WebSocket connection
+  - Test send/receive text
+  - Test send/receive JSON
+  - Test WebSocket disconnect
+
+- [ ] P7-4-12: SSE tests (2 tests)
+  - Test event stream
+  - Test stream termination
+
+**Total New Tests**: 52 tests (Rust + Python integration)
+**Focus**: K8s-native features prioritized (graceful shutdown, health checks, structured logging)
+
+---
+
 ## P3 - Lower Priority (Next Month)
 
 ### P3-CASCADE: BackReference and Cascade Operations
@@ -228,12 +563,12 @@ Atomic, testable tasks organized by priority and component.
 
 ### P3-SEC: Security Documentation
 
-- [ ] P3-SEC-01: Add TLS configuration documentation
+- [x] P3-SEC-01: Add TLS configuration documentation (2026-01-04)
   - **Location**: `connection.rs`
   - **Topics**: sslmode, certificate verification, client certificates
   - **Test**: Example TLS connection works
 
-- [ ] P3-SEC-02: Remove sensitive data from error logs
+- [x] P3-SEC-02: Remove sensitive data from error logs (2026-01-04)
   - **Issue**: Error messages may leak query parameters
   - **Fix**: Redact parameter values in error messages
   - **Test**: Verify no sensitive data in logged errors
@@ -244,10 +579,15 @@ Atomic, testable tasks organized by priority and component.
 
 ### P4-PERF: Performance Improvements
 
-- [ ] P4-PERF-01: Server-side cursors for large results
+- [x] P4-PERF-01: Server-side cursors for large results (2026-01-04)
   - **Issue**: Memory exhaustion on large result sets
   - **Fix**: Implement streaming with server-side cursors
   - **Test**: Fetch 1M+ rows without OOM
+  - **Implementation**:
+    - Added `fetch_batch` in Rust for paginated fetching
+    - Created `Cursor` class with async iterator protocol
+    - Added `QueryBuilder.cursor()` method
+    - 7 unit tests added (`tests/postgres/unit/test_cursor.py`)
 
 ### P4-QUERY: Advanced Query Features (SQLAlchemy Parity)
 
@@ -276,10 +616,51 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
-## P5 - Performance Roadmap (Long-term, Low Priority)
+## P5 - Long-term Roadmap (Low Priority)
 
-> **Note**: 目前性能已達可用標準，這些是長期優化目標
-> (Current performance meets production standards; these are long-term optimization goals)
+> **Note**: 這些是長期目標，待核心功能穩定後再實作
+> (Long-term goals to implement after core features stabilize)
+
+### P5-ORM: API Framework ORM Integration
+
+> **Status**: Deferred - 現有 MongoDB/PostgreSQL ORM 尚未完善
+> 待 ORM 成熟後再整合
+
+- [ ] P5-ORM-01: Generic `Repository[T, PK]` interface
+  - **Goal**: Abstract CRUD operations for any ORM backend
+  - **Test**: Same code works for MongoDB and PostgreSQL
+
+- [ ] P5-ORM-02: MongoDB adapter (`MongoRepository`)
+  - **Depends**: data-bridge-mongodb maturity
+  - **Test**: `@app.resource("/users")` generates CRUD endpoints
+
+- [ ] P5-ORM-03: PostgreSQL adapter (`PostgresRepository`)
+  - **Depends**: data-bridge-postgres maturity
+  - **Test**: Same `@resource` decorator works
+
+- [ ] P5-ORM-04: Auto CRUD endpoint generation
+  - **Features**: Pagination, filtering, sorting
+  - **Test**: GET /users?page=1&limit=10&sort=-created_at
+
+- [ ] P5-ORM-05: Relation serialization
+  - **Test**: Nested objects in JSON response
+
+### P5-API-ADVANCED: API Framework Advanced Features
+
+- [ ] P5-API-01: Middleware system
+  - **Test**: Request/response middleware chain
+
+- [ ] P5-API-02: WebSocket support
+  - **Test**: Real-time bidirectional communication
+
+- [ ] P5-API-03: Background tasks
+  - **Test**: `background_tasks.add_task(send_email, ...)`
+
+- [ ] P5-API-04: Rate limiting
+  - **Test**: 429 response after limit exceeded
+
+- [ ] P5-API-05: CORS configuration
+  - **Test**: Cross-origin requests allowed
 
 ### P5-HTTP: HTTP Client Optimization
 
@@ -327,7 +708,7 @@ Atomic, testable tasks organized by priority and component.
 
 > **Goal**: Achieve feature parity with SQLAlchemy ORM for Python-level usage
 
-### P5-ORM: Session & Unit of Work (COMPLETED 2025-01-05)
+### P5-ORM: Session & Unit of Work
 
 - [x] P5-ORM-01: Identity Map - Cache objects by primary key, single instance per PK (2025-01-05)
 - [x] P5-ORM-02: Dirty Tracking - Track which fields changed since load (2025-01-05)
@@ -335,53 +716,7 @@ Atomic, testable tasks organized by priority and component.
 - [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
 - [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
-### P5-OBSERVABILITY: OpenTelemetry Integration (COMPLETED 2026-01-06)
-
-**Result**: Built-in distributed tracing for database operations
-
-**Features Implemented**:
-- [x] Telemetry module with tracer configuration
-- [x] Query execution instrumentation (find, count, aggregate, exists)
-- [x] Session lifecycle instrumentation (open, close, flush, commit, rollback)
-- [x] Relationship loading instrumentation (lazy and eager loading)
-- [x] Connection pool metrics
-- [x] Zero overhead when disabled (fast-path optimization)
-- [x] FastAPI integration example
-- [x] Comprehensive documentation
-
-**Documentation**:
-- [x] `/docs/OPENTELEMETRY.md` - Comprehensive guide (2,752 lines)
-- [x] `/kb/40-postgres/operations/OPENTELEMETRY.md` - KB reference (450 lines)
-- [x] `/examples/fastapi_otel_example.py` - Working FastAPI example
-- [x] `/examples/QUICKSTART_FASTAPI_OTEL.md` - Quick start guide
-
-**Span Attributes**:
-- Standard OpenTelemetry semantic conventions (db.system, db.operation.name)
-- Query attributes (filters_count, limit, offset, order_by)
-- Session attributes (pending_count, dirty_count, deleted_count)
-- Relationship attributes (strategy, cache_hit, batch_count, depth)
-
-**OTLP Backends Documented**:
-- Jaeger (local development)
-- Grafana Cloud (production SaaS)
-- DataDog APM
-- New Relic
-- Honeycomb
-- AWS X-Ray (via ADOT)
-
-**Performance**:
-- Disabled: 0ms overhead (fast-path)
-- Enabled: ~1-2ms per span
-- Batch export: Amortized <0.5ms
-
-**N+1 Query Detection**:
-- Span patterns show lazy loading N+1 issues
-- Eager loading comparison (11 queries → 2 queries example)
-- Relationship cache hit tracking
-
-**Completed Date**: 2026-01-06
-
-### P5-LOAD: Loading Strategies
+### P5-LOAD: Loading Strategies (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -408,7 +743,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-EVENT-09 | on_attribute_change | Hook on field modification |
 | P5-EVENT-10 | @listens_for() | Decorator API for event registration |
 
-### P5-INHERIT: Inheritance Patterns
+### P5-INHERIT: Inheritance Patterns (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -418,7 +753,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-INHERIT-04 | Polymorphic loading | Load mixed types from one query |
 | P5-INHERIT-05 | Discriminator column | `type` column for class discrimination |
 
-### P5-COMPUTED: Computed Attributes
+### P5-COMPUTED: Computed Attributes (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -427,7 +762,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-COMPUTED-03 | GENERATED AS | PostgreSQL computed column support |
 | P5-COMPUTED-04 | Default factories | `default=lambda: datetime.now()` |
 
-### P5-QUERY: Query Builder Enhancements
+### P5-QUERY: Query Builder Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -438,7 +773,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-QUERY-05 | Query composition | Reusable query fragments |
 | P5-QUERY-06 | aliased() | For self-joins and multiple refs |
 
-### P5-VALID: ORM-Level Validation
+### P5-VALID: ORM-Level Validation (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -446,7 +781,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-VALID-02 | Custom types | User-defined type classes |
 | P5-VALID-03 | Auto-coercion | Auto-convert on assignment |
 
-### P5-ASYNC: Async Enhancements
+### P5-ASYNC: Async Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|

@@ -202,6 +202,7 @@ impl PyHttpClient {
         // Phase 2: Execute async without GIL
         future_into_py(py, async move {
             use data_bridge_http::request::{ExtractedAuth, ExtractedRequest, HttpMethod};
+            use std::str::FromStr;
 
             let method = HttpMethod::from_str(&method_str)
                 .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e.to_string()))?;

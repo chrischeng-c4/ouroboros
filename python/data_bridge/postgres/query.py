@@ -1859,6 +1859,9 @@ class QueryBuilder(Generic[T]):
         if not self._filters and not self._json_conditions:
             return ("", [])
 
+        # Import BooleanClause for type checking
+        from .query_ext import BooleanClause
+
         # Convert filters to SQL
         conditions = []
         params = []
@@ -1868,6 +1871,12 @@ class QueryBuilder(Generic[T]):
             if isinstance(filter_item, SqlExpr):
                 sql, filter_params = filter_item.to_sql(param_index)
                 conditions.append(sql)
+                params.extend(filter_params)
+                param_index += len(filter_params)
+            elif isinstance(filter_item, BooleanClause):
+                # Support BooleanClause from query_ext
+                sql, filter_params = filter_item.to_sql(param_index)
+                conditions.append(f"({sql})")  # Wrap in parens for safety
                 params.extend(filter_params)
                 param_index += len(filter_params)
             elif isinstance(filter_item, dict):
