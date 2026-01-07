@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-01-05 (P5 SQLAlchemy parity roadmap added)
+**Last Updated**: 2025-01-08 (Merged data-bridge-tasks Phase 7 + P5 SQLAlchemy parity roadmap)
 **Branch**: `main`
 
 ---
@@ -327,7 +327,7 @@ Atomic, testable tasks organized by priority and component.
 
 > **Goal**: Achieve feature parity with SQLAlchemy ORM for Python-level usage
 
-### P5-ORM: Session & Unit of Work
+### P5-ORM: Session & Unit of Work (COMPLETED 2025-01-05)
 
 - [x] P5-ORM-01: Identity Map - Cache objects by primary key, single instance per PK (2025-01-05)
 - [x] P5-ORM-02: Dirty Tracking - Track which fields changed since load (2025-01-05)
@@ -335,7 +335,57 @@ Atomic, testable tasks organized by priority and component.
 - [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
 - [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
+<<<<<<<< HEAD:kb/40-postgres/TODOS.md
+### P5-OBSERVABILITY: OpenTelemetry Integration (COMPLETED 2026-01-06)
+
+**Result**: Built-in distributed tracing for database operations
+
+**Features Implemented**:
+- [x] Telemetry module with tracer configuration
+- [x] Query execution instrumentation (find, count, aggregate, exists)
+- [x] Session lifecycle instrumentation (open, close, flush, commit, rollback)
+- [x] Relationship loading instrumentation (lazy and eager loading)
+- [x] Connection pool metrics
+- [x] Zero overhead when disabled (fast-path optimization)
+- [x] FastAPI integration example
+- [x] Comprehensive documentation
+
+**Documentation**:
+- [x] `/docs/OPENTELEMETRY.md` - Comprehensive guide (2,752 lines)
+- [x] `/kb/40-postgres/operations/OPENTELEMETRY.md` - KB reference (450 lines)
+- [x] `/examples/fastapi_otel_example.py` - Working FastAPI example
+- [x] `/examples/QUICKSTART_FASTAPI_OTEL.md` - Quick start guide
+
+**Span Attributes**:
+- Standard OpenTelemetry semantic conventions (db.system, db.operation.name)
+- Query attributes (filters_count, limit, offset, order_by)
+- Session attributes (pending_count, dirty_count, deleted_count)
+- Relationship attributes (strategy, cache_hit, batch_count, depth)
+
+**OTLP Backends Documented**:
+- Jaeger (local development)
+- Grafana Cloud (production SaaS)
+- DataDog APM
+- New Relic
+- Honeycomb
+- AWS X-Ray (via ADOT)
+
+**Performance**:
+- Disabled: 0ms overhead (fast-path)
+- Enabled: ~1-2ms per span
+- Batch export: Amortized <0.5ms
+
+**N+1 Query Detection**:
+- Span patterns show lazy loading N+1 issues
+- Eager loading comparison (11 queries → 2 queries example)
+- Relationship cache hit tracking
+
+**Completed Date**: 2026-01-06
+
 ### P5-LOAD: Loading Strategies
+========
+### P5-LOAD: Loading Strategies (COMPLETED 2025-01-05)
+>>>>>>>> origin/main:crates/data-bridge-postgres/TODOS.md
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -362,7 +412,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-EVENT-09 | on_attribute_change | Hook on field modification |
 | P5-EVENT-10 | @listens_for() | Decorator API for event registration |
 
-### P5-INHERIT: Inheritance Patterns
+### P5-INHERIT: Inheritance Patterns (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -372,7 +422,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-INHERIT-04 | Polymorphic loading | Load mixed types from one query |
 | P5-INHERIT-05 | Discriminator column | `type` column for class discrimination |
 
-### P5-COMPUTED: Computed Attributes
+### P5-COMPUTED: Computed Attributes (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -381,7 +431,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-COMPUTED-03 | GENERATED AS | PostgreSQL computed column support |
 | P5-COMPUTED-04 | Default factories | `default=lambda: datetime.now()` |
 
-### P5-QUERY: Query Builder Enhancements
+### P5-QUERY: Query Builder Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -392,7 +442,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-QUERY-05 | Query composition | Reusable query fragments |
 | P5-QUERY-06 | aliased() | For self-joins and multiple refs |
 
-### P5-VALID: ORM-Level Validation
+### P5-VALID: ORM-Level Validation (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -400,7 +450,7 @@ Atomic, testable tasks organized by priority and component.
 | P5-VALID-02 | Custom types | User-defined type classes |
 | P5-VALID-03 | Auto-coercion | Auto-convert on assignment |
 
-### P5-ASYNC: Async Enhancements
+### P5-ASYNC: Async Enhancements (COMPLETED 2025-01-05)
 
 | ID | Feature | Description |
 |----|---------|-------------|
@@ -696,3 +746,82 @@ rg "\.unwrap\(\)|\.expect\(" crates/ --type rust
 # Check for format! in SQL generation
 rg "format!\(|push_str\(" crates/data-bridge-postgres/src/ --type rust
 ```
+
+---
+
+## data-bridge-tasks: K8s-Native Task Queue
+
+> **Container-First, Cloud-Native** - 為 K8s 環境設計的高效能任務佇列
+
+### Design Philosophy
+
+| 傳統 Celery | data-bridge-tasks |
+|-------------|-------------------|
+| 長運行 worker 進程 | 短暫容器，隨時可重啟 |
+| Prefork 進程模型 | Async Rust (Tokio) |
+| Worker autoscale | K8s HPA |
+| Remote control | kubectl / K8s API |
+| Flower 監控 | Prometheus + Grafana |
+| RabbitMQ/Redis | Cloud-native brokers |
+
+### ✅ Completed (Phase 1-8)
+
+- [x] **Core**: Task trait, Registry, States, Results, Context
+- [x] **Retry**: Exponential backoff, Jitter, Selective retry
+- [x] **Rate Limiting**: Token bucket, Sliding window, Global/Queue/Task limits
+- [x] **Routing**: Exact, Glob, Regex, Custom functions
+- [x] **Signals**: 14 task + worker lifecycle signals
+- [x] **Brokers**: NATS JetStream, Cloud Pub/Sub (Pull)
+- [x] **Backend**: Redis result store
+- [x] **Scheduling**: Cron, Interval, ETA/Countdown
+- [x] **Workflows**: Chain, Group, Chord, Map, Starmap, Chunks
+- [x] **Revocation**: In-memory + Redis store
+- [x] **Observability**: Prometheus metrics, OpenTelemetry tracing
+- [x] **PyO3 Bindings**: Python API
+
+**Tests**: 121 passed ✅ | **Clippy**: Clean ✅
+
+### 🎯 P0 - Cloud Run / Serverless (Push-based)
+
+> 支援 Cloud Run、Knative 等 serverless 平台
+
+- [ ] **HTTP Server (Axum)** - Push broker 的 HTTP endpoint
+- [ ] **Cloud Tasks Broker** - GCP Cloud Tasks 整合 (native scheduling)
+- [ ] **Pub/Sub Push** - Pub/Sub push subscription
+- [ ] **OIDC Auth** - Cloud Tasks/Pub/Sub 身份驗證
+
+### 🔧 P1 - K8s Integration
+
+> 深度 K8s 整合功能
+
+- [ ] **K8s Job Mode** - 任務完成後 Pod 自動退出
+- [ ] **Pod Disruption Budget** - Graceful shutdown 配合 PDB
+- [ ] **Config from ConfigMap/Secret** - 環境變數 + 檔案配置
+- [ ] **Leader Election** - Scheduler 高可用 (lease)
+
+### 📊 P2 - Observability Enhancement
+
+> 強化監控與可觀測性
+
+- [ ] **Grafana Dashboard** - 預設 dashboard JSON
+- [ ] **Custom Metrics** - 業務指標 API
+- [ ] **Structured Logging** - JSON logs for Loki/ELK
+- [ ] **Trace Context Propagation** - 跨服務追蹤
+
+### ☁️ P3 - Multi-Cloud
+
+> 多雲支援
+
+- [ ] **Amazon SQS** - AWS 整合
+- [ ] **Azure Service Bus** - Azure 整合
+- [ ] **Firestore Backend** - GCP serverless backend
+
+### ❌ Not Planned (K8s handles these)
+
+| Feature | K8s Alternative |
+|---------|-----------------|
+| Worker Autoscale | HPA / KEDA |
+| Remote Control | kubectl exec |
+| Worker Discovery | K8s Service |
+| Flower Dashboard | Grafana |
+| RabbitMQ | NATS / Pub/Sub |

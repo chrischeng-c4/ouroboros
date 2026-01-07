@@ -23,3 +23,6 @@ pub use config::HttpClientConfig;
 pub use error::{HttpError, HttpResult};
 pub use request::{HttpMethod, RequestBuilder};
 pub use response::HttpResponse;
+
+// Re-export shared HTTP types from data-bridge-common
+pub use data_bridge_common::http::{HttpStatus, HttpResponseLike, HttpRequestLike};

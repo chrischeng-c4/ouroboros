@@ -5,17 +5,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// HTTP methods
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HttpMethod {
-    Get,
-    Post,
-    Put,
-    Patch,
-    Delete,
-    Head,
-    Options,
-}
+// Re-export HttpMethod from data-bridge-common
+pub use data_bridge_common::http::HttpMethod;
 
 impl HttpMethod {
     /// Convert to reqwest Method
@@ -273,7 +264,7 @@ impl ExtractedRequest {
             self.url.clone()
         };
 
-        let mut builder = client.request(self.method.to_reqwest(), &full_url);
+        let mut builder = client.request(to_reqwest_method(self.method), &full_url);
 
         // Add headers
         for (name, value) in &self.headers {
@@ -321,6 +312,7 @@ impl ExtractedRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn test_http_method_from_str() {

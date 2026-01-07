@@ -276,6 +276,163 @@ impl KvClient {
         let (_, resp) = self.request(Command::ExtendLock, &payload).await?;
         Ok(resp.first() == Some(&1))
     }
+
+    // ==================== Batch Operations ====================
+
+    /// Get multiple values by keys (MGET)
+    ///
+    /// Returns a vector of Option<KvValue> in the same order as the input keys.
+    /// Missing or expired keys return None.
+    ///
+    /// # Performance
+    /// This is significantly faster than multiple individual GET calls as it:
+    /// - Reduces network round-trips from N to 1
+    /// - Reduces protocol overhead
+    /// - Better CPU cache utilization
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use data_bridge_kv_client::KvClient;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = KvClient::connect("127.0.0.1:16380").await?;
+    ///
+    /// let keys = vec!["task:1", "task:2", "task:3"];
+    /// let values = client.mget(&keys).await?;
+    ///
+    /// for (key, value) in keys.iter().zip(values.iter()) {
+    ///     match value {
+    ///         Some(v) => println!("{} = {:?}", key, v),
+    ///         None => println!("{} not found", key),
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn mget(&mut self, keys: &[&str]) -> Result<Vec<Option<KvValue>>, ClientError> {
+        let mut payload = Vec::new();
+
+        // count (2 bytes)
+        payload.extend_from_slice(&(keys.len() as u16).to_be_bytes());
+
+        // [key_len(2) + key]...
+        for key in keys {
+            let prefixed_key = self.prefix_key(key);
+            payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+            payload.extend_from_slice(prefixed_key.as_bytes());
+        }
+
+        let (_, resp) = self.request(Command::MGet, &payload).await?;
+
+        // Parse response: count(2) + [value_or_null]...
+        if resp.len() < 2 {
+            return Err(ClientError::Protocol(ProtocolError::UnexpectedEof));
+        }
+
+        let count = u16::from_be_bytes([resp[0], resp[1]]) as usize;
+        let mut values = Vec::with_capacity(count);
+        let mut pos = 2;
+
+        for _ in 0..count {
+            let (value, consumed) = decode_value(&resp[pos..])?;
+            pos += consumed;
+            values.push(if value == KvValue::Null { None } else { Some(value) });
+        }
+
+        Ok(values)
+    }
+
+    /// Set multiple key-value pairs (MSET)
+    ///
+    /// Sets multiple keys in a single operation. All keys will have the same TTL.
+    ///
+    /// # Performance
+    /// Significantly faster than multiple individual SET calls for the same reasons as MGET.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use data_bridge_kv_client::{KvClient, KvValue};
+    /// # use std::time::Duration;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = KvClient::connect("127.0.0.1:16380").await?;
+    ///
+    /// let pairs = vec![
+    ///     ("task:1", KvValue::String("result1".to_string())),
+    ///     ("task:2", KvValue::String("result2".to_string())),
+    ///     ("task:3", KvValue::Int(42)),
+    /// ];
+    ///
+    /// // Set with 1 hour TTL
+    /// client.mset(&pairs, Some(Duration::from_secs(3600))).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn mset(&mut self, pairs: &[(&str, KvValue)], ttl: Option<Duration>) -> Result<(), ClientError> {
+        let mut payload = Vec::new();
+
+        // count (2 bytes)
+        payload.extend_from_slice(&(pairs.len() as u16).to_be_bytes());
+
+        // ttl in ms (8 bytes)
+        let ttl_ms = ttl.map(|d| d.as_millis() as u64).unwrap_or(0);
+        payload.extend_from_slice(&ttl_ms.to_be_bytes());
+
+        // [key_len(2) + key + value]...
+        for (key, value) in pairs {
+            let prefixed_key = self.prefix_key(key);
+            payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+            payload.extend_from_slice(prefixed_key.as_bytes());
+            payload.extend_from_slice(&encode_value(value));
+        }
+
+        self.request(Command::MSet, &payload).await?;
+        Ok(())
+    }
+
+    /// Delete multiple keys (MDEL)
+    ///
+    /// Deletes multiple keys in a single operation.
+    ///
+    /// # Returns
+    /// The number of keys that were actually deleted (existed before deletion).
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use data_bridge_kv_client::KvClient;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut client = KvClient::connect("127.0.0.1:16380").await?;
+    ///
+    /// let keys = vec!["task:1", "task:2", "task:3"];
+    /// let deleted = client.mdel(&keys).await?;
+    /// println!("Deleted {} keys", deleted);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn mdel(&mut self, keys: &[&str]) -> Result<usize, ClientError> {
+        let mut payload = Vec::new();
+
+        // count (2 bytes)
+        payload.extend_from_slice(&(keys.len() as u16).to_be_bytes());
+
+        // [key_len(2) + key]...
+        for key in keys {
+            let prefixed_key = self.prefix_key(key);
+            payload.extend_from_slice(&(prefixed_key.len() as u16).to_be_bytes());
+            payload.extend_from_slice(prefixed_key.as_bytes());
+        }
+
+        let (_, resp) = self.request(Command::MDel, &payload).await?;
+
+        // Response is u32 count
+        if resp.len() < 4 {
+            return Err(ClientError::Protocol(ProtocolError::UnexpectedEof));
+        }
+
+        let count = u32::from_be_bytes([resp[0], resp[1], resp[2], resp[3]]) as usize;
+        Ok(count)
+    }
 }
 
 #[cfg(test)]
