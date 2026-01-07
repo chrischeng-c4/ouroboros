@@ -342,6 +342,72 @@ class KvClient:
         """
         return await self._client.extend_lock(key, owner, ttl)
 
+    async def mget(self, keys: list[str]) -> list[Optional[KvValue]]:
+        """
+        Get multiple values by keys in a single operation (MGET).
+
+        This is significantly faster than multiple individual GET calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            keys: List of keys to fetch.
+
+        Returns:
+            List of values in the same order as keys. None for missing keys.
+
+        Example:
+            >>> # Fetch 100 task results in one operation
+            >>> task_ids = [f"task:{i}" for i in range(100)]
+            >>> results = await client.mget(task_ids)
+            >>> for task_id, result in zip(task_ids, results):
+            ...     if result is not None:
+            ...         print(f"{task_id}: {result}")
+        """
+        return await self._client.mget(keys)
+
+    async def mset(
+        self,
+        pairs: list[tuple[str, KvValue]],
+        ttl: Optional[float] = None,
+    ) -> None:
+        """
+        Set multiple key-value pairs in a single operation (MSET).
+
+        This is significantly faster than multiple individual SET calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            pairs: List of (key, value) tuples to set.
+            ttl: Optional time-to-live in seconds (applies to all keys).
+
+        Example:
+            >>> # Store 100 task results in one operation
+            >>> pairs = [(f"task:{i}", f"result_{i}") for i in range(100)]
+            >>> await client.mset(pairs, ttl=3600)
+        """
+        await self._client.mset(pairs, ttl)
+
+    async def mdel(self, keys: list[str]) -> int:
+        """
+        Delete multiple keys in a single operation (MDEL).
+
+        This is significantly faster than multiple individual DELETE calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            keys: List of keys to delete.
+
+        Returns:
+            Number of keys that were actually deleted.
+
+        Example:
+            >>> # Clean up 100 expired task keys in one operation
+            >>> task_ids = [f"task:{i}" for i in range(100)]
+            >>> deleted = await client.mdel(task_ids)
+            >>> print(f"Deleted {deleted} keys")
+        """
+        return await self._client.mdel(keys)
+
     def __repr__(self) -> str:
         return "KvClient(connected)"
 
@@ -706,6 +772,68 @@ class KvPool:
             True if extended, False if not held or wrong owner.
         """
         return await self._pool.extend_lock(key, owner, ttl)
+
+    async def mget(self, keys: list[str]) -> list[Optional[KvValue]]:
+        """
+        Get multiple values by keys in a single operation (MGET).
+
+        This is significantly faster than multiple individual GET calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            keys: List of keys to fetch.
+
+        Returns:
+            List of values in the same order as keys. None for missing keys.
+
+        Example:
+            >>> # Fetch 100 task results in one operation
+            >>> task_ids = [f"task:{i}" for i in range(100)]
+            >>> results = await pool.mget(task_ids)
+        """
+        return await self._pool.mget(keys)
+
+    async def mset(
+        self,
+        pairs: list[tuple[str, KvValue]],
+        ttl: Optional[float] = None,
+    ) -> None:
+        """
+        Set multiple key-value pairs in a single operation (MSET).
+
+        This is significantly faster than multiple individual SET calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            pairs: List of (key, value) tuples to set.
+            ttl: Optional time-to-live in seconds (applies to all keys).
+
+        Example:
+            >>> # Store 100 task results in one operation
+            >>> pairs = [(f"task:{i}", f"result_{i}") for i in range(100)]
+            >>> await pool.mset(pairs, ttl=3600)
+        """
+        await self._pool.mset(pairs, ttl)
+
+    async def mdel(self, keys: list[str]) -> int:
+        """
+        Delete multiple keys in a single operation (MDEL).
+
+        This is significantly faster than multiple individual DELETE calls
+        due to reduced network round-trips (N round-trips → 1 round-trip).
+
+        Args:
+            keys: List of keys to delete.
+
+        Returns:
+            Number of keys that were actually deleted.
+
+        Example:
+            >>> # Clean up 100 expired task keys in one operation
+            >>> task_ids = [f"task:{i}" for i in range(100)]
+            >>> deleted = await pool.mdel(task_ids)
+        """
+        return await self._pool.mdel(keys)
 
     def __repr__(self) -> str:
         return f"KvPool(namespace={self.namespace!r})"

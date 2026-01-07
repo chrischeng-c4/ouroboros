@@ -10,6 +10,7 @@
 pub mod engine;
 pub mod types;
 pub mod error;
+pub mod persistence;
 
 pub use data_bridge_common::{DataBridgeError, Result};
 pub use engine::KvEngine;

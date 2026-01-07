@@ -13,9 +13,16 @@ serde.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 parking_lot.workspace = true
+tracing.workspace = true
 
 # High-precision numeric
 rust_decimal = { version = "1.36", features = ["serde"] }
+
+# Persistence
+bincode = "1.3"
+crc32fast = "1.4"
+crossbeam-channel = "0.5"
+sha2 = "0.10"
 
 # Shared utilities
 data-bridge-common = { path = "../data-bridge-common" }
@@ -23,7 +30,15 @@ data-bridge-common = { path = "../data-bridge-common" }
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = "0.5"
+data-bridge-test = { path = "../data-bridge-test" }
+num_cpus = "1.16"
+hostname = "0.4"
+tempfile = "3.12"
 
 [[bench]]
 name = "kv_bench"
+harness = false
+
+[[bench]]
+name = "kv_benchmark"
 harness = false

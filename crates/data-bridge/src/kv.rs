@@ -359,6 +359,93 @@ impl PyKvClient {
         })
     }
 
+    // ==================== Batch Operations ====================
+
+    /// Get multiple values by keys (MGET)
+    ///
+    /// Args:
+    ///     keys: List of keys to retrieve
+    ///
+    /// Returns:
+    ///     List of values (None for missing keys)
+    fn mget<'py>(&self, py: Python<'py>, keys: Vec<String>) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+            let results = guard.mget(&key_refs).await.map_err(client_error_to_py)?;
+
+            Python::with_gil(|py| {
+                let py_list = PyList::empty_bound(py);
+                for result in results {
+                    match result {
+                        Some(value) => py_list.append(kv_value_to_py(py, value)?)?,
+                        None => py_list.append(py.None())?,
+                    }
+                }
+                Ok(py_list.into_any().unbind())
+            })
+        })
+    }
+
+    /// Set multiple key-value pairs (MSET)
+    ///
+    /// Args:
+    ///     pairs: List of (key, value) tuples
+    ///     ttl: Optional TTL in seconds
+    #[pyo3(signature = (pairs, ttl = None))]
+    fn mset<'py>(
+        &self,
+        py: Python<'py>,
+        pairs: Vec<(String, Bound<'py, PyAny>)>,
+        ttl: Option<f64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(ttl) = ttl {
+            if ttl < 0.0 {
+                return Err(PyValueError::new_err("TTL cannot be negative"));
+            }
+        }
+
+        let rust_pairs: PyResult<Vec<(String, KvValue)>> = pairs
+            .iter()
+            .map(|(key, value)| {
+                let kv_value = py_to_kv_value(value)?;
+                Ok((key.clone(), kv_value))
+            })
+            .collect();
+        let rust_pairs = rust_pairs?;
+
+        let duration = ttl.map(Duration::from_secs_f64);
+        let client = self.client.clone();
+
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            let pair_refs: Vec<(&str, KvValue)> = rust_pairs
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.clone()))
+                .collect();
+            guard.mset(&pair_refs, duration).await.map_err(client_error_to_py)?;
+            Python::with_gil(|py| Ok(py.None()))
+        })
+    }
+
+    /// Delete multiple keys (MDEL)
+    ///
+    /// Args:
+    ///     keys: List of keys to delete
+    ///
+    /// Returns:
+    ///     Number of keys deleted
+    fn mdel<'py>(&self, py: Python<'py>, keys: Vec<String>) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client.clone();
+        future_into_py(py, async move {
+            let mut guard = client.lock().await;
+            let key_refs: Vec<&str> = keys.iter().map(|s| s.as_str()).collect();
+            let count = guard.mdel(&key_refs).await.map_err(client_error_to_py)?;
+            Python::with_gil(|py| Ok(count.into_py(py)))
+        })
+    }
+
     /// Get the namespace for this client
     ///
     /// Returns:
