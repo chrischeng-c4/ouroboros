@@ -3,6 +3,11 @@
 from .table import Table
 from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery, ManyToMany, ManyToManyQuery, create_m2m_join_table
 from .query import QueryBuilder
+from .relationships import relationship, LoadingStrategy, RelationshipDescriptor
+from .options import QueryOption, selectinload, joinedload, noload, raiseload
+from .fulltext import FullTextSearch, fts
+from .postgis import Point, GeoQuery
+from .arrays import ArrayOps
 from .query_ext import (
     filter_by, and_, or_, not_, any_, has, aliased,
     QueryFragment, BooleanClause, AliasedClass,
@@ -30,6 +35,14 @@ from .events import (
     before_delete, after_delete,
     before_flush, after_commit,
     AttributeEvents
+)
+from .telemetry import (
+    is_tracing_enabled, get_tracer, get_meter,
+    SpanAttributes, MetricNames,
+    create_query_span, create_session_span, create_relationship_span,
+    add_exception, set_span_result,
+    instrument_span, instrument_query, instrument_session,
+    ConnectionPoolMetrics, get_connection_pool_metrics
 )
 from .loading import (
     LoadingStrategy, LoadingConfig,
@@ -84,6 +97,16 @@ __all__ = [
     "ManyToMany",
     "ManyToManyQuery",
     "create_m2m_join_table",
+    # Relationships (Lazy Loading)
+    "relationship",
+    "LoadingStrategy",
+    "RelationshipDescriptor",
+    # Query Options (Eager Loading)
+    "QueryOption",
+    "selectinload",
+    "joinedload",
+    "noload",
+    "raiseload",
     # Query
     "QueryBuilder",
     # Query Extensions
@@ -162,6 +185,28 @@ __all__ = [
     "before_flush",
     "after_commit",
     "AttributeEvents",
+    # PostgreSQL Extensions
+    "FullTextSearch",
+    "fts",
+    "Point",
+    "GeoQuery",
+    "ArrayOps",
+    # OpenTelemetry Integration
+    "is_tracing_enabled",
+    "get_tracer",
+    "get_meter",
+    "SpanAttributes",
+    "MetricNames",
+    "create_query_span",
+    "create_session_span",
+    "create_relationship_span",
+    "add_exception",
+    "set_span_result",
+    "instrument_span",
+    "instrument_query",
+    "instrument_session",
+    "ConnectionPoolMetrics",
+    "get_connection_pool_metrics",
     # Loading Strategies
     "LoadingStrategy",
     "LoadingConfig",

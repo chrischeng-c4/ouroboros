@@ -327,7 +327,7 @@ Atomic, testable tasks organized by priority and component.
 
 > **Goal**: Achieve feature parity with SQLAlchemy ORM for Python-level usage
 
-### P5-ORM: Session & Unit of Work
+### P5-ORM: Session & Unit of Work (COMPLETED 2025-01-05)
 
 - [x] P5-ORM-01: Identity Map - Cache objects by primary key, single instance per PK (2025-01-05)
 - [x] P5-ORM-02: Dirty Tracking - Track which fields changed since load (2025-01-05)
@@ -335,7 +335,57 @@ Atomic, testable tasks organized by priority and component.
 - [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
 - [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
+<<<<<<<< HEAD:kb/40-postgres/TODOS.md
+### P5-OBSERVABILITY: OpenTelemetry Integration (COMPLETED 2026-01-06)
+
+**Result**: Built-in distributed tracing for database operations
+
+**Features Implemented**:
+- [x] Telemetry module with tracer configuration
+- [x] Query execution instrumentation (find, count, aggregate, exists)
+- [x] Session lifecycle instrumentation (open, close, flush, commit, rollback)
+- [x] Relationship loading instrumentation (lazy and eager loading)
+- [x] Connection pool metrics
+- [x] Zero overhead when disabled (fast-path optimization)
+- [x] FastAPI integration example
+- [x] Comprehensive documentation
+
+**Documentation**:
+- [x] `/docs/OPENTELEMETRY.md` - Comprehensive guide (2,752 lines)
+- [x] `/kb/40-postgres/operations/OPENTELEMETRY.md` - KB reference (450 lines)
+- [x] `/examples/fastapi_otel_example.py` - Working FastAPI example
+- [x] `/examples/QUICKSTART_FASTAPI_OTEL.md` - Quick start guide
+
+**Span Attributes**:
+- Standard OpenTelemetry semantic conventions (db.system, db.operation.name)
+- Query attributes (filters_count, limit, offset, order_by)
+- Session attributes (pending_count, dirty_count, deleted_count)
+- Relationship attributes (strategy, cache_hit, batch_count, depth)
+
+**OTLP Backends Documented**:
+- Jaeger (local development)
+- Grafana Cloud (production SaaS)
+- DataDog APM
+- New Relic
+- Honeycomb
+- AWS X-Ray (via ADOT)
+
+**Performance**:
+- Disabled: 0ms overhead (fast-path)
+- Enabled: ~1-2ms per span
+- Batch export: Amortized <0.5ms
+
+**N+1 Query Detection**:
+- Span patterns show lazy loading N+1 issues
+- Eager loading comparison (11 queries → 2 queries example)
+- Relationship cache hit tracking
+
+**Completed Date**: 2026-01-06
+
+### P5-LOAD: Loading Strategies
+========
 ### P5-LOAD: Loading Strategies (COMPLETED 2025-01-05)
+>>>>>>>> origin/main:crates/data-bridge-postgres/TODOS.md
 
 | ID | Feature | Description |
 |----|---------|-------------|
