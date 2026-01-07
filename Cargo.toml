@@ -10,6 +10,7 @@ members = [
     "crates/data-bridge-kv-server",
     "crates/data-bridge-kv-client",
     "crates/data-bridge-api",
+    "crates/data-bridge-tasks",
 ]
 resolver = "2"
 
@@ -79,6 +80,13 @@ clap = { version = "4", features = ["derive"] }
 multer = "3.1"
 urlencoding = "2"
 futures-util = "0.3"
+
+# Task queue (for data-bridge-tasks crate)
+dashmap = "6.1"
+async-nats = "0.38"
+deadpool-redis = "0.18"
+cron = "0.12"
+tokio-util = { version = "0.7", features = ["rt"] }
 
 [profile.release]
 opt-level = 3

@@ -54,6 +54,9 @@ mod kv;
 #[cfg(feature = "api")]
 mod api;
 
+#[cfg(feature = "tasks")]
+mod tasks;
+
 /// data-bridge Python module
 #[pymodule]
 fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -109,6 +112,14 @@ fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         let api_module = PyModule::new(py, "api")?;
         api::register_module(&api_module)?;
         m.add_submodule(&api_module)?;
+    }
+
+    // Add Tasks module if enabled
+    #[cfg(feature = "tasks")]
+    {
+        let tasks_module = PyModule::new(py, "tasks")?;
+        tasks::register_module(&tasks_module)?;
+        m.add_submodule(&tasks_module)?;
     }
 
     Ok(())

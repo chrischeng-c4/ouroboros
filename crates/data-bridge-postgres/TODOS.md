@@ -2,7 +2,7 @@
 
 Atomic, testable tasks organized by priority and component.
 
-**Last Updated**: 2025-01-05 (P5 SQLAlchemy parity roadmap added)
+**Last Updated**: 2025-01-08 (Merged data-bridge-tasks Phase 7 + P5 SQLAlchemy parity roadmap)
 **Branch**: `main`
 
 ---
@@ -746,3 +746,82 @@ rg "\.unwrap\(\)|\.expect\(" crates/ --type rust
 # Check for format! in SQL generation
 rg "format!\(|push_str\(" crates/data-bridge-postgres/src/ --type rust
 ```
+
+---
+
+## data-bridge-tasks: K8s-Native Task Queue
+
+> **Container-First, Cloud-Native** - 為 K8s 環境設計的高效能任務佇列
+
+### Design Philosophy
+
+| 傳統 Celery | data-bridge-tasks |
+|-------------|-------------------|
+| 長運行 worker 進程 | 短暫容器，隨時可重啟 |
+| Prefork 進程模型 | Async Rust (Tokio) |
+| Worker autoscale | K8s HPA |
+| Remote control | kubectl / K8s API |
+| Flower 監控 | Prometheus + Grafana |
+| RabbitMQ/Redis | Cloud-native brokers |
+
+### ✅ Completed (Phase 1-8)
+
+- [x] **Core**: Task trait, Registry, States, Results, Context
+- [x] **Retry**: Exponential backoff, Jitter, Selective retry
+- [x] **Rate Limiting**: Token bucket, Sliding window, Global/Queue/Task limits
+- [x] **Routing**: Exact, Glob, Regex, Custom functions
+- [x] **Signals**: 14 task + worker lifecycle signals
+- [x] **Brokers**: NATS JetStream, Cloud Pub/Sub (Pull)
+- [x] **Backend**: Redis result store
+- [x] **Scheduling**: Cron, Interval, ETA/Countdown
+- [x] **Workflows**: Chain, Group, Chord, Map, Starmap, Chunks
+- [x] **Revocation**: In-memory + Redis store
+- [x] **Observability**: Prometheus metrics, OpenTelemetry tracing
+- [x] **PyO3 Bindings**: Python API
+
+**Tests**: 121 passed ✅ | **Clippy**: Clean ✅
+
+### 🎯 P0 - Cloud Run / Serverless (Push-based)
+
+> 支援 Cloud Run、Knative 等 serverless 平台
+
+- [ ] **HTTP Server (Axum)** - Push broker 的 HTTP endpoint
+- [ ] **Cloud Tasks Broker** - GCP Cloud Tasks 整合 (native scheduling)
+- [ ] **Pub/Sub Push** - Pub/Sub push subscription
+- [ ] **OIDC Auth** - Cloud Tasks/Pub/Sub 身份驗證
+
+### 🔧 P1 - K8s Integration
+
+> 深度 K8s 整合功能
+
+- [ ] **K8s Job Mode** - 任務完成後 Pod 自動退出
+- [ ] **Pod Disruption Budget** - Graceful shutdown 配合 PDB
+- [ ] **Config from ConfigMap/Secret** - 環境變數 + 檔案配置
+- [ ] **Leader Election** - Scheduler 高可用 (lease)
+
+### 📊 P2 - Observability Enhancement
+
+> 強化監控與可觀測性
+
+- [ ] **Grafana Dashboard** - 預設 dashboard JSON
+- [ ] **Custom Metrics** - 業務指標 API
+- [ ] **Structured Logging** - JSON logs for Loki/ELK
+- [ ] **Trace Context Propagation** - 跨服務追蹤
+
+### ☁️ P3 - Multi-Cloud
+
+> 多雲支援
+
+- [ ] **Amazon SQS** - AWS 整合
+- [ ] **Azure Service Bus** - Azure 整合
+- [ ] **Firestore Backend** - GCP serverless backend
+
+### ❌ Not Planned (K8s handles these)
+
+| Feature | K8s Alternative |
+|---------|-----------------|
+| Worker Autoscale | HPA / KEDA |
+| Remote Control | kubectl exec |
+| Worker Discovery | K8s Service |
+| Flower Dashboard | Grafana |
+| RabbitMQ | NATS / Pub/Sub |
