@@ -64,6 +64,7 @@ impl<T> Expectation<T> {
     }
 
     /// Negate the assertion
+    #[allow(clippy::should_implement_trait)]
     pub fn not(mut self) -> Self {
         self.negated = !self.negated;
         self

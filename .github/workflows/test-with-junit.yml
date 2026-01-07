@@ -1,0 +1,159 @@
+name: Test with JUnit XML Report
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Run Tests and Generate JUnit Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install dependencies
+        run: |
+          cargo build --release
+          pip install -r requirements.txt || echo "No requirements.txt found"
+
+      - name: Run Rust tests with JUnit output
+        run: |
+          # Install cargo-junit for JUnit XML output from Cargo tests
+          cargo install cargo-junit || echo "cargo-junit already installed"
+
+          # Run tests and generate JUnit XML
+          cargo test --all -- -Z unstable-options --format json --report-time | \
+            cargo-junit > rust-test-results.xml || \
+            cargo test --all 2>&1 | tee test-output.txt
+        continue-on-error: true
+
+      - name: Run JUnit reporter example
+        run: |
+          # Run the example to generate test-results.xml
+          cargo run --example junit_reporter_example -p data-bridge-test
+
+          # The example generates test-results.xml in the current directory
+          ls -la test-results.xml || echo "test-results.xml not found"
+
+      - name: Upload JUnit test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-test-results
+          path: |
+            test-results.xml
+            rust-test-results.xml
+            test-report.md
+          retention-days: 30
+
+      - name: Publish Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: |
+            test-results.xml
+            rust-test-results.xml
+          reporter: java-junit
+          fail-on-error: true
+
+      - name: Test Summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          paths: |
+            test-results.xml
+            rust-test-results.xml
+
+      - name: Comment PR with Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always() && github.event_name == 'pull_request'
+        with:
+          files: |
+            test-results.xml
+            rust-test-results.xml
+          check_name: Test Results
+          comment_title: Test Results
+
+  # Optional: Generate coverage report with test results
+  test-with-coverage:
+    name: Test with Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: |
+          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+          cargo llvm-cov report --json --output-path coverage.json
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+
+      - name: Generate coverage summary
+        run: |
+          cargo llvm-cov report --summary-only
+
+  # Example: Integration with other CI systems
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --no-fail-fast -- --output-format bencher | tee bench-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: bench-results.txt

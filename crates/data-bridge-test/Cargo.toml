@@ -27,6 +27,7 @@ anyhow.workspace = true
 chrono.workspace = true
 regex.workspace = true
 walkdir.workspace = true
+jwalk.workspace = true
 tracing.workspace = true
 rand = "0.8"
 
@@ -37,11 +38,19 @@ inferno = "0.12"
 axum.workspace = true
 tower.workspace = true
 
+# HTTP client (for async fuzzer HTTP endpoint testing)
+reqwest.workspace = true
+
 # Optional: HTTP client for API testing
 data-bridge-http = { path = "../data-bridge-http", optional = true }
 
 [dev-dependencies]
 reqwest.workspace = true
+criterion = "0.5"
+
+[[bench]]
+name = "discovery_benchmark"
+harness = false
 
 [features]
 default = ["http"]
