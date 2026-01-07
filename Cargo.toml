@@ -9,6 +9,7 @@ members = [
     "crates/data-bridge-kv",
     "crates/data-bridge-kv-server",
     "crates/data-bridge-kv-client",
+    "crates/data-bridge-api",
 ]
 resolver = "2"
 
@@ -47,9 +48,14 @@ http = "1.2"
 url = "2.5"
 bytes = "1.9"
 
-# HTTP Server (for test server)
+# HTTP Server (for test server and data-bridge-api)
 axum = "0.8"
 tower = "0.5"
+tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
+
+# API framework
+utoipa = "4"
+matchit = "0.7"
 
 # Efficient serde <-> Python conversion
 pythonize = "0.24"
@@ -68,6 +74,11 @@ rust_decimal = { version = "1.36", features = ["serde"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
+
+# Form data parsing
+multer = "3.1"
+urlencoding = "2"
+futures-util = "0.3"
 
 [profile.release]
 opt-level = 3

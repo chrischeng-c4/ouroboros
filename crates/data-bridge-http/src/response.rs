@@ -3,6 +3,7 @@
 use crate::error::{HttpError, HttpResult};
 use std::collections::HashMap;
 use std::time::Duration;
+use data_bridge_common::http::HttpResponseLike;
 
 /// HTTP response with built-in latency measurement
 #[derive(Debug, Clone)]
@@ -118,6 +119,20 @@ impl HttpResponse {
         self.content_type()
             .map(|ct| ct.contains("application/json"))
             .unwrap_or(false)
+    }
+}
+
+impl HttpResponseLike for HttpResponse {
+    fn status_code(&self) -> u16 {
+        self.status_code
+    }
+
+    fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    fn body_bytes(&self) -> &[u8] {
+        &self.body
     }
 }
 

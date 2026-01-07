@@ -51,6 +51,9 @@ mod postgres;
 #[cfg(feature = "kv")]
 mod kv;
 
+#[cfg(feature = "api")]
+mod api;
+
 /// data-bridge Python module
 #[pymodule]
 fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -98,6 +101,14 @@ fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         let kv_module = PyModule::new(py, "kv")?;
         kv::register_module(&kv_module)?;
         m.add_submodule(&kv_module)?;
+    }
+
+    // Add API module if enabled
+    #[cfg(feature = "api")]
+    {
+        let api_module = PyModule::new(py, "api")?;
+        api::register_module(&api_module)?;
+        m.add_submodule(&api_module)?;
     }
 
     Ok(())
