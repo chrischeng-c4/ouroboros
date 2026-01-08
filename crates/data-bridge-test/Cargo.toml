@@ -19,6 +19,10 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 
+# Zero-copy serialization
+rkyv = { version = "0.7", features = ["validation"], optional = true }
+bytecheck = { version = "0.6", optional = true }
+
 # Error handling
 thiserror.workspace = true
 anyhow.workspace = true
@@ -27,6 +31,7 @@ anyhow.workspace = true
 chrono.workspace = true
 regex.workspace = true
 walkdir.workspace = true
+jwalk.workspace = true
 tracing.workspace = true
 rand = "0.8"
 
@@ -37,12 +42,25 @@ inferno = "0.12"
 axum.workspace = true
 tower.workspace = true
 
+# HTTP client (for async fuzzer HTTP endpoint testing)
+reqwest.workspace = true
+
 # Optional: HTTP client for API testing
 data-bridge-http = { path = "../data-bridge-http", optional = true }
 
 [dev-dependencies]
 reqwest.workspace = true
+criterion = "0.5"
+
+[[bench]]
+name = "discovery_benchmark"
+harness = false
+
+[[bench]]
+name = "serialization_benchmark"
+harness = false
 
 [features]
-default = ["http"]
+default = ["http", "rkyv"]
 http = ["data-bridge-http"]
+rkyv = ["dep:rkyv", "dep:bytecheck"]

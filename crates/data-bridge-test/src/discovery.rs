@@ -1,11 +1,12 @@
 // Discovery module for dbtest CLI
 //
-// This module provides fast file-system discovery using the walkdir crate,
+// This module provides fast file-system discovery using the jwalk crate,
 // storing file paths and metadata for lazy loading during execution.
+// jwalk provides parallel directory traversal for improved performance.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use walkdir::WalkDir;
+use jwalk::{WalkDir, Parallelism};
 
 /// File type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +26,8 @@ pub struct DiscoveryConfig {
     pub exclusions: Vec<String>,
     /// Maximum directory depth
     pub max_depth: usize,
+    /// Number of parallel threads for discovery (default: available CPU cores or 4)
+    pub num_threads: usize,
 }
 
 impl Default for DiscoveryConfig {
@@ -34,6 +37,9 @@ impl Default for DiscoveryConfig {
             patterns: vec!["test_*.py".to_string(), "bench_*.py".to_string()],
             exclusions: vec!["__pycache__".to_string(), ".git".to_string()],
             max_depth: 10,
+            num_threads: std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4),
         }
     }
 }
@@ -110,6 +116,10 @@ pub struct DiscoveryStats {
     pub files_found: usize,
     pub filtered_count: usize,
     pub discovery_time_ms: u64,
+    /// Total entries scanned during discovery
+    pub entries_scanned: usize,
+    /// Number of parallel threads used
+    pub num_threads_used: usize,
 }
 
 /// Registry for test files
@@ -194,58 +204,78 @@ impl Default for BenchmarkRegistry {
     }
 }
 
-/// Walk file system and discover test/benchmark files
+/// Walk file system and discover test/benchmark files using parallel traversal
 pub fn walk_files(config: &DiscoveryConfig) -> Result<Vec<FileInfo>, String> {
     let start = Instant::now();
     let mut files = Vec::new();
+    let mut entries_scanned = 0usize;
 
+    // Clone config for use in closure
+    let exclusions = config.exclusions.clone();
+
+    // Determine parallelism strategy based on num_threads
+    let parallelism = if config.num_threads <= 1 {
+        Parallelism::Serial
+    } else {
+        Parallelism::RayonNewPool(config.num_threads)
+    };
+
+    // Create parallel walker with jwalk
     let walker = WalkDir::new(&config.root_path)
         .follow_links(false)
         .max_depth(config.max_depth)
-        .into_iter()
-        .filter_entry(|e| {
-            // Exclude specified directories
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !config.exclusions.iter().any(|ex| name.contains(ex))
-            } else {
-                true
-            }
+        .parallelism(parallelism)
+        .skip_hidden(false)
+        .process_read_dir(move |_depth, _path, _read_dir_state, children| {
+            // Filter out excluded directories during traversal for better performance
+            children.retain(|dir_entry_result| {
+                if let Ok(dir_entry) = dir_entry_result {
+                    if dir_entry.file_type().is_dir() {
+                        let name = dir_entry.file_name().to_string_lossy();
+                        !exclusions.iter().any(|ex| name.contains(ex))
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                }
+            });
         });
 
-    for entry in walker {
-        let entry = entry.map_err(|e| format!("Walk error: {}", e))?;
+    // Process entries
+    for entry_result in walker {
+        let entry = entry_result.map_err(|e| format!("Walk error: {}", e))?;
+        entries_scanned += 1;
 
         // Skip directories
-        if !entry.file_type().is_file() {
+        if entry.file_type().is_dir() {
             continue;
         }
 
-        let path = entry.path();
-        let file_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        // Get filename
+        let file_name = entry.file_name().to_string_lossy().to_string();
 
         // Check if matches any pattern
-        let matches = config
-            .patterns
-            .iter()
-            .any(|pat| pattern_matches(file_name, pat));
+        let matches_pattern = config.patterns.iter().any(|pattern| {
+            pattern_matches(&file_name, pattern)
+        });
 
-        if matches {
-            match FileInfo::from_path(path, &config.root_path) {
+        if matches_pattern {
+            let path = entry.path();
+            match FileInfo::from_path(&path, &config.root_path) {
                 Ok(file_info) => files.push(file_info),
-                Err(e) => eprintln!("Warning: {}", e),
+                Err(e) => tracing::warn!("Failed to create FileInfo: {}", e),
             }
         }
     }
 
     let elapsed = start.elapsed().as_millis() as u64;
     tracing::debug!(
-        "Discovery completed: {} files in {}ms",
+        "Parallel discovery completed: {} files found, {} entries scanned in {}ms using {} threads",
         files.len(),
-        elapsed
+        entries_scanned,
+        elapsed,
+        config.num_threads
     );
 
     Ok(files)
@@ -345,5 +375,48 @@ mod tests {
         let filtered = filter_files(files, "test_foo.py");
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].module_name, "test_foo");
+    }
+
+    #[test]
+    fn test_parallel_discovery() {
+        // Use a path relative to the workspace root
+        let root = std::env::current_dir()
+            .unwrap()
+            .ancestors()
+            .find(|p| p.join("tests").exists())
+            .map(|p| p.join("tests"))
+            .unwrap_or_else(|| PathBuf::from("tests/"));
+
+        let config = DiscoveryConfig {
+            root_path: root,
+            num_threads: 4,
+            ..Default::default()
+        };
+
+        let result = walk_files(&config);
+        // Should complete discovery without error
+        assert!(result.is_ok(), "Discovery should complete successfully");
+        // In a real project with tests, files.len() > 0
+    }
+
+    #[test]
+    fn test_single_thread_compatibility() {
+        // Use a path relative to the workspace root
+        let root = std::env::current_dir()
+            .unwrap()
+            .ancestors()
+            .find(|p| p.join("tests").exists())
+            .map(|p| p.join("tests"))
+            .unwrap_or_else(|| PathBuf::from("tests/"));
+
+        let config = DiscoveryConfig {
+            root_path: root,
+            num_threads: 1,
+            ..Default::default()
+        };
+
+        let result = walk_files(&config);
+        // Should work with single thread
+        assert!(result.is_ok(), "Single-threaded discovery should complete successfully");
     }
 }

@@ -3,6 +3,16 @@
 from .table import Table
 from .columns import Column, ColumnProxy, ForeignKeyProxy, BackReference, BackReferenceQuery, ManyToMany, ManyToManyQuery, create_m2m_join_table
 from .query import QueryBuilder
+from .relationships import relationship, LoadingStrategy, RelationshipDescriptor
+from .options import QueryOption, selectinload, joinedload, noload, raiseload
+from .fulltext import FullTextSearch, fts
+from .postgis import Point, GeoQuery
+from .arrays import ArrayOps
+from .query_ext import (
+    filter_by, and_, or_, not_, any_, has, aliased,
+    QueryFragment, BooleanClause, AliasedClass,
+    active_filter, date_range_filter, in_list_filter, null_check_filter
+)
 from .connection import (
     init, close, is_connected, execute, query_aggregate, query_with_cte,
     insert_one, insert_many,
@@ -26,6 +36,54 @@ from .events import (
     before_flush, after_commit,
     AttributeEvents
 )
+from .telemetry import (
+    is_tracing_enabled, get_tracer, get_meter,
+    SpanAttributes, MetricNames,
+    create_query_span, create_session_span, create_relationship_span,
+    add_exception, set_span_result,
+    instrument_span, instrument_query, instrument_session,
+    ConnectionPoolMetrics, get_connection_pool_metrics
+)
+from .loading import (
+    LoadingStrategy, LoadingConfig,
+    lazy, joined, subquery, selectinload, noload, raiseload, defer, undefer,
+    LazyLoadingProxy, DeferredColumn, RelationshipLoader,
+    LazyLoadError, SQLGenerationError
+)
+from .inheritance import (
+    InheritanceType, InheritanceConfig, inheritance,
+    SingleTableInheritance, JoinedTableInheritance, ConcreteTableInheritance,
+    PolymorphicQueryMixin,
+    get_inheritance_type, get_discriminator_column, get_discriminator_value,
+    register_polymorphic_class, get_polymorphic_map
+)
+from .computed import (
+    hybrid_property, hybrid_method, column_property, Computed,
+    default_factory,
+    HybridPropertyDescriptor, HybridMethodDescriptor,
+    ColumnPropertyDescriptor, ComputedColumn
+)
+from .validation import (
+    validates, validates_many,
+    TypeDecorator,
+    coerce_int, coerce_float, coerce_str, coerce_bool, coerce_datetime, coerce_date, coerce_decimal,
+    ValidationError,
+    ValidatorRegistry,
+    AutoCoerceMixin,
+    validate_not_empty, validate_email, validate_url,
+    validate_min_length, validate_max_length, validate_regex,
+    validate_range, validate_min_value, validate_max_value,
+    validate_in_list, validate_positive, validate_non_negative
+)
+from .async_utils import (
+    AsyncSession, AsyncSessionFactory,
+    run_sync, async_wrap,
+    AsyncScoped, get_async_session,
+    async_load, async_refresh, async_expire,
+    async_stream, AsyncResultIterator,
+    greenlet_spawn, AsyncGreenlet, GREENLET_AVAILABLE,
+    AsyncEngine
+)
 
 __all__ = [
     # Base class
@@ -39,8 +97,33 @@ __all__ = [
     "ManyToMany",
     "ManyToManyQuery",
     "create_m2m_join_table",
+    # Relationships (Lazy Loading)
+    "relationship",
+    "LoadingStrategy",
+    "RelationshipDescriptor",
+    # Query Options (Eager Loading)
+    "QueryOption",
+    "selectinload",
+    "joinedload",
+    "noload",
+    "raiseload",
     # Query
     "QueryBuilder",
+    # Query Extensions
+    "filter_by",
+    "and_",
+    "or_",
+    "not_",
+    "any_",
+    "has",
+    "aliased",
+    "QueryFragment",
+    "BooleanClause",
+    "AliasedClass",
+    "active_filter",
+    "date_range_filter",
+    "in_list_filter",
+    "null_check_filter",
     # Connection
     "init",
     "close",
@@ -102,4 +185,107 @@ __all__ = [
     "before_flush",
     "after_commit",
     "AttributeEvents",
+    # PostgreSQL Extensions
+    "FullTextSearch",
+    "fts",
+    "Point",
+    "GeoQuery",
+    "ArrayOps",
+    # OpenTelemetry Integration
+    "is_tracing_enabled",
+    "get_tracer",
+    "get_meter",
+    "SpanAttributes",
+    "MetricNames",
+    "create_query_span",
+    "create_session_span",
+    "create_relationship_span",
+    "add_exception",
+    "set_span_result",
+    "instrument_span",
+    "instrument_query",
+    "instrument_session",
+    "ConnectionPoolMetrics",
+    "get_connection_pool_metrics",
+    # Loading Strategies
+    "LoadingStrategy",
+    "LoadingConfig",
+    "lazy",
+    "joined",
+    "subquery",
+    "selectinload",
+    "noload",
+    "raiseload",
+    "defer",
+    "undefer",
+    "LazyLoadingProxy",
+    "DeferredColumn",
+    "RelationshipLoader",
+    "LazyLoadError",
+    "SQLGenerationError",
+    # Inheritance Patterns
+    "InheritanceType",
+    "InheritanceConfig",
+    "inheritance",
+    "SingleTableInheritance",
+    "JoinedTableInheritance",
+    "ConcreteTableInheritance",
+    "PolymorphicQueryMixin",
+    "get_inheritance_type",
+    "get_discriminator_column",
+    "get_discriminator_value",
+    "register_polymorphic_class",
+    "get_polymorphic_map",
+    # Computed Attributes
+    "hybrid_property",
+    "hybrid_method",
+    "column_property",
+    "Computed",
+    "default_factory",
+    "HybridPropertyDescriptor",
+    "HybridMethodDescriptor",
+    "ColumnPropertyDescriptor",
+    "ComputedColumn",
+    # Validation
+    "validates",
+    "validates_many",
+    "TypeDecorator",
+    "coerce_int",
+    "coerce_float",
+    "coerce_str",
+    "coerce_bool",
+    "coerce_datetime",
+    "coerce_date",
+    "coerce_decimal",
+    "ValidationError",
+    "ValidatorRegistry",
+    "AutoCoerceMixin",
+    "validate_not_empty",
+    "validate_email",
+    "validate_url",
+    "validate_min_length",
+    "validate_max_length",
+    "validate_regex",
+    "validate_range",
+    "validate_min_value",
+    "validate_max_value",
+    "validate_in_list",
+    "validate_positive",
+    "validate_non_negative",
+    # Async Utilities
+    "AsyncSession",
+    "AsyncSessionFactory",
+    "run_sync",
+    "async_wrap",
+    "AsyncScoped",
+    "get_async_session",
+    "async_load",
+    "async_refresh",
+    "async_expire",
+    "async_stream",
+    "AsyncResultIterator",
+    "greenlet_spawn",
+    "AsyncGreenlet",
+    "GREENLET_AVAILABLE",
+    "AsyncEngine",
 ]

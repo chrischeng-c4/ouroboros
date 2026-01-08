@@ -18,3 +18,4 @@ This directory serves as the **Single Source of Truth** for the system architect
 
 - [Roadmap](./00-overview/01-roadmap.md)
 - [Architecture Principles](./00-overview/02-architecture-principles.md)
+- [PostgreSQL OpenTelemetry Guide](./40-postgres/operations/OPENTELEMETRY.md) - Distributed tracing

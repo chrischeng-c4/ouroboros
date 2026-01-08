@@ -17,8 +17,16 @@ from typing import (
 )
 from dataclasses import dataclass, field
 
+from .telemetry import (
+    create_session_span,
+    add_exception,
+    is_tracing_enabled,
+    set_span_result,
+)
+
 if TYPE_CHECKING:
     from .table import Table
+    from opentelemetry.trace import Span
 
 T = TypeVar('T', bound='Table')
 
@@ -293,6 +301,9 @@ class Session:
         self._unit_of_work = UnitOfWork()
         self._transaction_started = False
         self._closed = False
+        self._loaded_relationships: Dict[Tuple[Any, str], Any] = {}
+        self._session_span_ctx = None  # Track session span context manager
+        self._session_span: Optional['Span'] = None  # Track session lifecycle span
 
     @classmethod
     def get_current(cls) -> Optional['Session']:
@@ -301,6 +312,16 @@ class Session:
 
     async def __aenter__(self) -> 'Session':
         """Enter session context."""
+        if is_tracing_enabled():
+            # Create session lifecycle span
+            self._session_span_ctx = create_session_span(
+                operation="open",
+                autoflush=self.autoflush,
+                expire_on_commit=self.expire_on_commit,
+            )
+            # Enter the context manager and store the span
+            self._session_span = self._session_span_ctx.__enter__()
+
         Session._current = self
         return self
 
@@ -314,6 +335,19 @@ class Session:
                 # Exception occurred, rollback
                 await self.rollback()
         finally:
+            # End session span if it exists
+            if self._session_span_ctx is not None:
+                if exc_type and self._session_span is not None:
+                    add_exception(self._session_span, exc_val)
+                elif self._session_span is not None:
+                    # Set success status
+                    if hasattr(self._session_span, 'set_attribute'):
+                        self._session_span.set_attribute("db.session.status", "closed")
+                # Exit the span context
+                self._session_span_ctx.__exit__(exc_type, exc_val, exc_tb)
+                self._session_span_ctx = None
+                self._session_span = None
+
             await self.close()
             if Session._current is self:
                 Session._current = None
@@ -406,6 +440,33 @@ class Session:
         if self._closed:
             raise RuntimeError("Session is closed")
 
+        # Fast path: no tracing
+        if not is_tracing_enabled():
+            await self._execute_flush()
+            return
+
+        # With tracing
+        new_count = len(self._unit_of_work._new)
+        dirty_count = len(self._unit_of_work._dirty)
+        deleted_count = len(self._unit_of_work._deleted)
+
+        with create_session_span(
+            operation="flush",
+            new_count=new_count,
+            dirty_count=dirty_count,
+            deleted_count=deleted_count,
+        ) as span:
+            try:
+                await self._execute_flush()
+                # Record result
+                if span is not None and hasattr(span, 'set_attribute'):
+                    span.set_attribute("db.session.status", "flushed")
+            except Exception as e:
+                add_exception(span, e)
+                raise
+
+    async def _execute_flush(self) -> None:
+        """Internal method to execute flush operations."""
         from . import insert_one, update_many, delete_many
 
         # Process INSERTs
@@ -463,22 +524,56 @@ class Session:
 
     async def commit(self) -> None:
         """Flush and commit the current transaction."""
-        await self.flush()
+        # Fast path: no tracing
+        if not is_tracing_enabled():
+            await self.flush()
+            if self.expire_on_commit:
+                # Clear snapshots to force refresh on next access
+                self._unit_of_work._dirty_tracker.clear()
+            return
 
-        if self.expire_on_commit:
-            # Clear snapshots to force refresh on next access
-            self._unit_of_work._dirty_tracker.clear()
+        # With tracing
+        with create_session_span(operation="commit") as span:
+            try:
+                await self.flush()
+                if self.expire_on_commit:
+                    # Clear snapshots to force refresh on next access
+                    self._unit_of_work._dirty_tracker.clear()
+
+                # Record success
+                if span is not None and hasattr(span, 'set_attribute'):
+                    span.set_attribute("db.session.status", "committed")
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def rollback(self) -> None:
         """Rollback the current transaction and clear pending changes."""
-        self._unit_of_work.clear()
-        self._identity_map.clear()
+        # Fast path: no tracing
+        if not is_tracing_enabled():
+            self._unit_of_work.clear()
+            self._identity_map.clear()
+            return
+
+        # With tracing
+        with create_session_span(operation="rollback") as span:
+            try:
+                self._unit_of_work.clear()
+                self._identity_map.clear()
+
+                # Record success
+                if span is not None and hasattr(span, 'set_attribute'):
+                    span.set_attribute("db.session.status", "rolled_back")
+            except Exception as e:
+                add_exception(span, e)
+                raise
 
     async def close(self) -> None:
         """Close the session."""
         self._closed = True
         self._unit_of_work.clear()
         self._identity_map.clear()
+        self._loaded_relationships.clear()
 
     def expunge(self, obj: T) -> None:
         """Remove object from session without deleting from database."""
@@ -501,6 +596,43 @@ class Session:
     def is_modified(self, obj: T) -> bool:
         """Check if object has uncommitted changes."""
         return self._unit_of_work.is_dirty(obj) or obj in self._unit_of_work._new
+
+    def _track_relationship(self, instance: 'Table', relationship_name: str, loaded_value: Any) -> None:
+        """
+        Track a loaded relationship.
+
+        This allows the session to keep track of which relationships have been
+        loaded for which instances, enabling future optimizations.
+
+        Args:
+            instance: The Table instance that owns the relationship
+            relationship_name: Name of the relationship attribute
+            loaded_value: The loaded related object(s)
+
+        Note:
+            This is preparation for Phase 3 optimizations.
+        """
+        instance_id = id(instance)
+        key = (instance_id, relationship_name)
+        self._loaded_relationships[key] = loaded_value
+
+    def _get_tracked_relationship(self, instance: 'Table', relationship_name: str) -> Optional[Any]:
+        """
+        Get a tracked relationship if it exists.
+
+        Args:
+            instance: The Table instance
+            relationship_name: Name of the relationship attribute
+
+        Returns:
+            The tracked relationship value, or None if not tracked
+
+        Note:
+            This is preparation for Phase 3 optimizations.
+        """
+        instance_id = id(instance)
+        key = (instance_id, relationship_name)
+        return self._loaded_relationships.get(key)
 
     # Helper methods
     def _get_pk(self, obj: Any) -> Any:

@@ -1,0 +1,332 @@
+asyncapi: 3.0.0
+info:
+  title: data-bridge-tasks
+  version: 0.1.0
+  description: |
+    High-performance distributed task queue supporting multiple message brokers.
+
+    ## Supported Brokers
+    - **NATS JetStream** - Pull-based, supports delayed tasks
+    - **Google Cloud Pub/Sub** - Pull-based, GCP native
+
+    ## Message Flow
+    1. Producer publishes TaskMessage to queue channel
+    2. Worker subscribes and receives messages
+    3. Worker executes task and stores result in Redis
+    4. Producer can poll for result via AsyncResult
+  license:
+    name: MIT
+  contact:
+    name: data-bridge-tasks
+    url: https://github.com/anthropics/data-bridge
+
+servers:
+  nats:
+    host: localhost:4222
+    protocol: nats
+    description: NATS JetStream server
+    tags:
+      - name: broker
+        description: Primary message broker
+
+  pubsub:
+    host: pubsub.googleapis.com
+    protocol: googlepubsub
+    description: Google Cloud Pub/Sub
+    tags:
+      - name: broker
+        description: GCP message broker
+
+  redis:
+    host: localhost:6379
+    protocol: redis
+    description: Redis result backend
+    tags:
+      - name: backend
+        description: Task result storage
+
+channels:
+  tasks:
+    address: tasks.{queue}
+    description: Task queue channel for submitting and consuming tasks
+    parameters:
+      queue:
+        description: Queue name (e.g., "default", "high-priority", "math")
+    messages:
+      taskMessage:
+        $ref: '#/components/messages/TaskMessage'
+
+  tasksScheduled:
+    address: tasks.scheduled.{queue}
+    description: Channel for delayed/scheduled tasks (NATS only)
+    parameters:
+      queue:
+        description: Queue name
+    messages:
+      taskMessage:
+        $ref: '#/components/messages/TaskMessage'
+
+operations:
+  publishTask:
+    action: send
+    channel:
+      $ref: '#/channels/tasks'
+    summary: Publish a task for execution
+    description: |
+      Publishes a task message to the specified queue.
+      Workers subscribed to this queue will receive and execute the task.
+    messages:
+      - $ref: '#/components/messages/TaskMessage'
+
+  consumeTask:
+    action: receive
+    channel:
+      $ref: '#/channels/tasks'
+    summary: Consume tasks from queue
+    description: |
+      Workers subscribe to receive task messages.
+      After processing, worker sends ack (success) or nack (retry).
+    messages:
+      - $ref: '#/components/messages/TaskMessage'
+
+  publishDelayedTask:
+    action: send
+    channel:
+      $ref: '#/channels/tasksScheduled'
+    summary: Publish a delayed task
+    description: |
+      Publishes a task to be executed after a delay.
+      Only supported by NATS broker with native scheduling.
+    messages:
+      - $ref: '#/components/messages/TaskMessage'
+
+components:
+  messages:
+    TaskMessage:
+      name: TaskMessage
+      title: Task Message
+      summary: Message containing task execution details
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TaskMessage'
+      headers:
+        $ref: '#/components/schemas/TaskHeaders'
+      examples:
+        - name: Simple task
+          summary: Basic task with positional arguments
+          payload:
+            id: "0192f5e8-7b3a-7000-8000-000000000001"
+            name: "add"
+            args: [1, 2]
+            kwargs: {}
+            queue: "default"
+            retries: 0
+            max_retries: 3
+            eta: null
+            expires: null
+            created_at: "2024-01-15T10:30:00Z"
+
+        - name: Delayed task
+          summary: Task scheduled for future execution
+          payload:
+            id: "0192f5e8-7b3a-7000-8000-000000000002"
+            name: "send_email"
+            args: []
+            kwargs:
+              to: "user@example.com"
+              subject: "Hello"
+            queue: "email"
+            retries: 0
+            max_retries: 5
+            eta: "2024-01-15T12:00:00Z"
+            expires: "2024-01-15T13:00:00Z"
+            created_at: "2024-01-15T10:30:00Z"
+
+    TaskResult:
+      name: TaskResult
+      title: Task Result
+      summary: Result of task execution stored in Redis
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TaskResult'
+
+  schemas:
+    TaskMessage:
+      type: object
+      description: Task message payload
+      required:
+        - id
+        - name
+        - args
+        - kwargs
+        - queue
+        - retries
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique task identifier (UUID v7)
+          example: "0192f5e8-7b3a-7000-8000-000000000001"
+        name:
+          type: string
+          description: Registered task name
+          example: "add"
+        args:
+          type: array
+          description: Positional arguments for task
+          items: {}
+          example: [1, 2]
+        kwargs:
+          type: object
+          description: Keyword arguments for task
+          additionalProperties: true
+          example: {"key": "value"}
+        queue:
+          type: string
+          description: Target queue name
+          default: "default"
+          example: "default"
+        retries:
+          type: integer
+          minimum: 0
+          description: Current retry count
+          default: 0
+        max_retries:
+          type: integer
+          minimum: 0
+          description: Maximum retry attempts
+          default: 3
+        eta:
+          type: string
+          format: date-time
+          nullable: true
+          description: Estimated time of arrival (scheduled execution time)
+          example: "2024-01-15T12:00:00Z"
+        expires:
+          type: string
+          format: date-time
+          nullable: true
+          description: Task expiration time
+        countdown:
+          type: number
+          nullable: true
+          description: Delay in seconds before execution
+        created_at:
+          type: string
+          format: date-time
+          description: Task creation timestamp
+        correlation_id:
+          type: string
+          nullable: true
+          description: ID for tracing related tasks (workflows)
+        parent_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Parent task ID (for chained tasks)
+        root_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Root task ID (for workflow trees)
+
+    TaskHeaders:
+      type: object
+      description: Message headers for broker routing
+      properties:
+        task-id:
+          type: string
+          description: Task ID (duplicated from payload for routing)
+        task-name:
+          type: string
+          description: Task name for filtering
+        queue:
+          type: string
+          description: Target queue
+        correlation-id:
+          type: string
+          description: Correlation ID for tracing
+        eta:
+          type: string
+          description: Scheduled execution time (ISO 8601)
+
+    TaskResult:
+      type: object
+      description: Task execution result
+      required:
+        - task_id
+        - status
+      properties:
+        task_id:
+          type: string
+          format: uuid
+          description: Task identifier
+        status:
+          $ref: '#/components/schemas/TaskState'
+        result:
+          description: Task return value (if successful)
+        error:
+          type: string
+          nullable: true
+          description: Error message (if failed)
+        traceback:
+          type: string
+          nullable: true
+          description: Error traceback (if failed)
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        runtime:
+          type: number
+          nullable: true
+          description: Execution time in seconds
+
+    TaskState:
+      type: string
+      description: Task execution state
+      enum:
+        - PENDING
+        - RECEIVED
+        - STARTED
+        - SUCCESS
+        - FAILURE
+        - RETRY
+        - REVOKED
+        - REJECTED
+      example: "SUCCESS"
+
+    RetryPolicy:
+      type: object
+      description: Task retry configuration
+      properties:
+        max_retries:
+          type: integer
+          minimum: 0
+          default: 3
+          description: Maximum retry attempts
+        retry_delay:
+          type: number
+          default: 1.0
+          description: Base delay between retries (seconds)
+        retry_backoff:
+          type: number
+          default: 2.0
+          description: Exponential backoff multiplier
+        retry_jitter:
+          type: boolean
+          default: true
+          description: Add random jitter to retry delay
+
+tags:
+  - name: task
+    description: Task submission and execution
+  - name: workflow
+    description: Task workflows (Chain, Group, Chord)
+  - name: result
+    description: Task result management

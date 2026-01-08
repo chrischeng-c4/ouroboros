@@ -734,25 +734,36 @@ impl Reporter {
         writeln!(output, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>").unwrap();
         writeln!(
             output,
-            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"{}\" skipped=\"{}\" time=\"{:.3}\">",
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"{}\" skipped=\"{}\" time=\"{:.3}\" timestamp=\"{}\">",
             escape_xml(&report.suite_name),
             report.summary.total,
             report.summary.failed,
             report.summary.errors,
             report.summary.skipped,
-            report.duration_ms as f64 / 1000.0
+            report.duration_ms as f64 / 1000.0,
+            report.generated_at
         )
         .unwrap();
 
         for result in &report.results {
-            writeln!(
+            write!(
                 output,
-                "  <testcase name=\"{}\" classname=\"{}\" time=\"{:.3}\">",
+                "  <testcase name=\"{}\" classname=\"{}\" time=\"{:.3}\"",
                 escape_xml(&result.meta.name),
                 escape_xml(&result.meta.full_name),
                 result.duration_ms as f64 / 1000.0
             )
             .unwrap();
+
+            // Add file and line if available
+            if let Some(ref file) = result.meta.file_path {
+                write!(output, " file=\"{}\"", escape_xml(file)).unwrap();
+            }
+            if let Some(line) = result.meta.line_number {
+                write!(output, " line=\"{}\"", line).unwrap();
+            }
+
+            writeln!(output, ">").unwrap();
 
             match result.status {
                 TestStatus::Failed => {
@@ -769,7 +780,7 @@ impl Reporter {
                     let message = result.error.as_deref().unwrap_or("Test error");
                     writeln!(
                         output,
-                        "    <error message=\"{}\">{}</error>",
+                        "    <error type=\"Error\" message=\"{}\">{}</error>",
                         escape_xml(message),
                         escape_xml(result.stack_trace.as_deref().unwrap_or(""))
                     )
@@ -1085,6 +1096,50 @@ mod tests {
         assert!(xml.contains("tests=\"2\""));
         assert!(xml.contains("failures=\"1\""));
         assert!(xml.contains("<failure"));
+    }
+
+    #[test]
+    fn test_junit_enhanced_attributes() {
+        // Test with file_path and line_number
+        let mut meta1 = TestMeta::new("test_with_location");
+        meta1.file_path = Some("src/lib.rs".to_string());
+        meta1.line_number = Some(42);
+        meta1.full_name = "my_module::test_with_location".to_string();
+
+        let mut meta2 = TestMeta::new("test_error");
+        meta2.file_path = Some("src/error.rs".to_string());
+        meta2.line_number = Some(100);
+        meta2.full_name = "my_module::test_error".to_string();
+
+        let results = vec![
+            TestResult::passed(meta1, 150),
+            TestResult {
+                meta: meta2,
+                status: TestStatus::Error,
+                duration_ms: 25,
+                error: Some("Runtime error".to_string()),
+                stack_trace: Some("stack trace".to_string()),
+                profile_metrics: None,
+                stress_metrics: None,
+                started_at: chrono::Utc::now().to_rfc3339(),
+            },
+        ];
+
+        let report = TestReport::new("EnhancedSuite", results);
+        let reporter = Reporter::junit();
+        let xml = reporter.generate(&report);
+
+        // Verify timestamp attribute on testsuite
+        assert!(xml.contains("timestamp=\""));
+
+        // Verify file and line attributes on testcase
+        assert!(xml.contains("file=\"src/lib.rs\""));
+        assert!(xml.contains("line=\"42\""));
+        assert!(xml.contains("file=\"src/error.rs\""));
+        assert!(xml.contains("line=\"100\""));
+
+        // Verify type attribute on error element
+        assert!(xml.contains("<error type=\"Error\""));
     }
 
     #[test]
