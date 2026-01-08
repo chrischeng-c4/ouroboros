@@ -52,6 +52,8 @@ impl PercentileType {
 
 /// Metadata for a baseline snapshot
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BaselineMetadata {
     /// Baseline format version
     pub version: String,
@@ -65,6 +67,8 @@ pub struct BaselineMetadata {
 
 /// Git repository metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct GitMetadata {
     /// Current commit SHA
     pub commit_sha: Option<String>,
@@ -78,11 +82,57 @@ pub struct GitMetadata {
 
 /// A snapshot of benchmark results at a point in time
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BaselineSnapshot {
     /// Metadata about this baseline
     pub metadata: BaselineMetadata,
     /// Benchmark results
     pub benchmarks: Vec<BenchmarkResult>,
+}
+
+impl BaselineSnapshot {
+    /// Serialize to binary format using rkyv (zero-copy)
+    #[cfg(feature = "rkyv")]
+    pub fn to_binary(&self) -> Result<Vec<u8>, String> {
+        use rkyv::ser::{serializers::AllocSerializer, Serializer};
+
+        let mut serializer = AllocSerializer::<256>::default();
+        serializer.serialize_value(self)
+            .map_err(|e| format!("rkyv serialization failed: {}", e))?;
+        Ok(serializer.into_serializer().into_inner().to_vec())
+    }
+
+    /// Deserialize from binary format using rkyv (zero-copy)
+    #[cfg(feature = "rkyv")]
+    pub fn from_binary(bytes: &[u8]) -> Result<Self, String> {
+        use rkyv::archived_root;
+        use rkyv::Deserialize;
+        use rkyv::de::deserializers::SharedDeserializeMap;
+
+        // Safety: We trust the data we serialized
+        let archived = unsafe { archived_root::<Self>(bytes) };
+
+        let mut deserializer = SharedDeserializeMap::new();
+        archived.deserialize(&mut deserializer)
+            .map_err(|e| format!("rkyv deserialization failed: {}", e))
+    }
+
+    /// Get size comparison between JSON and binary formats
+    pub fn size_comparison(&self) -> (usize, usize) {
+        let json_size = serde_json::to_string(self).unwrap().len();
+
+        #[cfg(feature = "rkyv")]
+        {
+            let binary_size = self.to_binary().unwrap().len();
+            (json_size, binary_size)
+        }
+
+        #[cfg(not(feature = "rkyv"))]
+        {
+            (json_size, 0)
+        }
+    }
 }
 
 /// Thresholds for regression detection
@@ -237,19 +287,47 @@ impl FileBaselineStore {
             benchmarks: results.to_vec(),
         };
 
-        let filename = format!("{}_{}.json", name, timestamp.replace(':', "-"));
-        let path = self.base_dir.join(&filename);
+        let filename_base = format!("{}_{}", name, timestamp.replace(':', "-"));
 
+        // Save JSON (human-readable, git-diffable)
+        let json_path = self.base_dir.join(format!("{}.json", filename_base));
         let json = serde_json::to_string_pretty(&snapshot)
             .map_err(io::Error::other)?;
-        fs::write(&path, json)?;
+        fs::write(&json_path, json)?;
 
-        // Update latest symlink/copy
+        // Save binary (fast loading)
+        #[cfg(feature = "rkyv")]
+        {
+            let binary_path = self.base_dir.join(format!("{}.bin", filename_base));
+            let binary = snapshot.to_binary()
+                .map_err(io::Error::other)?;
+            fs::write(&binary_path, binary)?;
+        }
+
+        // Update latest symlink/copy (JSON)
         let latest = self.base_dir.join(format!("{}_latest.json", name));
         let _ = fs::remove_file(&latest);
-        fs::copy(&path, &latest)?;
+        fs::copy(&json_path, &latest)?;
 
-        Ok(filename)
+        // Update latest binary
+        #[cfg(feature = "rkyv")]
+        {
+            let latest_bin = self.base_dir.join(format!("{}_latest.bin", name));
+            let binary_path = self.base_dir.join(format!("{}.bin", filename_base));
+            let _ = fs::remove_file(&latest_bin);
+            fs::copy(&binary_path, &latest_bin).ok();
+        }
+
+        let (json_size, binary_size) = snapshot.size_comparison();
+        if binary_size > 0 {
+            println!("Baseline saved: JSON={}KB, Binary={}KB ({:.1}% reduction)",
+                json_size / 1024,
+                binary_size / 1024,
+                (1.0 - (binary_size as f64 / json_size as f64)) * 100.0
+            );
+        }
+
+        Ok(format!("{}.json", filename_base))
     }
 
     /// Load a baseline by name and ID
@@ -261,13 +339,26 @@ impl FileBaselineStore {
     /// # Returns
     /// The loaded baseline snapshot
     pub fn load_baseline(&self, name: &str, id: &str) -> io::Result<BaselineSnapshot> {
-        let path = if id == "latest" {
-            self.base_dir.join(format!("{}_latest.json", name))
+        let base_path = if id == "latest" {
+            format!("{}_latest", name)
         } else {
-            self.base_dir.join(id)
+            id.trim_end_matches(".json").trim_end_matches(".bin").to_string()
         };
 
-        let json = fs::read_to_string(&path)?;
+        // Try binary first (faster)
+        #[cfg(feature = "rkyv")]
+        {
+            let binary_path = self.base_dir.join(format!("{}.bin", base_path));
+            if binary_path.exists() {
+                let bytes = fs::read(&binary_path)?;
+                return BaselineSnapshot::from_binary(&bytes)
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
+            }
+        }
+
+        // Fallback to JSON
+        let json_path = self.base_dir.join(format!("{}.json", base_path));
+        let json = fs::read_to_string(&json_path)?;
         let snapshot: BaselineSnapshot = serde_json::from_str(&json)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
@@ -643,5 +734,71 @@ mod tests {
         assert_eq!(PercentileType::P99.name(), "P99");
         assert_eq!(PercentileType::P999.name(), "P999");
         assert_eq!(PercentileType::P9999.name(), "P9999");
+    }
+
+    #[test]
+    #[cfg(feature = "rkyv")]
+    fn test_binary_serialization_roundtrip() {
+        let snapshot = BaselineSnapshot {
+            metadata: BaselineMetadata {
+                version: "1.0".to_string(),
+                timestamp: "2026-01-06T00:00:00Z".to_string(),
+                git_metadata: None,
+                environment: BenchmarkEnvironment::default(),
+            },
+            benchmarks: vec![
+                create_test_result("test1", 10.0, 1.0),
+            ],
+        };
+
+        // Serialize to binary
+        let binary = snapshot.to_binary().expect("Failed to serialize");
+
+        // Deserialize from binary
+        let restored = BaselineSnapshot::from_binary(&binary).expect("Failed to deserialize");
+
+        // Verify data integrity
+        assert_eq!(restored.metadata.version, "1.0");
+        assert_eq!(restored.benchmarks.len(), 1);
+        assert_eq!(restored.benchmarks[0].name, "test1");
+        assert!((restored.benchmarks[0].stats.mean_ms - 10.0).abs() < 0.01);
+    }
+
+    #[test]
+    #[cfg(feature = "rkyv")]
+    fn test_size_comparison() {
+        let times: Vec<f64> = (0..1000).map(|i| i as f64).collect();
+        let snapshot = BaselineSnapshot {
+            metadata: BaselineMetadata {
+                version: "1.0".to_string(),
+                timestamp: "2026-01-06T00:00:00Z".to_string(),
+                git_metadata: None,
+                environment: BenchmarkEnvironment::default(),
+            },
+            benchmarks: vec![
+                BenchmarkResult {
+                    name: "test".to_string(),
+                    stats: BenchmarkStats::from_times(times, 1000, 1, 0),
+                    success: true,
+                    error: None,
+                },
+            ],
+        };
+
+        let (json_size, binary_size) = snapshot.size_comparison();
+
+        println!("JSON size: {} bytes", json_size);
+        println!("Binary size: {} bytes", binary_size);
+        if binary_size < json_size {
+            println!("Reduction: {:.1}%", (1.0 - (binary_size as f64 / json_size as f64)) * 100.0);
+        } else {
+            println!("Increase: {:.1}%", (binary_size as f64 / json_size as f64 - 1.0) * 100.0);
+        }
+
+        // Note: rkyv binary format may be larger than JSON due to alignment padding
+        // and zero-copy optimizations. The real benefit is in deserialization speed.
+        // We just verify both formats work correctly.
+        assert!(binary_size > 0, "Binary size should be non-zero");
+        assert!(json_size > 0, "JSON size should be non-zero");
     }
 }

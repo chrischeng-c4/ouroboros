@@ -10,6 +10,8 @@ use serde_yaml;
 
 /// Latency distribution histogram bucket
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct HistogramBucket {
     /// Minimum latency in bucket (ms)
     pub min_ms: f64,
@@ -23,6 +25,8 @@ pub struct HistogramBucket {
 
 /// Statistics from a benchmark run
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkStats {
     /// Number of iterations per round
     pub iterations: u32,
@@ -394,6 +398,8 @@ impl BenchmarkStats {
 
 /// Result of a benchmark run
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkResult {
     /// Name of this benchmark
     pub name: String,
@@ -969,6 +975,8 @@ pub struct BenchmarkReportGroup {
 
 /// Environment information for the benchmark
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkEnvironment {
     pub python_version: Option<String>,
     pub rust_version: Option<String>,
