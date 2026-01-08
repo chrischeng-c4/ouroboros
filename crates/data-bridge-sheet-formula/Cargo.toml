@@ -1,0 +1,13 @@
+[package]
+name = "data-bridge-sheet-formula"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Formula parsing and evaluation engine for RuSheet"
+
+[dependencies]
+data-bridge-sheet-core = { path = "../data-bridge-sheet-core" }
+serde.workspace = true
+thiserror.workspace = true
+nom = "7.1"

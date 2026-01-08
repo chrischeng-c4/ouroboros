@@ -1,0 +1,11 @@
+[package]
+name = "data-bridge-sheet-history"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Undo/redo history management for RuSheet"
+
+[dependencies]
+data-bridge-sheet-core = { path = "../data-bridge-sheet-core" }
+data-bridge-sheet-formula = { path = "../data-bridge-sheet-formula" }
