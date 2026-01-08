@@ -20,6 +20,9 @@ pub mod recovery;
 pub mod snapshot;
 pub mod wal;
 
+// Re-export key types for convenience
+pub use handle::PersistenceHandle;
+
 use std::path::PathBuf;
 use std::time::Duration;
 use thiserror::Error;
@@ -44,6 +47,35 @@ impl Default for PersistenceConfig {
             wal_config: WalConfig::default(),
             snapshot_config: SnapshotConfig::default(),
         }
+    }
+}
+
+impl PersistenceConfig {
+    /// Create a new persistence config with the specified data directory
+    pub fn new(data_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            data_dir: data_dir.into(),
+            wal_config: WalConfig::default(),
+            snapshot_config: SnapshotConfig::default(),
+        }
+    }
+
+    /// Set WAL fsync interval in milliseconds
+    pub fn with_fsync_interval_ms(mut self, ms: u64) -> Self {
+        self.wal_config.flush_interval_ms = ms;
+        self
+    }
+
+    /// Set snapshot interval in seconds
+    pub fn with_snapshot_interval_secs(mut self, secs: u64) -> Self {
+        self.snapshot_config.interval_secs = secs;
+        self
+    }
+
+    /// Set snapshot operations threshold
+    pub fn with_snapshot_ops_threshold(mut self, ops: usize) -> Self {
+        self.snapshot_config.ops_threshold = ops;
+        self
     }
 }
 

@@ -37,8 +37,13 @@ cargo test -p data-bridge-kv-server -- --ignored
 | 0x04 | EXISTS | key (UTF-8) |
 | 0x05 | INCR   | key_len(2) + key + delta(8) |
 | 0x06 | DECR   | key_len(2) + key + delta(8) |
+| 0x07 | CAS    | (Planned) |
 | 0x08 | PING   | (empty) |
 | 0x09 | INFO   | (empty) |
+| 0x0A | SETNX  | key_len(2) + key + ttl_ms(8) + value |
+| 0x0B | LOCK   | key_len(2) + key + owner_len(2) + owner + ttl_ms(8) |
+| 0x0C | UNLOCK | key_len(2) + key + owner_len(2) + owner |
+| 0x0D | EXTEND | key_len(2) + key + owner_len(2) + owner + ttl_ms(8) |
 
 ### Response Status
 | Code | Meaning |
