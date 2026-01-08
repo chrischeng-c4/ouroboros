@@ -378,7 +378,6 @@ Atomic, testable tasks organized by priority and component.
 - [x] P5-ORM-04: Unit of Work - Accumulate INSERT/UPDATE/DELETE, execute on commit (2025-01-05)
 - [x] P5-ORM-05: Session context - `async with Session()` pattern (2025-01-05)
 
-<<<<<<<< HEAD:kb/40-postgres/TODOS.md
 ### P5-OBSERVABILITY: OpenTelemetry Integration (COMPLETED 2026-01-06)
 
 **Result**: Built-in distributed tracing for database operations
@@ -395,7 +394,7 @@ Atomic, testable tasks organized by priority and component.
 
 **Documentation**:
 - [x] `/docs/OPENTELEMETRY.md` - Comprehensive guide (2,752 lines)
-- [x] `/kb/40-postgres/operations/OPENTELEMETRY.md` - KB reference (450 lines)
+- [x] `/dev-docs/40-postgres/operations/OPENTELEMETRY.md` - KB reference (450 lines)
 - [x] `/examples/fastapi_otel_example.py` - Working FastAPI example
 - [x] `/examples/QUICKSTART_FASTAPI_OTEL.md` - Quick start guide
 

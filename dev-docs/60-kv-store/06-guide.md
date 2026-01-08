@@ -118,5 +118,5 @@ def send_ping():
 ## Next Steps
 
 1. See `/Users/chris.cheng/chris-project/data-bridge/crates/data-bridge-kv-server/README.md` for full documentation
-2. See `/Users/chris.cheng/chris-project/data-bridge/kb/60-kv-store/03-kv-server.md` for architecture details
+2. See `/Users/chris.cheng/chris-project/data-bridge/dev-docs/60-kv-store/03-kv-server.md` for architecture details
 3. Build a Python client library for easy integration

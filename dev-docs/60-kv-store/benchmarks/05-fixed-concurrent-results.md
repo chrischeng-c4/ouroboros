@@ -178,7 +178,7 @@ SET 8 threads:   9.7M ops/sec  (2.2x faster ✅)
 
 - **Fixed benchmarks**: `crates/data-bridge-kv/examples/kv_benchmark_concurrent.rs`
 - **Diagnostic tool**: `crates/data-bridge-kv/examples/diagnose_contention.rs`
-- **Analysis report**: `kb/60-kv-store/benchmarks/04-contention-analysis.md`
+- **Analysis report**: `dev-docs/60-kv-store/benchmarks/04-contention-analysis.md`
 
 ---
 

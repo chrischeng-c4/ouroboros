@@ -22,7 +22,7 @@ The following files have been moved here:
 - `TELEMETRY_RELATIONSHIPS.md`
 - `telemetry.md`
 
-These files are kept for historical reference but should not be considered the current source of truth. Please refer to `openspec/specs/` or `kb/` for the latest documentation.
+These files are kept for historical reference but should not be considered the current source of truth. Please refer to `openspec/specs/` or `dev-docs/` for the latest documentation.
 
 ### From Root (Phase Summaries - Obsolete)
 - `PHASE2_LAZY_LOADING_IMPLEMENTATION.md`: Old implementation summary

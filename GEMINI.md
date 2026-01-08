@@ -35,7 +35,7 @@ Understand where you fit in:
 │   ├── AGENTS.md           # Workflow rules
 │   ├── specs/              # Current Capabilities (Read-Only reference)
 │   └── changes/            # Proposals (Write Access - Create new directories here)
-├── kb/                     # Knowledge Base (Read-Only)
+├── dev-docs/               # Developer Documentation (Read-Only)
 ├── docs/                   # User Documentation (Read-Only)
 ├── crates/                 # Rust Source (Read-Only)
 ├── python/                 # Python Source (Read-Only)

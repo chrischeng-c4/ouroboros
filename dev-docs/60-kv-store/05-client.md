@@ -377,6 +377,6 @@ All `KvClient` methods are available on `KvPool`:
 
 ## See Also
 
-- [KV Client API](/kb/60-kv-store/02-data-types-and-api.md) - Core client methods
-- [KV Server](/kb/60-kv-store/03-kv-server.md) - Server implementation
-- [Protocol](/kb/60-kv-store/protocol.md) - Wire protocol details
+- [KV Client API](/dev-docs/60-kv-store/02-data-types-and-api.md) - Core client methods
+- [KV Server](/dev-docs/60-kv-store/03-kv-server.md) - Server implementation
+- [Protocol](/dev-docs/60-kv-store/protocol.md) - Wire protocol details

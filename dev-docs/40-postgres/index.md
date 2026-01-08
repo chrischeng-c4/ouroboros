@@ -331,7 +331,7 @@ Complete security audit covering all SQL generation code:
 ## Directory Structure
 
 ```
-kb/40-postgres/
+dev-docs/40-postgres/
 ├── INDEX.md                          # This file - central navigation
 ├── index.md                          # PostgreSQL solution overview (214 lines)
 ├── TODOS.md                          # Task tracking (698 lines)

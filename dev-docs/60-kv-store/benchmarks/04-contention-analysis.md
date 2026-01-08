@@ -208,7 +208,7 @@ The actual bottleneck was thread spawning overhead in the benchmark measurement,
 ## Files Modified
 
 - `crates/data-bridge-kv/examples/diagnose_contention.rs` - Diagnostic tool
-- `kb/60-kv-store/benchmarks/04-contention-analysis.md` - This document
+- `dev-docs/60-kv-store/benchmarks/04-contention-analysis.md` - This document
 
 ## Next Steps
 

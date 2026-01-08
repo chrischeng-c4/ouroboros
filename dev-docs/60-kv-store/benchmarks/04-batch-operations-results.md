@@ -154,7 +154,7 @@ uv run pytest tests/kv/test_batch_operations.py -v
    - `mdel()`: Delete multiple keys
    - `mexists()`: Check multiple keys exist
 
-2. **Protocol** (`kb/60-kv-store/02-protocol.md`)
+2. **Protocol** (`dev-docs/60-kv-store/02-protocol.md`)
    - Command 0x0E: MGET
    - Command 0x0F: MSET
    - Command 0x10: MDEL

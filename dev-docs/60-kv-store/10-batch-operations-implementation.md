@@ -56,7 +56,7 @@ pub fn mexists(&self, keys: &[&KvKey]) -> Vec<bool>
 
 ### 2. Protocol Specification ✅
 
-**File**: `kb/60-kv-store/02-protocol.md`
+**File**: `dev-docs/60-kv-store/02-protocol.md`
 
 Added new command opcodes:
 
@@ -261,7 +261,7 @@ print(f"Deleted {deleted} keys")
 ### Medium Term (1 week)
 
 5. **Documentation**
-   - Update: `kb/60-kv-store/03-api.md` with batch operations
+   - Update: `dev-docs/60-kv-store/03-api.md` with batch operations
    - Add: Usage guide for Celery result backend
    - Create: Performance comparison charts
 
@@ -274,18 +274,18 @@ print(f"Deleted {deleted} keys")
 ## Files Modified
 
 ### Created
-- `kb/60-kv-store/10-batch-operations-implementation.md` (this file)
-- `kb/60-kv-store/benchmarks/05-fixed-concurrent-results.md`
+- `dev-docs/60-kv-store/10-batch-operations-implementation.md` (this file)
+- `dev-docs/60-kv-store/benchmarks/05-fixed-concurrent-results.md`
 
 ### Modified
 1. `crates/data-bridge-kv/src/engine.rs` (+130 lines)
-2. `kb/60-kv-store/02-protocol.md` (protocol spec)
+2. `dev-docs/60-kv-store/02-protocol.md` (protocol spec)
 3. `crates/data-bridge-kv-server/src/protocol.rs` (+85 lines)
 4. `crates/data-bridge-kv-server/src/server.rs` (+60 lines)
 5. `crates/data-bridge-kv-client/src/protocol.rs` (+10 lines)
 6. `crates/data-bridge-kv-client/src/client.rs` (+145 lines)
 7. `crates/data-bridge/src/kv.rs` (+80 lines, needs fixes)
-8. `kb/60-kv-store/09-roadmap.md` (updated with Phase 10)
+8. `dev-docs/60-kv-store/09-roadmap.md` (updated with Phase 10)
 
 **Total Lines Added**: ~655 lines across 8 files
 
