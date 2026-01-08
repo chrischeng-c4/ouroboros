@@ -19,13 +19,6 @@ pub struct KvServer {
 }
 
 impl KvServer {
-    /// Create a new KV server
-    pub fn new(num_shards: usize) -> Self {
-        Self {
-            engine: Arc::new(KvEngine::with_shards(num_shards)),
-        }
-    }
-
     /// Create a KV server with an existing engine (for persistence support)
     pub fn with_engine(engine: Arc<KvEngine>) -> Self {
         Self { engine }

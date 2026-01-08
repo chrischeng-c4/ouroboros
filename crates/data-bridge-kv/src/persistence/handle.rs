@@ -36,7 +36,8 @@ pub struct PersistenceHandle {
     /// Background thread handle
     thread_handle: Option<JoinHandle<()>>,
 
-    /// Configuration
+    /// Configuration (kept for potential future use)
+    #[allow(dead_code)]
     config: PersistenceConfig,
 }
 

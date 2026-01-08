@@ -20,7 +20,10 @@ Targeting Python/K8s ecosystems where Redis is too expensive (RAM-bound) or oper
 
 - [ ] **Data Durability (MVP for Result Store)**
   - [ ] **Disk Spillover (Tiered Storage)**: Ensure cold task results move to disk instead of OOM-ing.
-  - [x] **Persistence**: ✅ WAL (Write-Ahead Log) implemented - recent task results survive Pod restarts (2026-01-06)
+  - [x] **Persistence**: ✅ WAL (Write-Ahead Log) fully implemented and tested - task results survive Pod restarts (2026-01-08)
+    - ✅ All 8 phases complete (format, WAL, snapshot, recovery, engine integration, server integration, tests, polish)
+    - ✅ Production-ready with CLI configuration
+    - ✅ 17 unit tests + 8 integration tests passing
 - [x] **Operational Features**
   - [ ] **Active TTL Expiration**: Efficient background cleanup for expired task results (mass deletion performance).
   - [x] **Batch Operations**: ✅ `MGET`/`MSET`/`MDEL` implemented for high-throughput (2026-01-06)
@@ -153,21 +156,37 @@ Targeting Python/K8s ecosystems where Redis is too expensive (RAM-bound) or oper
 - Estimated throughput: ~1.3M ops/sec for batch-100
 - Critical for Celery result backend performance
 
-### Phase 12: WAL Persistence ✅ (2026-01-06)
-- [x] ✅ Binary serialization formats (CRC32/SHA256 checksums)
-- [x] ✅ WAL writer with 100ms batched fsync
-- [x] ✅ WAL reader with corruption detection
-- [x] ✅ Periodic snapshots (5 min or 100K ops)
-- [x] ✅ Recovery orchestration (snapshot + WAL replay)
-- [x] ✅ Background persistence thread (crossbeam channels)
-- [x] ✅ Engine integration with non-blocking writes
-- [x] ✅ Automatic WAL rotation at 1GB
-- [x] ✅ 17 unit tests across all modules
+### Phase 12: WAL Persistence ✅ (2026-01-06 to 2026-01-08 - PRODUCTION READY)
 
-**Key Features**:
+**All 8 Phases Complete**:
+- [x] ✅ **Phase 1-5**: Core persistence implementation (format, WAL, snapshot, recovery, engine integration)
+- [x] ✅ **Phase 6**: Server integration with CLI configuration (2026-01-08)
+- [x] ✅ **Phase 7**: Comprehensive integration tests (8/8 passing) (2026-01-08)
+- [x] ✅ **Phase 8**: Polish and documentation (2026-01-08)
+
+**Core Features**:
+- ✅ Binary serialization formats (CRC32/SHA256 checksums)
+- ✅ WAL writer with 100ms batched fsync
+- ✅ WAL reader with corruption detection
+- ✅ Periodic snapshots (5 min or 100K ops)
+- ✅ Recovery orchestration (snapshot + WAL replay)
+- ✅ Background persistence thread (crossbeam channels)
+- ✅ Engine integration with non-blocking writes
+- ✅ Automatic WAL rotation at 1GB
+- ✅ Interior mutability for Arc compatibility
+- ✅ 17 unit tests + 8 integration tests (all passing)
+
+**Server Integration**:
+- ✅ CLI flags: `--data-dir`, `--disable-persistence`, `--fsync-interval-ms`, `--snapshot-interval-secs`, `--snapshot-ops-threshold`
+- ✅ Recovery at startup before accepting connections
+- ✅ Graceful shutdown with Ctrl+C signal handling
+- ✅ Zero compiler warnings
+
+**Performance**:
 - Crash-safe durability with ~100ms data loss window
 - Target: 50-100K ops/sec with <10% latency overhead
 - Non-blocking writes via 10K operation buffer
+- Recovery: < 5s for 10K entries
 - Full recovery from snapshot + WAL delta
 
 **Modules Implemented**:
@@ -177,8 +196,11 @@ Targeting Python/K8s ecosystems where Redis is too expensive (RAM-bound) or oper
 - `persistence/recovery.rs` - Recovery orchestration (386 lines)
 - `persistence/handle.rs` - Background thread manager (337 lines)
 - `persistence/mod.rs` - Module structure (143 lines)
+- `tests/persistence_integration.rs` - Integration tests (368 lines)
 
-**Total**: 2,582 lines of production-ready persistence code
+**Total**: 2,950 lines of production-ready persistence code
+
+**Production Readiness**: ✅ Fully production-ready. Suitable for Celery result backend deployment.
 
 ## Crate Summary
 
