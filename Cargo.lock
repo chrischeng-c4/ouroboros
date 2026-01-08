@@ -1327,6 +1327,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
+ "bytecheck",
  "chrono",
  "criterion",
  "data-bridge-http",
@@ -1336,6 +1337,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest",
+ "rkyv 0.7.46",
  "serde",
  "serde_json",
  "serde_yaml",

@@ -8,50 +8,16 @@ use std::time::Duration;
 // Re-export HttpMethod from data-bridge-common
 pub use data_bridge_common::http::HttpMethod;
 
-impl HttpMethod {
-    /// Convert to reqwest Method
-    pub fn to_reqwest(&self) -> reqwest::Method {
-        match self {
-            HttpMethod::Get => reqwest::Method::GET,
-            HttpMethod::Post => reqwest::Method::POST,
-            HttpMethod::Put => reqwest::Method::PUT,
-            HttpMethod::Patch => reqwest::Method::PATCH,
-            HttpMethod::Delete => reqwest::Method::DELETE,
-            HttpMethod::Head => reqwest::Method::HEAD,
-            HttpMethod::Options => reqwest::Method::OPTIONS,
-        }
-    }
-
-    /// Parse from string
-    pub fn parse_method(s: &str) -> HttpResult<Self> {
-        match s.to_uppercase().as_str() {
-            "GET" => Ok(HttpMethod::Get),
-            "POST" => Ok(HttpMethod::Post),
-            "PUT" => Ok(HttpMethod::Put),
-            "PATCH" => Ok(HttpMethod::Patch),
-            "DELETE" => Ok(HttpMethod::Delete),
-            "HEAD" => Ok(HttpMethod::Head),
-            "OPTIONS" => Ok(HttpMethod::Options),
-            _ => Err(HttpError::InvalidRequest(format!(
-                "Invalid HTTP method: {}",
-                s
-            ))),
-        }
-    }
-}
-
-impl std::fmt::Display for HttpMethod {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            HttpMethod::Get => "GET",
-            HttpMethod::Post => "POST",
-            HttpMethod::Put => "PUT",
-            HttpMethod::Patch => "PATCH",
-            HttpMethod::Delete => "DELETE",
-            HttpMethod::Head => "HEAD",
-            HttpMethod::Options => "OPTIONS",
-        };
-        write!(f, "{}", s)
+/// Convert HttpMethod to reqwest Method
+fn to_reqwest_method(method: HttpMethod) -> reqwest::Method {
+    match method {
+        HttpMethod::Get => reqwest::Method::GET,
+        HttpMethod::Post => reqwest::Method::POST,
+        HttpMethod::Put => reqwest::Method::PUT,
+        HttpMethod::Patch => reqwest::Method::PATCH,
+        HttpMethod::Delete => reqwest::Method::DELETE,
+        HttpMethod::Head => reqwest::Method::HEAD,
+        HttpMethod::Options => reqwest::Method::OPTIONS,
     }
 }
 

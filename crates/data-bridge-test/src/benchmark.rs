@@ -8,8 +8,25 @@ use std::hint::black_box;
 use serde::{Deserialize, Serialize};
 use serde_yaml;
 
+/// Latency distribution histogram bucket
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
+pub struct HistogramBucket {
+    /// Minimum latency in bucket (ms)
+    pub min_ms: f64,
+    /// Maximum latency in bucket (ms)
+    pub max_ms: f64,
+    /// Number of samples in bucket
+    pub count: usize,
+    /// Percentage of total samples
+    pub percentage: f64,
+}
+
 /// Statistics from a benchmark run
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkStats {
     /// Number of iterations per round
     pub iterations: u32,
@@ -43,6 +60,14 @@ pub struct BenchmarkStats {
     pub p95_ms: f64,
     /// 99th percentile
     pub p99_ms: f64,
+    /// 99.9th percentile
+    pub p999_ms: f64,
+    /// 99.99th percentile (extreme tail)
+    pub p9999_ms: f64,
+    /// Tail latency ratio: p99/p50 (higher = more variability)
+    pub tail_latency_ratio: f64,
+    /// Distribution histogram buckets
+    pub histogram: Vec<HistogramBucket>,
 
     // Outlier detection (IQR-based)
     /// Interquartile range (Q3 - Q1)
@@ -117,6 +142,58 @@ fn detect_outliers(sorted: &[f64], q1: f64, q3: f64) -> (u32, u32, u32) {
     }
 
     (low + high, low, high)
+}
+
+/// Generate histogram from sorted timing data
+fn generate_histogram(sorted: &[f64], num_buckets: usize) -> Vec<HistogramBucket> {
+    if sorted.is_empty() || num_buckets == 0 {
+        return Vec::new();
+    }
+
+    let min = sorted[0];
+    let max = sorted[sorted.len() - 1];
+    let range = max - min;
+
+    // Handle case where all values are identical
+    if range < 1e-10 {
+        return vec![HistogramBucket {
+            min_ms: min,
+            max_ms: max,
+            count: sorted.len(),
+            percentage: 100.0,
+        }];
+    }
+
+    let bucket_size = range / num_buckets as f64;
+    let total = sorted.len() as f64;
+
+    let mut buckets = Vec::new();
+    let mut current_idx = 0;
+
+    for i in 0..num_buckets {
+        let bucket_min = min + (i as f64 * bucket_size);
+        let bucket_max = if i == num_buckets - 1 {
+            max + 1e-10  // Include max value in last bucket
+        } else {
+            min + ((i + 1) as f64 * bucket_size)
+        };
+
+        // Count values in this bucket
+        let mut count = 0;
+        while current_idx < sorted.len() && sorted[current_idx] < bucket_max {
+            count += 1;
+            current_idx += 1;
+        }
+
+        buckets.push(HistogramBucket {
+            min_ms: bucket_min,
+            max_ms: bucket_max,
+            count,
+            percentage: (count as f64 / total) * 100.0,
+        });
+    }
+
+    buckets
 }
 
 /// Calculate coefficient of variation (CV) as a percentage
@@ -210,6 +287,18 @@ impl BenchmarkStats {
         let p75 = percentile(&sorted, 75.0);
         let p95 = percentile(&sorted, 95.0);
         let p99 = percentile(&sorted, 99.0);
+        let p999 = percentile(&sorted, 99.9);
+        let p9999 = percentile(&sorted, 99.99);
+
+        // Calculate tail latency ratio (p99/p50)
+        let tail_latency_ratio = if median > 1e-10 {
+            p99 / median
+        } else {
+            1.0
+        };
+
+        // Generate histogram (10 buckets)
+        let histogram = generate_histogram(&sorted, 10);
 
         // Calculate IQR and detect outliers
         let iqr = p75 - p25;
@@ -235,6 +324,10 @@ impl BenchmarkStats {
             p75_ms: p75,
             p95_ms: p95,
             p99_ms: p99,
+            p999_ms: p999,
+            p9999_ms: p9999,
+            tail_latency_ratio,
+            histogram,
             // Outlier detection
             iqr_ms: iqr,
             outliers,
@@ -263,41 +356,50 @@ impl BenchmarkStats {
 
     /// Format stats as a human-readable string
     pub fn format(&self) -> String {
-        format!(
-            "Mean:   {:>10.3}ms ± {:.3}ms (95% CI: {:.3}-{:.3}ms)\n\
-             Min:    {:>10.3}ms\n\
-             Max:    {:>10.3}ms\n\
-             Stddev: {:>10.3}ms\n\
-             Median: {:>10.3}ms\n\
-             P25:    {:>10.3}ms  P75: {:.3}ms  P95: {:.3}ms  P99: {:.3}ms\n\
-             IQR:    {:>10.3}ms  Outliers: {} ({} low, {} high)\n\
-             Ops/s:  {:>10.1}\n\
-             Runs:   {} ({}x{})",
-            self.mean_ms, self.std_error_ms, self.ci_lower_ms, self.ci_upper_ms,
-            self.min_ms,
-            self.max_ms,
-            self.stddev_ms,
-            self.median_ms,
-            self.p25_ms, self.p75_ms, self.p95_ms, self.p99_ms,
-            self.iqr_ms, self.outliers, self.outliers_low, self.outliers_high,
-            self.ops_per_second(),
-            self.total_runs,
-            self.iterations,
-            self.rounds
-        )
+        use std::fmt::Write;
+        let mut f = String::new();
+
+        writeln!(f, "Mean:   {:>10.3}ms ± {:.3}ms (95% CI: {:.3}-{:.3}ms)",
+            self.mean_ms, self.std_error_ms, self.ci_lower_ms, self.ci_upper_ms).unwrap();
+        writeln!(f, "Min:    {:>10.3}ms", self.min_ms).unwrap();
+        writeln!(f, "Max:    {:>10.3}ms", self.max_ms).unwrap();
+        writeln!(f, "Stddev: {:>10.3}ms", self.stddev_ms).unwrap();
+        writeln!(f, "Median: {:>10.3}ms", self.median_ms).unwrap();
+        writeln!(f, "P25:    {:>10.3}ms  P75: {:.3}ms  P95: {:.3}ms  P99: {:.3}ms",
+            self.p25_ms, self.p75_ms, self.p95_ms, self.p99_ms).unwrap();
+        writeln!(f, "P99.9:  {:>10.3}ms", self.p999_ms).unwrap();
+        writeln!(f, "P99.99: {:>10.3}ms", self.p9999_ms).unwrap();
+        writeln!(f, "Tail Ratio: {:>7.2}x (p99/p50)", self.tail_latency_ratio).unwrap();
+        writeln!(f).unwrap();
+        writeln!(f, "Distribution Histogram:").unwrap();
+        for (i, bucket) in self.histogram.iter().enumerate() {
+            let bar_width = (bucket.percentage / 2.0) as usize;  // Scale to fit
+            let bar = "█".repeat(bar_width.max(1));
+            writeln!(f, "  [{:2}] {:>8.2}-{:<8.2} ms: {:>5.1}% {}",
+                i, bucket.min_ms, bucket.max_ms, bucket.percentage, bar).unwrap();
+        }
+        writeln!(f).unwrap();
+        writeln!(f, "IQR:    {:>10.3}ms  Outliers: {} ({} low, {} high)",
+            self.iqr_ms, self.outliers, self.outliers_low, self.outliers_high).unwrap();
+        writeln!(f, "Ops/s:  {:>10.1}", self.ops_per_second()).unwrap();
+        write!(f, "Runs:   {} ({}x{})", self.total_runs, self.iterations, self.rounds).unwrap();
+
+        f
     }
 
     /// Format stats as a short single-line summary
     pub fn format_short(&self) -> String {
         format!(
-            "{:.3}ms ± {:.3}ms (P50={:.3}ms, P95={:.3}ms)",
-            self.mean_ms, self.stddev_ms, self.median_ms, self.p95_ms
+            "{:.3}ms ± {:.3}ms (P50={:.3}ms, P95={:.3}ms, P99.9={:.3}ms, Tail={:.2}x)",
+            self.mean_ms, self.stddev_ms, self.median_ms, self.p95_ms, self.p999_ms, self.tail_latency_ratio
         )
     }
 }
 
 /// Result of a benchmark run
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkResult {
     /// Name of this benchmark
     pub name: String,
@@ -873,6 +975,8 @@ pub struct BenchmarkReportGroup {
 
 /// Environment information for the benchmark
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
+#[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct BenchmarkEnvironment {
     pub python_version: Option<String>,
     pub rust_version: Option<String>,
@@ -1578,5 +1682,63 @@ mod tests {
         // Should hit max iterations
         assert_eq!(result.stats.adaptive_iterations_used, 50);
         // May or may not have stopped early (depends on variance)
+    }
+
+    #[test]
+    fn test_extended_percentiles() {
+        // Test with 10000 samples for p999/p9999 accuracy
+        let times: Vec<f64> = (0..10000).map(|i| i as f64).collect();
+        let stats = BenchmarkStats::from_times(times, 10000, 1, 0);
+
+        // P999 should be around 9990 (99.9% of 10000)
+        assert!((stats.p999_ms - 9990.0).abs() < 10.0, "P999 = {}", stats.p999_ms);
+
+        // P9999 should be around 9999 (99.99% of 10000)
+        assert!((stats.p9999_ms - 9999.0).abs() < 1.0, "P9999 = {}", stats.p9999_ms);
+    }
+
+    #[test]
+    fn test_tail_latency_ratio() {
+        // Uniform distribution: p99/p50 should be close to 2.0
+        let uniform: Vec<f64> = (0..1000).map(|i| i as f64).collect();
+        let stats_uniform = BenchmarkStats::from_times(uniform, 1000, 1, 0);
+        assert!((stats_uniform.tail_latency_ratio - 2.0).abs() < 0.1);
+
+        // Skewed distribution with tail
+        let mut skewed: Vec<f64> = (0..900).map(|i| i as f64).collect();
+        skewed.extend((900..1000).map(|i| (i as f64) * 10.0));  // 10x tail
+        let stats_skewed = BenchmarkStats::from_times(skewed, 1000, 1, 0);
+
+        // Tail ratio should be much higher for skewed data
+        assert!(stats_skewed.tail_latency_ratio > 5.0,
+            "Skewed tail ratio = {}", stats_skewed.tail_latency_ratio);
+    }
+
+    #[test]
+    fn test_histogram_generation() {
+        let times: Vec<f64> = (0..100).map(|i| i as f64).collect();
+        let stats = BenchmarkStats::from_times(times, 100, 1, 0);
+
+        assert_eq!(stats.histogram.len(), 10, "Should have 10 buckets");
+
+        // Each bucket should have ~10% of samples
+        for bucket in &stats.histogram {
+            assert!((bucket.percentage - 10.0).abs() < 2.0,
+                "Bucket percentage = {}", bucket.percentage);
+        }
+
+        // Total should be 100%
+        let total_pct: f64 = stats.histogram.iter().map(|b| b.percentage).sum();
+        assert!((total_pct - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_histogram_edge_cases() {
+        // All identical values
+        let identical = vec![5.0; 100];
+        let stats = BenchmarkStats::from_times(identical, 100, 1, 0);
+        assert_eq!(stats.histogram.len(), 1, "Should have 1 bucket for identical values");
+        assert_eq!(stats.histogram[0].count, 100);
+        assert!((stats.histogram[0].percentage - 100.0).abs() < 0.1);
     }
 }

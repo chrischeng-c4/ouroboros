@@ -14,13 +14,12 @@ use data_bridge_test::{
         DiscoveryConfig, FileType, FileInfo, TestRegistry, BenchmarkRegistry,
         DiscoveryStats, walk_files, filter_files,
     },
-    profiler::{
-        ProfilePhase, PhaseTiming, PhaseBreakdown,
-        GilTestConfig, GilContentionResult,
-        MemorySnapshot, MemoryProfile,
-        FlamegraphData, ProfileResult, ProfileConfig,
-        generate_flamegraph_svg,
-    },
+    // Profiler types are now re-exported from the top level (from performance module)
+    ProfilePhase, PhaseTiming, PhaseBreakdown,
+    GilTestConfig, GilContentionResult,
+    MemorySnapshot, MemoryProfile,
+    FlamegraphData, ProfileResult, ProfileConfig,
+    generate_flamegraph_svg,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
