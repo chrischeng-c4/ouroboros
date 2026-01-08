@@ -1,20 +1,20 @@
 ---
 title: Cloud Native KV Store Core
-status: planning
+status: active
 component: kv-store
 type: architecture
 ---
 
 # Architecture Design
 
-The Cloud Native KV Store utilizes a **Hybrid Tiered Storage Architecture** to combine the speed of in-memory caching with the capacity and durability of disk storage. This design is specifically optimized for Kubernetes StatefulSet deployments.
+The Cloud Native KV Store utilizes a **Sharded In-Memory Architecture** (currently implemented) with a planned **Hybrid Tiered Storage Architecture** to combine the speed of in-memory caching with the capacity and durability of disk storage. This design is specifically optimized for Kubernetes StatefulSet deployments.
 
-## 1. Sharded Engine (Multi-Core)
+## 1. Sharded Engine (Multi-Core) - [Implemented]
 
 To overcome the "Global Lock" limitation common in single-threaded stores (like Redis), the key space is partitioned into independent **Shards** (default: 256 or 1024).
 
 ```rust
-struct KvStore {
+struct KvEngine {
     // Array of shards, each protected by its own lock
     shards: Vec<RwLock<Shard>>,
     // Consistent hashing state
@@ -23,13 +23,9 @@ struct KvStore {
 
 struct Shard {
     // Hot Data (In-Memory)
-    data: HashMap<Key, Entry>,
-    // Cold Data (On-Disk Index)
-    disk_index: DiskIndex, 
-    // Memory Tracking
-    current_memory_usage: usize,
-    // LRU/Clock list for eviction
-    eviction_list: EvictionPolicy,
+    data: HashMap<KvKey, Entry>,
+    // Lock Manager for distributed locking
+    locks: HashMap<KvKey, LockEntry>,
 }
 ```
 
@@ -38,9 +34,11 @@ struct Shard {
 -   **Concurrency**: Operations on different shards run in parallel. A Write on Shard 1 does not block a Read on Shard 2.
 -   **Lock Granularity**: `RwLock` ensures multiple readers can access the same shard simultaneously, while writers gain exclusive access only to that specific shard.
 
-## 2. Hybrid Tiered Storage (RAM + Disk)
+## 2. Hybrid Tiered Storage (RAM + Disk) - [Planned]
 
-The engine acts as a virtual memory manager for KV pairs, allowing the dataset to exceed available RAM.
+*Note: This feature is currently in the design phase. The current implementation is strictly in-memory.*
+
+The engine will act as a virtual memory manager for KV pairs, allowing the dataset to exceed available RAM.
 
 ### Eviction Logic (RAM → Disk)
 When a shard exceeds its configured memory limit (`Shard.current_memory_usage > Shard.limit`):
@@ -61,7 +59,9 @@ When a `GET(key)` request occurs:
     -   **Trigger Eviction**: If this promotion fills memory, evict another cold entry to make room.
 4.  **Return**: Serve the value to the caller.
 
-## 3. Persistence Strategy (WAL)
+## 3. Persistence Strategy (WAL) - [Planned]
+
+*Note: This feature is currently in the design phase. The current implementation is strictly in-memory and ephemeral.*
 
 Durability is configurable based on the use case (Cache vs. Task Store).
 
@@ -77,7 +77,7 @@ Durability is configurable based on the use case (Cache vs. Task Store).
 -   **Sync Policy**: Configurable (`Always`, `EverySec`, `No`).
 -   **Restart**: The system replays the WAL to reconstruct the Memory and Disk Index state.
 
-## 4. On-Disk Storage Layout
+## 4. On-Disk Storage Layout - [Planned]
 
 The disk layer consists of two types of files:
 

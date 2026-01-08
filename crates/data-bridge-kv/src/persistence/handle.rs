@@ -240,8 +240,8 @@ impl PersistenceHandle {
         }
     }
 
-    /// Graceful shutdown of persistence thread
-    pub fn shutdown(&mut self) {
+    /// Internal shutdown implementation
+    fn shutdown_internal(&mut self) -> Result<()> {
         info!("Shutting down persistence handle");
 
         // Send shutdown signal
@@ -251,8 +251,19 @@ impl PersistenceHandle {
         if let Some(handle) = self.thread_handle.take() {
             if let Err(e) = handle.join() {
                 error!("Failed to join persistence thread: {:?}", e);
+                return Err(PersistenceError::DataDirectory(format!(
+                    "Persistence thread panic: {:?}",
+                    e
+                )));
             }
         }
+
+        Ok(())
+    }
+
+    /// Graceful shutdown of persistence thread (consumes self)
+    pub fn shutdown(mut self) -> Result<()> {
+        self.shutdown_internal()
     }
 }
 
@@ -260,7 +271,7 @@ impl Drop for PersistenceHandle {
     fn drop(&mut self) {
         if self.thread_handle.is_some() {
             warn!("PersistenceHandle dropped without explicit shutdown, forcing shutdown");
-            self.shutdown();
+            let _ = self.shutdown_internal();
         }
     }
 }

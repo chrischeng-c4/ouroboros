@@ -283,9 +283,9 @@ impl KvEngine {
     /// Sets up WAL logging and periodic snapshots.
     pub fn enable_persistence(
         &mut self,
-        persistence_handle: crate::persistence::handle::PersistenceHandle,
+        persistence_handle: std::sync::Arc<crate::persistence::handle::PersistenceHandle>,
     ) {
-        self.persistence = Some(std::sync::Arc::new(persistence_handle));
+        self.persistence = Some(persistence_handle);
     }
 
     /// Log an operation to WAL (if persistence is enabled)

@@ -26,6 +26,11 @@ impl KvServer {
         }
     }
 
+    /// Create a KV server with an existing engine (for persistence support)
+    pub fn with_engine(engine: Arc<KvEngine>) -> Self {
+        Self { engine }
+    }
+
     /// Run the server
     pub async fn run(&self, addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
         let listener = TcpListener::bind(addr).await?;

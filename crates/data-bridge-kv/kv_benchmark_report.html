@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KV Store Performance Benchmarks</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0d1117; color: #c9d1d9; padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #58a6ff; margin-bottom: 0.5rem; }
+        h2 { color: #8b949e; margin: 2rem 0 1rem; border-bottom: 1px solid #30363d; padding-bottom: 0.5rem; }
+        .description { color: #8b949e; margin-bottom: 2rem; }
+        .meta { display: flex; gap: 2rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .meta-item { background: #161b22; padding: 1rem; border-radius: 6px; border: 1px solid #30363d; }
+        .meta-label { color: #8b949e; font-size: 0.85rem; }
+        .meta-value { color: #c9d1d9; font-size: 1.1rem; font-weight: 600; }
+        .group { background: #161b22; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; border: 1px solid #30363d; }
+        .group-title { color: #58a6ff; margin-bottom: 1rem; }
+        .chart-container { height: 300px; margin-bottom: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #30363d; }
+        th { color: #8b949e; font-weight: 500; }
+        td { color: #c9d1d9; }
+        .faster { color: #3fb950; }
+        .slower { color: #f85149; }
+        .baseline { color: #8b949e; }
+        .number { font-family: 'SF Mono', Monaco, monospace; }
+        .env { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .env-item { background: #0d1117; padding: 0.75rem; border-radius: 4px; }
+        footer { margin-top: 3rem; text-align: center; color: #8b949e; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>KV Store Performance Benchmarks</h1>
+        <p class="description">Comprehensive performance analysis of the data-bridge KV storage engine</p>
+        <div class="meta">
+            <div class="meta-item"><div class="meta-label">Generated</div><div class="meta-value">2026-01-06 07:06:07</div></div>
+            <div class="meta-item"><div class="meta-label">Total Duration</div><div class="meta-value">42.84s</div></div>
+            <div class="meta-item"><div class="meta-label">Groups</div><div class="meta-value">6</div></div>
+            <div class="meta-item"><div class="meta-label">Benchmarks</div><div class="meta-value">22</div></div>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Pure Engine Performance</h2>
+            <div class="chart-container"><canvas id="chart0"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>set_single_thread</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.001ms</td><td class="number">0.000ms</td><td class="number">5239881.8</td><td><span class="baseline">(baseline)</span></td></tr>
+                <tr><td>get_single_thread</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">7712478.8</td><td><span class="faster">1.47x faster</span></td></tr>
+                <tr><td>mixed_50_50</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.001ms</td><td class="number">0.000ms</td><td class="number">5976500.4</td><td><span class="faster">1.14x faster</span></td></tr>
+                <tr><td>incr_atomic</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">18319715.7</td><td><span class="faster">3.50x faster</span></td></tr>
+                <tr><td>decr_atomic</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">18894305.3</td><td><span class="faster">3.61x faster</span></td></tr>
+                <tr><td>cas_operations</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.006ms</td><td class="number">0.000ms</td><td class="number">10291454.0</td><td><span class="faster">1.96x faster</span></td></tr>
+                <tr><td>setnx_operations</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.001ms</td><td class="number">0.000ms</td><td class="number">5050607.1</td><td><span class="slower">1.04x slower</span></td></tr>
+                <tr><td>exists_checks</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">8413684.0</td><td><span class="faster">1.61x faster</span></td></tr>
+                <tr><td>delete_operations</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">0.000ms</td><td class="number">8179423.8</td><td><span class="faster">1.56x faster</span></td></tr>
+            </table>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Concurrency - SET Operations</h2>
+            <div class="chart-container"><canvas id="chart1"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>set_concurrent_2t</td><td class="number">0.116ms</td><td class="number">0.087ms</td><td class="number">0.237ms</td><td class="number">0.021ms</td><td class="number">8623.0</td><td><span class="baseline">(baseline)</span></td></tr>
+                <tr><td>set_concurrent_4t</td><td class="number">0.118ms</td><td class="number">0.084ms</td><td class="number">0.235ms</td><td class="number">0.019ms</td><td class="number">8470.0</td><td><span class="slower">1.02x slower</span></td></tr>
+                <tr><td>set_concurrent_8t</td><td class="number">0.180ms</td><td class="number">0.115ms</td><td class="number">0.378ms</td><td class="number">0.035ms</td><td class="number">5546.2</td><td><span class="slower">1.55x slower</span></td></tr>
+            </table>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Concurrency - GET Operations</h2>
+            <div class="chart-container"><canvas id="chart2"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>get_concurrent_2t</td><td class="number">0.075ms</td><td class="number">0.047ms</td><td class="number">0.166ms</td><td class="number">0.018ms</td><td class="number">13420.9</td><td><span class="baseline">(baseline)</span></td></tr>
+                <tr><td>get_concurrent_4t</td><td class="number">0.084ms</td><td class="number">0.049ms</td><td class="number">0.138ms</td><td class="number">0.015ms</td><td class="number">11956.3</td><td><span class="slower">1.12x slower</span></td></tr>
+                <tr><td>get_concurrent_8t</td><td class="number">0.124ms</td><td class="number">0.083ms</td><td class="number">0.287ms</td><td class="number">0.033ms</td><td class="number">8076.5</td><td><span class="slower">1.66x slower</span></td></tr>
+            </table>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Lock Contention</h2>
+            <div class="chart-container"><canvas id="chart3"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>lock_contention</td><td class="number">0.325ms</td><td class="number">0.211ms</td><td class="number">0.772ms</td><td class="number">0.067ms</td><td class="number">3079.4</td><td><span class="baseline">(baseline)</span></td></tr>
+            </table>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Memory & TTL Management</h2>
+            <div class="chart-container"><canvas id="chart4"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>memory_100k_entries</td><td class="number">34.509ms</td><td class="number">27.383ms</td><td class="number">70.631ms</td><td class="number">3.877ms</td><td class="number">29.0</td><td><span class="baseline">(baseline)</span></td></tr>
+                <tr><td>ttl_cleanup</td><td class="number">14.863ms</td><td class="number">12.416ms</td><td class="number">25.670ms</td><td class="number">1.005ms</td><td class="number">67.3</td><td><span class="faster">2.32x faster</span></td></tr>
+            </table>
+        </div>
+
+        <div class="group">
+            <h2 class="group-title">Insertion Scalability</h2>
+            <div class="chart-container"><canvas id="chart5"></canvas></div>
+            <table>
+                <tr><th>Benchmark</th><th>Mean</th><th>Min</th><th>Max</th><th>Stddev</th><th>Ops/s</th><th>vs Baseline</th></tr>
+                <tr><td>insert_1k</td><td class="number">0.199ms</td><td class="number">0.184ms</td><td class="number">0.311ms</td><td class="number">0.013ms</td><td class="number">5025.7</td><td><span class="baseline">(baseline)</span></td></tr>
+                <tr><td>insert_10k</td><td class="number">2.086ms</td><td class="number">1.979ms</td><td class="number">3.306ms</td><td class="number">0.129ms</td><td class="number">479.4</td><td><span class="slower">10.48x slower</span></td></tr>
+                <tr><td>insert_100k</td><td class="number">31.643ms</td><td class="number">27.113ms</td><td class="number">44.949ms</td><td class="number">2.946ms</td><td class="number">31.6</td><td><span class="slower">159.03x slower</span></td></tr>
+                <tr><td>insert_1m</td><td class="number">682.868ms</td><td class="number">682.868ms</td><td class="number">682.868ms</td><td class="number">0.000ms</td><td class="number">1.5</td><td><span class="slower">3431.90x slower</span></td></tr>
+            </table>
+        </div>
+
+        <h2>Environment</h2>
+        <div class="env">
+            <div class="env-item"><strong>Rust:</strong> </div>
+            <div class="env-item"><strong>Platform:</strong> macos</div>
+            <div class="env-item"><strong>CPU:</strong> 10 cores</div>
+            <div class="env-item"><strong>Host:</strong> HW32H3YK3X</div>
+        </div>
+
+        <footer>Generated by data-bridge-test benchmark framework</footer>
+    </div>
+
+    <script>
+
+        new Chart(document.getElementById('chart0'), {
+            type: 'bar',
+            data: {
+                labels: ['set_single_thread', 'get_single_thread', 'mixed_50_50', 'incr_atomic', 'decr_atomic', 'cas_operations', 'setnx_operations', 'exists_checks', 'delete_operations'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000, 0.000], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [0.001, 0.000, 0.001, 0.000, 0.000, 0.006, 0.001, 0.000, 0.000], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('chart1'), {
+            type: 'bar',
+            data: {
+                labels: ['set_concurrent_2t', 'set_concurrent_4t', 'set_concurrent_8t'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [0.116, 0.118, 0.180], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [0.087, 0.084, 0.115], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [0.237, 0.235, 0.378], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('chart2'), {
+            type: 'bar',
+            data: {
+                labels: ['get_concurrent_2t', 'get_concurrent_4t', 'get_concurrent_8t'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [0.075, 0.084, 0.124], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [0.047, 0.049, 0.083], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [0.166, 0.138, 0.287], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('chart3'), {
+            type: 'bar',
+            data: {
+                labels: ['lock_contention'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [0.325], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [0.211], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [0.772], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('chart4'), {
+            type: 'bar',
+            data: {
+                labels: ['memory_100k_entries', 'ttl_cleanup'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [34.509, 14.863], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [27.383, 12.416], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [70.631, 25.670], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById('chart5'), {
+            type: 'bar',
+            data: {
+                labels: ['insert_1k', 'insert_10k', 'insert_100k', 'insert_1m'],
+                datasets: [
+                    { label: 'Mean (ms)', data: [0.199, 2.086, 31.643, 682.868], backgroundColor: 'rgba(88, 166, 255, 0.8)' },
+                    { label: 'Min (ms)', data: [0.184, 1.979, 27.113, 682.868], backgroundColor: 'rgba(63, 185, 80, 0.6)' },
+                    { label: 'Max (ms)', data: [0.311, 3.306, 44.949, 682.868], backgroundColor: 'rgba(248, 81, 73, 0.6)' }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#c9d1d9' } } },
+                scales: {
+                    x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' }, title: { display: true, text: 'Time (ms)', color: '#8b949e' } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
