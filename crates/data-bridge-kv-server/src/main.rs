@@ -113,15 +113,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_snapshot_ops_threshold(args.snapshot_ops_threshold);
 
         // Wrap recovered engine in Arc for sharing between persistence and server
-        let mut engine_arc = Arc::new(recovered_engine);
+        let engine_arc = Arc::new(recovered_engine);
 
         // Create persistence handle with the Arc (clones the Arc, not the engine)
         let persistence = Arc::new(PersistenceHandle::new(config, engine_arc.clone())?);
 
-        // Enable persistence on the engine (we have exclusive access via get_mut)
-        Arc::get_mut(&mut engine_arc)
-            .expect("Should have exclusive access to engine at this point")
-            .enable_persistence(persistence.clone());
+        // Enable persistence on the engine (uses interior mutability)
+        engine_arc.enable_persistence(persistence.clone());
 
         info!(
             "Persistence configured: fsync={}ms, snapshot={}s or {} ops",
