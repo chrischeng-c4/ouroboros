@@ -1,0 +1,107 @@
+{
+  "name": "@data-bridge/sheet",
+  "version": "0.1.0",
+  "description": "High-performance spreadsheet engine built with Rust and WebAssembly",
+  "author": "Data Bridge Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrischeng-c4/rusheet.git"
+  },
+  "homepage": "https://github.com/chrischeng-c4/rusheet#readme",
+  "bugs": {
+    "url": "https://github.com/chrischeng-c4/rusheet/issues"
+  },
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "wasm",
+    "webassembly",
+    "rust",
+    "formula",
+    "grid",
+    "table",
+    "data",
+    "collaboration",
+    "real-time",
+    "data-bridge"
+  ],
+  "type": "module",
+  "main": "./dist/data-bridge-sheet.umd.js",
+  "module": "./dist/data-bridge-sheet.es.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/data-bridge-sheet.es.js",
+      "require": "./dist/data-bridge-sheet.umd.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./react": {
+      "import": "./dist/react/index.js",
+      "require": "./dist/react/index.cjs",
+      "types": "./dist/react/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "pkg"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm run build:wasm && vite build",
+    "build:lib": "pnpm run build:wasm && vite build --config vite.config.lib.ts",
+    "build:wasm": "wasm-pack build ../crates/data-bridge-sheet-wasm --target web --out-dir ../../frontend/pkg",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run --config vite.config.browser.ts",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:rust": "cargo test --all",
+    "test:all": "pnpm run test:rust && pnpm test:unit && pnpm test:integration",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.0.11",
+    "@playwright/test": "^1.57.0",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/xlsx": "^0.0.36",
+    "@vitest/browser": "^4.0.16",
+    "@vitest/browser-playwright": "^4.0.16",
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^4.0.16",
+    "jsdom": "^27.4.0",
+    "playwright": "^1.57.0",
+    "typescript": "^5.3.0",
+    "vite": "^6.4.1",
+    "vite-plugin-top-level-await": "^1.4.0",
+    "vite-plugin-wasm": "^3.3.0",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.0.16"
+  },
+  "dependencies": {
+    "papaparse": "^5.5.3",
+    "xlsx": "^0.18.5",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.28"
+  },
+  "peerDependencies": {
+    "react": ">=17.0.0",
+    "react-dom": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  }
+}

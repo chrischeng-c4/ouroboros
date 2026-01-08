@@ -1,13 +1,21 @@
 # data-bridge
 
-High-performance MongoDB ORM for Python with Rust backend and **zero Python byte handling**.
+A unified **high-performance data platform** built with Rust, combining:
+- **MongoDB ORM** with zero Python byte handling (1.4-5.4x faster than Beanie)
+- **High-Performance Spreadsheet Engine** with WebAssembly and real-time collaboration
+- **HTTP Client**, **Task Queue**, and **KV Store** - All powered by Rust
 
 ## Overview
 
-`data-bridge` is a Beanie-compatible MongoDB ORM that handles all BSON serialization/deserialization in Rust, providing maximum performance and memory efficiency for large-scale data operations.
+`data-bridge` is a comprehensive data platform that provides:
+
+1. **MongoDB ORM** - Beanie-compatible ORM with all BSON processing in Rust
+2. **Spreadsheet Engine** - High-performance spreadsheet with formula evaluation, WASM support, and CRDT-based collaboration
+3. **Data Infrastructure** - HTTP client, PostgreSQL support, task queue, and key-value store
 
 ### Key Features
 
+#### MongoDB ORM
 - **Beanie-Compatible API**: Drop-in replacement for most Beanie operations
 - **Zero Python Byte Handling**: All BSON serialization/deserialization happens in Rust
 - **2.8-3.2x Faster Inserts**: Measured benchmarks show significant insert performance gains
@@ -16,6 +24,16 @@ High-performance MongoDB ORM for Python with Rust backend and **zero Python byte
 - **Full CRUD Support**: insert, find, update, delete with bulk operations
 - **Query Builder**: Chainable API with sort, skip, limit, projection
 - **Security**: RUSTSEC-2025-0020 fixed (PyO3 0.24+)
+
+#### Spreadsheet Engine (data-bridge-sheet)
+- **High Performance**: Rust-powered formula engine compiled to WebAssembly
+- **Real-time Collaboration**: Multi-user editing with CRDT-based sync (Yjs/yrs)
+- **Full Formula Support**: 24+ built-in functions (SUM, IF, VLOOKUP, etc.)
+- **Undo/Redo**: Complete history with unlimited undo
+- **Event-driven API**: Subscribe to cell changes, selections, and more
+- **Zero-copy Rendering**: Direct memory access for optimal performance
+- **Custom Database**: Morton-encoded spatial indexing for fast range queries
+- **Canvas Rendering**: Smooth scrolling with virtual grid
 
 ## Performance
 
@@ -467,7 +485,125 @@ data-bridge provides a Beanie-compatible API for easy migration:
 
 3. **Run tests** - Most code should work without changes!
 
+## Spreadsheet Engine Quick Start
+
+### Installation (Frontend)
+
+```bash
+# Install frontend dependencies
+cd frontend
+pnpm install
+
+# Build WASM module
+just build-wasm
+
+# Start development server
+just dev-frontend
+```
+
+### Basic Usage (TypeScript/React)
+
+```typescript
+import { rusheet } from 'rusheet';
+
+// Initialize the engine
+await rusheet.init();
+
+// Set cell values
+rusheet.setCellValue(0, 0, 'Hello');
+rusheet.setCellValue(0, 1, 'World');
+rusheet.setCellValue(1, 0, '=A1 & " " & B1');
+
+// Get cell data
+const cell = rusheet.getCellData(1, 0);
+console.log(cell.displayValue); // "Hello World"
+
+// Subscribe to changes
+rusheet.onChange((event) => {
+  console.log(`Cell ${event.row},${event.col} changed to ${event.newValue}`);
+});
+```
+
+### React Component
+
+```tsx
+import { RuSheet, useRuSheet } from 'rusheet/react';
+
+function App() {
+  const { ref, api } = useRuSheet();
+
+  return (
+    <RuSheet
+      ref={ref}
+      initialData={[
+        ['Name', 'Age', 'City'],
+        ['Alice', 30, 'NYC'],
+        ['Bob', 25, 'LA'],
+      ]}
+      onChange={(e) => console.log('Changed:', e)}
+      width="100%"
+      height={500}
+    />
+  );
+}
+```
+
+See [docs/SHEET_README.md](docs/SHEET_README.md) for complete documentation.
+
 ## Architecture
+
+### Unified Platform Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Python Application Layer                   │
+│              (MongoDB ORM, HTTP Client, Tasks)               │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                   PyO3 Rust Bridge
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│                    Rust Core Layer                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  MongoDB ORM │  │  HTTP Client │  │   Task Queue     │   │
+│  │  (BSON/CRUD) │  │  (Reqwest)   │  │   (NATS/Redis)   │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                  Spreadsheet Frontend (Browser)              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │ Canvas      │  │  Yjs Client │  │   RuSheet API       │  │
+│  │ Renderer    │  │  (collab)   │  │   (TypeScript)      │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                      WASM Bridge
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│              Spreadsheet Engine (WASM/Rust)                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │ sheet-core   │  │sheet-formula │  │ sheet-history    │   │
+│  │ (cells/grid) │  │  (parser)    │  │  (undo/redo)     │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+│  ┌──────────────┐                                            │
+│  │  sheet-db    │  ← Custom Database (Morton encoding)      │
+│  │ (KV storage) │                                            │
+│  └──────────────┘                                            │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                      Axum Server
+                           │
+┌──────────────────────────▼──────────────────────────────────┐
+│             Spreadsheet Collaboration Server                 │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+│  │  Axum HTTP   │  │  yrs (CRDT)  │  │   PostgreSQL     │   │
+│  │  WebSocket   │  │              │  │   (workbooks)    │   │
+│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### MongoDB ORM Architecture
 
 ```
 Python Application Layer
@@ -561,28 +697,77 @@ cargo audit
 
 ```
 data-bridge/
-├── crates/
-│   ├── data-bridge/           # PyO3 Python bindings
-│   │   └── src/
-│   │       ├── lib.rs         # Module registration
-│   │       └── mongodb.rs     # MongoDB operations (1100+ lines)
-│   ├── data-bridge-mongodb/   # Pure Rust MongoDB client
-│   └── data-bridge-common/    # Shared types and errors
+├── crates/                    # Rust workspace
+│   ├── data-bridge/           # PyO3 Python bindings (main entry)
+│   ├── data-bridge-mongodb/   # Pure Rust MongoDB ORM
+│   ├── data-bridge-postgres/  # PostgreSQL support
+│   ├── data-bridge-http/      # HTTP client
+│   ├── data-bridge-test/      # Benchmarking & testing framework
+│   ├── data-bridge-common/    # Shared types and errors
+│   ├── data-bridge-kv/        # Key-Value store
+│   ├── data-bridge-kv-server/ # KV server
+│   ├── data-bridge-kv-client/ # KV client
+│   ├── data-bridge-api/       # API framework
+│   ├── data-bridge-tasks/     # Task queue
+│   │
+│   ├── data-bridge-sheet-core/     # Spreadsheet core (cells, grid)
+│   ├── data-bridge-sheet-db/       # Custom database (Morton encoding)
+│   ├── data-bridge-sheet-formula/  # Formula parser & evaluator
+│   ├── data-bridge-sheet-history/  # Undo/redo system
+│   ├── data-bridge-sheet-server/   # Collaboration server
+│   └── data-bridge-sheet-wasm/     # WebAssembly bindings
+│
 ├── python/
 │   └── data_bridge/           # Beanie-compatible Python API
 │       ├── __init__.py        # Public API exports
-│       ├── document.py        # Document base class with metaclass
-│       ├── fields.py          # FieldProxy, QueryExpr, operators
-│       ├── query.py           # QueryBuilder, AggregationBuilder
-│       ├── actions.py         # Lifecycle hooks
+│       ├── document.py        # Document base class
+│       ├── fields.py          # FieldProxy, QueryExpr
+│       ├── query.py           # QueryBuilder
 │       ├── bulk.py            # Bulk operations
-│       ├── links.py           # Document relations
-│       ├── types.py           # PydanticObjectId, Indexed
-│       ├── transactions.py    # Transaction stub
-│       └── connection.py      # Connection management
-├── tests/                     # Test suite (313 tests, 80% coverage)
-└── benchmarks/                # Performance benchmarks
+│       └── ...
+│
+├── frontend/                  # Spreadsheet frontend
+│   ├── src/                   # TypeScript source
+│   │   ├── core/              # API and state
+│   │   ├── canvas/            # Canvas rendering
+│   │   ├── ui/                # UI components
+│   │   ├── collab/            # Collaboration client
+│   │   └── worker/            # Web Worker
+│   ├── pkg/                   # Built WASM package
+│   └── examples/              # Example apps
+│
+├── tests/                     # Python tests (313 tests)
+├── benchmarks/                # Performance benchmarks
+└── docs/                      # Documentation
+    ├── SHEET_README.md        # Spreadsheet documentation
+    ├── SHEET_ARCHITECTURE.md  # Technical architecture
+    └── sheet-specs/           # Specifications
 ```
+
+### Crate Overview
+
+| Crate | Description | Type |
+|-------|-------------|------|
+| **MongoDB ORM** | | |
+| `data-bridge` | PyO3 bindings for Python | cdylib |
+| `data-bridge-mongodb` | Pure Rust MongoDB ORM | lib |
+| **Infrastructure** | | |
+| `data-bridge-http` | HTTP client with connection pooling | lib |
+| `data-bridge-postgres` | PostgreSQL support | lib |
+| `data-bridge-test` | Benchmarking & testing framework | lib |
+| `data-bridge-common` | Shared types and errors | lib |
+| `data-bridge-kv` | Key-Value store | lib |
+| `data-bridge-kv-server` | KV server | bin |
+| `data-bridge-kv-client` | KV client | lib |
+| `data-bridge-api` | API framework | lib |
+| `data-bridge-tasks` | Task queue (NATS/Redis) | lib |
+| **Spreadsheet Engine** | | |
+| `data-bridge-sheet-core` | Core data structures (cells, sheets, formatting) | lib |
+| `data-bridge-sheet-db` | Custom database with Morton encoding | lib |
+| `data-bridge-sheet-formula` | Formula parser and evaluator (24+ functions) | lib |
+| `data-bridge-sheet-history` | Undo/redo command system | lib |
+| `data-bridge-sheet-server` | Collaboration server (Axum + Yjs) | bin |
+| `data-bridge-sheet-wasm` | WebAssembly bindings | cdylib |
 
 ## Testing
 
@@ -606,6 +791,7 @@ MIT License - see LICENSE file for details.
 
 ## Roadmap
 
+### MongoDB ORM
 - [x] MongoDB ORM with Beanie compatibility
 - [x] Bulk operations
 - [x] Aggregation pipeline
@@ -614,5 +800,26 @@ MIT License - see LICENSE file for details.
 - [x] Index management
 - [ ] Transaction support (Rust implementation)
 - [ ] Link fetching (eager/lazy loading)
+
+### Spreadsheet Engine
+- [x] High-performance formula engine (24+ functions)
+- [x] Real-time collaboration (CRDT-based)
+- [x] Undo/Redo system
+- [x] CSV/XLSX import/export
+- [x] WebAssembly bindings
+- [x] React component wrapper
+- [ ] Authentication & permissions
+- [ ] Data validation (dropdowns, constraints)
+- [ ] Conditional formatting
+- [ ] Named ranges
+- [ ] Vue component wrapper
+
+### Infrastructure
+- [x] HTTP client
+- [x] Test framework
+- [x] PostgreSQL support (partial)
+- [ ] Task queue (NATS/Redis)
+- [ ] Key-Value store
 - [ ] Redis client
-- [ ] PostgreSQL support
+
+See [docs/SHEET_README.md](docs/SHEET_README.md) for detailed spreadsheet roadmap.

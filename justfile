@@ -24,7 +24,7 @@ build-release:
 build-wheel:
     uv run maturin build --release
 
-# Clean build artifacts
+# Clean build artifacts (backend only)
 clean:
     cargo clean
     rm -rf target/
@@ -32,6 +32,78 @@ clean:
     rm -rf python/data_bridge/*.so
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
     find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+
+# Clean all build artifacts (backend + frontend)
+clean-all: clean clean-frontend
+    @echo "✓ All build artifacts cleaned"
+
+# ============================================================================
+# FRONTEND BUILD COMMANDS (Sheet UI)
+# ============================================================================
+
+# Build WASM module for frontend
+build-wasm:
+    #!/usr/bin/env bash
+    echo "Building WASM module..."
+    wasm-pack build crates/data-bridge-sheet-wasm --target web --out-dir ../../frontend/pkg
+    echo "✓ WASM module built to frontend/pkg/"
+
+# Build frontend (WASM + TypeScript)
+build-frontend: build-wasm
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm install
+    pnpm run build
+    echo "✓ Frontend built to frontend/dist/"
+
+# Build frontend library version
+build-frontend-lib: build-wasm
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm install
+    pnpm run build:lib
+    echo "✓ Frontend library built to frontend/dist/"
+
+# Start frontend development server
+dev-frontend:
+    #!/usr/bin/env bash
+    just build-wasm
+    cd frontend
+    pnpm install
+    pnpm run dev
+
+# Run frontend tests
+test-frontend:
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm test
+
+# Run frontend tests (unit only)
+test-frontend-unit:
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm test:unit
+
+# Run frontend tests (integration)
+test-frontend-integration:
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm test:integration
+
+# Run frontend E2E tests
+test-frontend-e2e:
+    #!/usr/bin/env bash
+    cd frontend
+    pnpm test:e2e
+
+# Clean frontend build artifacts
+clean-frontend:
+    #!/usr/bin/env bash
+    rm -rf frontend/pkg/
+    rm -rf frontend/dist/
+    rm -rf frontend/node_modules/
+    cd frontend && pnpm store prune || true
+    echo "✓ Frontend artifacts cleaned"
 
 # ============================================================================
 # DBTEST COMMANDS (Primary Test & Benchmark Runner)

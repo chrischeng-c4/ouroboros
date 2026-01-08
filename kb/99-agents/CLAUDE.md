@@ -72,6 +72,36 @@ Orchestrator:
 <tree name="Component Selection">
 START: What component does this touch?
 │
+├─► Spreadsheet (cells, formulas, collaboration)?
+│   │
+│   ├─► Core data structures (cells, grid, formatting)?
+│   │   └─ YES → Component: data-bridge-sheet-core
+│   │            Files: crates/data-bridge-sheet-core/src/
+│   │
+│   ├─► Formula parsing/evaluation?
+│   │   └─ YES → Component: data-bridge-sheet-formula
+│   │            Files: crates/data-bridge-sheet-formula/src/
+│   │
+│   ├─► Undo/Redo system?
+│   │   └─ YES → Component: data-bridge-sheet-history
+│   │            Files: crates/data-bridge-sheet-history/src/
+│   │
+│   ├─► Custom database (Morton encoding, KV)?
+│   │   └─ YES → Component: data-bridge-sheet-db
+│   │            Files: crates/data-bridge-sheet-db/src/
+│   │
+│   ├─► Collaboration server (Axum, Yjs, WebSocket)?
+│   │   └─ YES → Component: data-bridge-sheet-server
+│   │            Files: crates/data-bridge-sheet-server/src/
+│   │
+│   ├─► WebAssembly bindings (WASM)?
+│   │   └─ YES → Component: data-bridge-sheet-wasm
+│   │            Files: crates/data-bridge-sheet-wasm/src/
+│   │
+│   └─► Frontend (TypeScript, Canvas, UI)?
+│       └─ YES → Component: Frontend
+│                Files: frontend/src/
+│
 ├─► MongoDB ORM (CRUD, queries, aggregation)?
 │   └─ YES → Component: data-bridge-mongodb (pure Rust)
 │                Files: crates/data-bridge-mongodb/src/
@@ -177,61 +207,123 @@ data-bridge/
 ├── Cargo.toml                      # Workspace root
 ├── CLAUDE.md                       # This file
 ├── pyproject.toml                  # Python package config (Maturin)
-├── crates/
+├── justfile                        # Build & test commands
+│
+├── crates/                         # Rust workspace
 │   ├── data-bridge/                # PyO3 bindings (main entry point)
 │   │   └── src/
 │   │       ├── lib.rs              # Module registration
-│   │       ├── mongodb.rs          # MongoDB PyO3 bindings (3,162 lines)
+│   │       ├── mongodb.rs          # MongoDB PyO3 bindings
 │   │       ├── http.rs             # HTTP PyO3 bindings
 │   │       ├── test.rs             # Test framework PyO3 bindings
 │   │       ├── validation.rs       # Security & type validation
 │   │       └── config.rs           # Security configuration
+│   │
 │   ├── data-bridge-mongodb/        # Pure Rust MongoDB ORM
+│   ├── data-bridge-postgres/       # PostgreSQL support
+│   ├── data-bridge-http/           # HTTP client
+│   ├── data-bridge-test/           # Benchmarking & testing framework
+│   ├── data-bridge-common/         # Shared utilities
+│   ├── data-bridge-kv/             # Key-Value store
+│   ├── data-bridge-kv-server/      # KV server
+│   ├── data-bridge-kv-client/      # KV client
+│   ├── data-bridge-api/            # API framework
+│   ├── data-bridge-tasks/          # Task queue
+│   │
+│   ├── data-bridge-sheet-core/     # Spreadsheet core (cells, grid)
 │   │   └── src/
-│   │       ├── connection.rs       # Connection pooling (6,252 lines)
-│   │       ├── document.rs         # Document operations (8,320 lines)
-│   │       └── query.rs            # Query builder (4,315 lines)
-│   ├── data-bridge-http/           # Pure Rust HTTP client
+│   │       ├── lib.rs              # Module registration
+│   │       ├── cell.rs             # Cell data structures
+│   │       ├── sheet.rs            # Sheet management
+│   │       ├── grid.rs             # Grid operations
+│   │       ├── format.rs           # Cell formatting
+│   │       └── ...
+│   │
+│   ├── data-bridge-sheet-db/       # Custom database
 │   │   └── src/
-│   │       ├── client.rs           # HTTP client with pooling (7,852 lines)
-│   │       ├── request.rs          # Request builder (10,224 lines)
-│   │       └── response.rs         # Response wrapper (7,376 lines)
-│   ├── data-bridge-test/           # Rust test framework
+│   │       ├── lib.rs              # Module registration
+│   │       ├── storage.rs          # Storage layer (Morton encoding)
+│   │       ├── query.rs            # Query layer (range, spatial)
+│   │       ├── crdt.rs             # CRDT operations
+│   │       └── wal.rs              # Write-ahead log
+│   │
+│   ├── data-bridge-sheet-formula/  # Formula parser & evaluator
 │   │   └── src/
-│   │       ├── benchmark.rs        # Benchmarking engine (40,199 lines)
-│   │       ├── assertions.rs       # Custom assertions (19,283 lines)
-│   │       └── runner.rs           # Test runner (12,883 lines)
-│   └── data-bridge-common/         # Shared utilities
+│   │       ├── lib.rs              # Module registration
+│   │       ├── parser.rs           # Formula parser (nom-based)
+│   │       ├── evaluator.rs        # Formula evaluator
+│   │       ├── functions/          # Built-in functions (24+)
+│   │       └── dependency.rs       # Dependency tracking
+│   │
+│   ├── data-bridge-sheet-history/  # Undo/redo system
+│   │   └── src/
+│   │       ├── lib.rs              # Module registration
+│   │       ├── command.rs          # Command pattern
+│   │       └── manager.rs          # History manager
+│   │
+│   ├── data-bridge-sheet-server/   # Collaboration server
+│   │   └── src/
+│   │       ├── main.rs             # Server entry point
+│   │       ├── api/                # REST API (Axum)
+│   │       ├── websocket/          # WebSocket handlers
+│   │       ├── crdt/               # CRDT sync (yrs)
+│   │       └── db/                 # PostgreSQL models
+│   │
+│   └── data-bridge-sheet-wasm/     # WebAssembly bindings
 │       └── src/
-│           └── error.rs            # Common error types
+│           ├── lib.rs              # WASM entry point
+│           ├── bindings.rs         # JavaScript bindings
+│           └── bridge.rs           # Rust ↔ JS bridge
+│
 ├── python/data_bridge/             # Python API layer
 │   ├── __init__.py                 # Public API exports
-│   ├── _engine.py                  # Rust backend bridge (27,604 lines)
-│   ├── document.py                 # Document base class (2,119 lines)
-│   ├── fields.py                   # FieldProxy & QueryExpr (18,745 lines)
-│   ├── query.py                    # QueryBuilder (27,188 lines)
-│   ├── bulk.py                     # Bulk operations (16,085 lines)
-│   ├── types.py                    # PydanticObjectId, Indexed (9,877 lines)
+│   ├── _engine.py                  # Rust backend bridge
+│   ├── document.py                 # Document base class
+│   ├── fields.py                   # FieldProxy & QueryExpr
+│   ├── query.py                    # QueryBuilder
+│   ├── bulk.py                     # Bulk operations
+│   ├── types.py                    # PydanticObjectId, Indexed
 │   ├── validation.py               # Type & constraint validation
-│   ├── state.py                    # Copy-on-Write state tracker (7,442 lines)
-│   └── connection.py               # Connection management (5,719 lines)
+│   ├── state.py                    # Copy-on-Write state tracker
+│   └── connection.py               # Connection management
+│
+├── frontend/                       # Spreadsheet frontend
+│   ├── src/                        # TypeScript source
+│   │   ├── core/                   # API and state
+│   │   ├── canvas/                 # Canvas rendering
+│   │   ├── ui/                     # UI components
+│   │   ├── collab/                 # Collaboration client
+│   │   └── worker/                 # Web Worker
+│   ├── pkg/                        # Built WASM package
+│   ├── examples/                   # Example apps
+│   ├── package.json                # npm configuration
+│   └── vite.config.ts              # Vite configuration
+│
 ├── tests/                          # Python tests (68 files, 313+ tests)
 │   ├── conftest.py                 # Pytest fixtures
 │   ├── unit/                       # Unit tests (no MongoDB)
 │   ├── integration/                # Integration tests (MongoDB required)
 │   └── mongo/benchmarks/           # Performance benchmarks
-└── benchmarks/
-    └── bench_comparison.py         # Beanie/PyMongo comparison
+│
+├── benchmarks/                     # Performance benchmarks
+│   └── bench_comparison.py         # Beanie/PyMongo comparison
+│
+└── docs/                           # Documentation
+    ├── SHEET_README.md             # Spreadsheet documentation
+    ├── SHEET_ARCHITECTURE.md       # Technical architecture
+    ├── SHEET_CONTRIBUTING.md       # Contribution guidelines
+    └── sheet-specs/                # Specifications
 </repository-structure>
 
 <build-commands>
-# Rust build
+# Rust build (MongoDB ORM)
 maturin develop                      # Debug build
 maturin develop --release            # Release build (optimized)
 
 # Rust tests
 cargo test                           # All Rust tests
 cargo test -p data-bridge-mongodb    # MongoDB crate only
+cargo test -p data-bridge-sheet-core # Sheet core only
 cargo clippy                         # Lint check
 
 # Python tests
@@ -241,6 +333,22 @@ uv run pytest --cov=data_bridge      # With coverage
 
 # Benchmarks
 MONGODB_URI="mongodb://localhost:27017/bench" uv run python benchmarks/bench_comparison.py
+
+# Frontend/WASM build (Spreadsheet)
+just build-wasm                      # Build WASM module
+just build-frontend                  # Build frontend + WASM
+just build-frontend-lib              # Build as library
+just dev-frontend                    # Start dev server
+
+# Frontend tests
+just test-frontend                   # All frontend tests
+just test-frontend-unit              # Unit tests only
+just test-frontend-integration       # Integration tests
+just test-frontend-e2e               # E2E tests
+
+# Spreadsheet server
+just server                          # Start collaboration server
+just db-up                           # Start PostgreSQL (for workbooks)
 
 # Security audit
 cargo audit
@@ -681,11 +789,28 @@ data-bridge: MongoDB → BSON bytes → Rust structs → Python objects
 
 ### Crate Organization
 
+**MongoDB ORM:**
 - **data-bridge**: PyO3 bindings (cdylib) - Python entry point
 - **data-bridge-mongodb**: Pure Rust MongoDB ORM - Core engine
+
+**Infrastructure:**
 - **data-bridge-http**: Pure Rust HTTP client - HTTP operations
+- **data-bridge-postgres**: PostgreSQL support
 - **data-bridge-test**: Rust test framework - Benchmarking & testing
 - **data-bridge-common**: Shared utilities - Error types
+- **data-bridge-kv**: Key-Value store
+- **data-bridge-kv-server**: KV server
+- **data-bridge-kv-client**: KV client
+- **data-bridge-api**: API framework
+- **data-bridge-tasks**: Task queue (NATS/Redis)
+
+**Spreadsheet Engine:**
+- **data-bridge-sheet-core**: Core data structures (cells, sheets, formatting)
+- **data-bridge-sheet-db**: Custom database with Morton encoding
+- **data-bridge-sheet-formula**: Formula parser and evaluator (24+ functions)
+- **data-bridge-sheet-history**: Undo/redo command system
+- **data-bridge-sheet-server**: Collaboration server (Axum + Yjs)
+- **data-bridge-sheet-wasm**: WebAssembly bindings
 
 ### Current Status
 
