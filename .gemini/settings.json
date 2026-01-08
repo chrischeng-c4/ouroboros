@@ -1,0 +1,20 @@
+{
+  "tools": {
+    "allowed": [
+      "list_directory",
+      "read_file",
+      "search_file_content",
+      "glob",
+      "write_file",
+      "replace",
+      "save_memory",
+      "google_web_search"
+    ]
+  },
+  "approvals": {
+    "autoApprove": {
+      "write_file": true,
+      "replace": true
+    }
+  }
+}
