@@ -7,6 +7,49 @@ Atomic, testable tasks organized by priority and component.
 
 ---
 
+## 🟢 KV Store Roadmap (2026-01-06)
+
+### ✅ Completed
+
+- [x] **Phase 1-10**: Core engine, server, client, pooling, benchmarks (2025-01-05)
+- [x] **Phase 11**: Batch Operations (MGET, MSET, MDEL) (2026-01-06)
+  - 100x latency reduction (N RTT → 1 RTT)
+  - Protocol spec updated with OpCodes 0x0E-0x10
+  - Full stack implementation (Rust + Python)
+  - 22 integration tests passing
+- [x] **Phase 12**: WAL Persistence (Phases 1-5) (2026-01-06)
+  - Binary formats with CRC32/SHA256 checksums
+  - WAL writer/reader with 100ms batched fsync
+  - Periodic snapshots (5 min or 100K ops)
+  - Recovery orchestration (snapshot + WAL replay)
+  - Background persistence thread (non-blocking)
+  - Engine integration with all write operations hooked
+  - 17 unit tests passing
+  - **Status**: Core persistence complete, server integration pending
+
+### 🔵 In Progress
+
+- [ ] **Phase 12**: WAL Persistence (Phases 6-8) - Server integration
+  - [ ] Add CLI flags (--data-dir, --disable-persistence, --fsync-interval-ms)
+  - [ ] Recovery at startup before accepting connections
+  - [ ] Graceful shutdown with persistence finalization
+  - [ ] Integration tests (write → crash → recover)
+  - [ ] Performance benchmarks
+  - [ ] Documentation and examples
+
+### 📋 Pending (Critical Path for Celery Backend)
+
+- [ ] **Active TTL Expiration**: Background cleanup for expired entries
+- [ ] **Disk Spillover (Tiered Storage)**: RAM + Disk for large datasets
+- [ ] **K8s Integration**:
+  - [ ] Prometheus metrics (/metrics endpoint)
+  - [ ] Health/readiness probes
+- [ ] **Security & Auth**:
+  - [ ] Simple password auth (Redis-style)
+  - [ ] TLS encryption
+
+---
+
 ## 🔴 Audit Findings (2025-12-30)
 
 ### P0 - Critical (Must Fix Before Production)

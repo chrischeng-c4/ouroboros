@@ -62,14 +62,19 @@ Binary protocol for efficient communication:
 - `0x04` EXISTS - Check key existence
 - `0x05` INCR - Increment integer
 - `0x06` DECR - Decrement integer
-- `0x07` CAS - Compare-and-swap (TODO)
+- `0x07` CAS - Compare-and-swap (Planned)
 - `0x08` PING - Health check
 - `0x09` INFO - Server stats
+- `0x0A` SETNX - Set if not exists
+- `0x0B` LOCK - Acquire distributed lock
+- `0x0C` UNLOCK - Release distributed lock
+- `0x0D` EXTEND - Extend lock TTL
 
 **Status Codes**:
 - `0x00` OK - Success
 - `0x01` NULL - Key not found
 - `0x02` ERROR - Error occurred
+- `0x03` INVALID - Invalid command/payload
 
 **Value Types**:
 - `0x00` Null
@@ -80,7 +85,6 @@ Binary protocol for efficient communication:
 - `0x05` Bytes (raw)
 - `0x06` List (recursive)
 - `0x07` Map (recursive)
-- `0x08` Bool (reserved)
 
 ### 3. Server Implementation (`src/server.rs`)
 

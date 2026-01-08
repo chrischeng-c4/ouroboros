@@ -88,7 +88,7 @@ struct PooledEntry {
 /// # Example
 ///
 /// ```no_run
-/// use data_bridge_kv_client::{KvPool, PoolConfig};
+/// use data_bridge_kv_client::{KvPool, PoolConfig, KvValue};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let pool = KvPool::connect(
@@ -97,10 +97,14 @@ struct PooledEntry {
 ///         .max_size(10)
 /// ).await?;
 ///
-/// // Acquire a connection (returned automatically on drop)
-/// let mut conn = pool.acquire().await?;
-/// conn.client().set("key", "value".into(), None).await?;
-/// # Ok(())
+/// {
+///     let mut conn = pool.acquire().await?;
+///     conn.client().set("key", KvValue::String("value".to_string()), None).await?;
+///     let value = conn.client().get("key").await?;
+///     println!("Value: {:?}", value);
+/// } // Connection automatically returned to pool here
+///
+/// Ok(())
 /// # }
 /// ```
 pub struct KvPool {

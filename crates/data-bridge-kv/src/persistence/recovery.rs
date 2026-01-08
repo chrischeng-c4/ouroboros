@@ -4,11 +4,11 @@
 
 use super::{PersistenceError, Result, RecoveryStats};
 use super::format::WalOp;
-use super::snapshot::{SnapshotLoader, SerializableEntry};
+use super::snapshot::SnapshotLoader;
 use super::wal::{WalReader, find_wal_files};
 use crate::engine::{Entry, KvEngine};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tracing::{debug, info, warn};
 
 /// Recovery manager for loading persisted state
@@ -188,7 +188,7 @@ impl RecoveryManager {
 
     /// Apply a single WAL operation to the engine
     fn apply_wal_operation(engine: &KvEngine, op: &WalOp) -> Result<()> {
-        use crate::types::{KvKey, KvValue};
+        use crate::types::KvKey;
 
         match op {
             WalOp::Set { key, value, ttl } => {
@@ -288,7 +288,7 @@ impl RecoveryManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{KvKey, KvValue};
+    use crate::types::KvKey;
     use crate::persistence::WalConfig;
     use crate::persistence::wal::WalWriter;
     use tempfile::TempDir;

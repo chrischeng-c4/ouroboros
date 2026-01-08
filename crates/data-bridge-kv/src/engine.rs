@@ -258,7 +258,8 @@ pub struct KvEngine {
     shards: Vec<Shard>,
     num_shards: usize,
     /// Optional persistence handle for WAL and snapshots
-    persistence: Option<std::sync::Arc<crate::persistence::handle::PersistenceHandle>>,
+    /// Uses RwLock for interior mutability (enables setting after Arc wrapping)
+    persistence: RwLock<Option<std::sync::Arc<crate::persistence::handle::PersistenceHandle>>>,
 }
 
 impl KvEngine {
@@ -273,25 +274,25 @@ impl KvEngine {
         Self {
             shards,
             num_shards,
-            persistence: None,
+            persistence: RwLock::new(None),
         }
     }
 
     /// Enable persistence on this engine
     ///
-    /// This should be called immediately after creation and before any operations.
+    /// Can be called after wrapping in Arc - uses interior mutability.
     /// Sets up WAL logging and periodic snapshots.
     pub fn enable_persistence(
-        &mut self,
-        persistence_handle: crate::persistence::handle::PersistenceHandle,
+        &self,
+        persistence_handle: std::sync::Arc<crate::persistence::handle::PersistenceHandle>,
     ) {
-        self.persistence = Some(std::sync::Arc::new(persistence_handle));
+        *self.persistence.write() = Some(persistence_handle);
     }
 
     /// Log an operation to WAL (if persistence is enabled)
     #[inline]
     fn log_wal(&self, op: crate::persistence::format::WalOp) {
-        if let Some(ref persistence) = self.persistence {
+        if let Some(ref persistence) = *self.persistence.read() {
             persistence.log_operation(op);
         }
     }

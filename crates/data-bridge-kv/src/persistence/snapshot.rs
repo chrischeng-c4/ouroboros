@@ -12,7 +12,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Snapshot file magic: "KVSN0001"
 pub const SNAPSHOT_MAGIC: &[u8; 8] = b"KVSN0001";

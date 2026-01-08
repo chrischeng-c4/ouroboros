@@ -15,7 +15,7 @@
 ///! Shard:  [ShardID:4 | EntryCount:4 | Entries using bincode]
 ///! ```
 
-use crate::types::{KvKey, KvValue};
+use crate::types::KvValue;
 use crate::persistence::{PersistenceError, Result};
 use crc32fast::Hasher;
 use serde::{Deserialize, Serialize};
