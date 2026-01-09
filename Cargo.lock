@@ -1171,7 +1171,9 @@ dependencies = [
  "data-bridge-common",
  "futures-util",
  "http 1.4.0",
+ "http-body-util",
  "hyper 1.8.1",
+ "hyper-util",
  "matchit 0.7.3",
  "multer",
  "once_cell",
@@ -1185,6 +1187,7 @@ dependencies = [
  "tower 0.5.2",
  "tower-http 0.5.2",
  "tracing",
+ "tracing-subscriber",
  "urlencoding",
  "utoipa",
 ]

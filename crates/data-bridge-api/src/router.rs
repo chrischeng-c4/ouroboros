@@ -174,6 +174,7 @@ impl Default for Router {
     }
 }
 
+
 /// Router builder for fluent API
 pub struct RouterBuilder {
     prefix: String,

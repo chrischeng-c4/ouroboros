@@ -17,6 +17,8 @@ axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
 hyper = { version = "1.0", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+http-body-util = "0.1"
 http = { workspace = true }
 
 # Serialization
@@ -49,3 +51,4 @@ data-bridge-common = { path = "../data-bridge-common" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tracing-subscriber = "0.3"

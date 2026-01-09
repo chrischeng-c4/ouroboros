@@ -17,6 +17,7 @@ pub mod extractors;
 pub mod error;
 pub mod validation;
 pub mod openapi;
+pub mod server;
 
 // Re-exports
 pub use app::App;
@@ -25,6 +26,7 @@ pub use handler::{Handler, HandlerMeta};
 pub use request::Request;
 pub use response::Response;
 pub use error::{ApiError, ApiResult};
+pub use server::{Server, ServerConfig};
 
 // Re-export shared HTTP types from data-bridge-common
 pub use data_bridge_common::http::{HttpMethod, HttpStatus, HttpResponseLike, HttpRequestLike};

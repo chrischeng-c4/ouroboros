@@ -28,7 +28,9 @@ from .forms import FormMarker, FileMarker, UploadFile
 
 # Import Rust bindings
 try:
-    from data_bridge._engine import api as _api
+    # Import the Rust module (data_bridge.data_bridge is the compiled .so file)
+    # It exposes submodules like data_bridge.data_bridge.api
+    from data_bridge.data_bridge import api as _api
 except ImportError:
     _api = None
 
@@ -332,19 +334,26 @@ class App:
             # Extract handler metadata for validation
             meta = extract_handler_meta(handler, method, path)
 
+            # Build metadata dict, excluding None values
+            metadata_dict = {
+                "deprecated": deprecated,
+                "status_code": status_code,
+            }
+            if name is not None:
+                metadata_dict["operation_id"] = name
+            if summary is not None:
+                metadata_dict["summary"] = summary
+            if description is not None:
+                metadata_dict["description"] = description
+            if tags is not None:
+                metadata_dict["tags"] = tags
+
             self._rust_app.register_route(
                 method=method,
                 path=path,
                 handler=handler,
                 validator_dict=meta.get("validator"),
-                metadata_dict={
-                    "operation_id": name,
-                    "summary": summary,
-                    "description": description,
-                    "tags": tags,
-                    "deprecated": deprecated,
-                    "status_code": status_code,
-                },
+                metadata_dict=metadata_dict,
             )
 
     def openapi(self) -> dict:
@@ -839,57 +848,253 @@ class App:
         self,
         host: str = "127.0.0.1",
         port: int = 8000,
+        use_rust_server: bool = True,
         reload: bool = False,
         workers: int = 1,
         log_level: str = "info",
         access_log: bool = True,
         **kwargs
     ) -> None:
-        """Run the application using uvicorn (for local development).
-
-        This is a convenience method for local development. In production,
-        run the app directly with uvicorn CLI or use a process manager.
+        """Run the application.
 
         Args:
             host: Bind host (default: 127.0.0.1)
             port: Bind port (default: 8000)
+            use_rust_server: Use high-performance Rust server (default: True)
+                           If False, falls back to uvicorn with ASGI
             reload: Enable auto-reload on code changes (default: False)
+                   Only works with uvicorn (use_rust_server=False)
             workers: Number of worker processes (default: 1)
+                    Only works with uvicorn (use_rust_server=False)
             log_level: Logging level (default: "info")
             access_log: Enable access logging (default: True)
-            **kwargs: Additional uvicorn config options
+            **kwargs: Additional uvicorn config options (only with uvicorn)
 
         Example:
             >>> app = App(title="My API")
-            >>> app.run(host="0.0.0.0", port=3000, reload=True)
+            >>> # Use Rust server (high performance, recommended)
+            >>> app.run(host="0.0.0.0", port=8000)
+            >>>
+            >>> # Use uvicorn with ASGI (for development with reload)
+            >>> app.run(host="0.0.0.0", port=8000, use_rust_server=False, reload=True)
 
         Note:
-            In K8s/container environments, prefer running uvicorn directly:
+            - Rust server: Maximum performance, GIL-free request processing
+            - Uvicorn/ASGI: Compatible with ASGI middleware, supports reload
+
+            For production in K8s/containers, use Rust server:
+            $ python -c "from app import app; app.run(host='0.0.0.0', port=8000)"
+
+            Or use uvicorn CLI for ASGI compatibility:
             $ uvicorn app:app --host 0.0.0.0 --port 8000
         """
+        if use_rust_server and self._rust_app is not None:
+            # Use high-performance Rust server
+            print(f"Starting data-bridge-api server on {host}:{port}")
+            print("Using Rust HTTP server for maximum performance")
+            print("Press Ctrl+C to shutdown")
+
+            try:
+                # This will block until Ctrl+C
+                self._rust_app.serve(host, port)
+            except KeyboardInterrupt:
+                print("\nShutting down...")
+        else:
+            # Fall back to uvicorn with ASGI
+            if use_rust_server:
+                print("Warning: Rust server not available, falling back to uvicorn")
+
+            try:
+                import uvicorn
+            except ImportError:
+                raise ImportError(
+                    "uvicorn is required to run the app. Install with: pip install uvicorn"
+                )
+
+            # Setup signal handlers for graceful shutdown
+            setup_signal_handlers(self)
+
+            # Build uvicorn config
+            config = {
+                "host": host,
+                "port": port,
+                "reload": reload,
+                "workers": workers,
+                "log_level": log_level,
+                "access_log": access_log,
+                **kwargs
+            }
+
+            print(f"Starting uvicorn server on {host}:{port}")
+            print("Using ASGI interface (Python routing)")
+
+            # Run with uvicorn
+            uvicorn.run(self, **config)
+
+    async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
+        """ASGI 3.0 interface for compatibility with uvicorn/hypercorn.
+
+        This provides ASGI compatibility for running with standard ASGI servers:
+        - uvicorn app:app
+        - hypercorn app:app
+        - gunicorn with uvicorn workers
+
+        Note: This fallback uses Python routing and is slower than app.run().
+        For best performance, use app.run(use_rust_server=True) which uses
+        the Rust HTTP server with GIL-free request processing.
+        """
+        import json
+
+        if scope["type"] != "http":
+            # Only handle HTTP requests
+            await send({
+                "type": "http.response.start",
+                "status": 404,
+                "headers": [[b"content-type", b"text/plain"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"Not found",
+            })
+            return
+
+        # Extract request info
+        method = scope["method"]
+        path = scope["path"]
+        headers = dict(scope.get("headers", []))
+
+        # Find matching route (Python fallback routing)
+        handler = None
+        route_info = None
+        for route in self._routes:
+            if route.method.upper() == method and route.path == path:
+                handler = route.handler
+                route_info = route
+                break
+
+        if handler is None:
+            # Route not found
+            await send({
+                "type": "http.response.start",
+                "status": 404,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b'{"error": "Not found"}',
+            })
+            return
+
+        # Call handler
         try:
-            import uvicorn
-        except ImportError:
-            raise ImportError(
-                "uvicorn is required to run the app. Install with: pip install uvicorn"
-            )
+            # Read body if present
+            body = b""
+            while True:
+                message = await receive()
+                if message["type"] == "http.request":
+                    body += message.get("body", b"")
+                    if not message.get("more_body", False):
+                        break
 
-        # Setup signal handlers for graceful shutdown
-        setup_signal_handlers(self)
+            # Build request context
+            from .dependencies import RequestContext
+            context = RequestContext()
+            context.scope = scope
+            context.receive = receive
+            context.send = send
 
-        # Build uvicorn config
-        config = {
-            "host": host,
-            "port": port,
-            "reload": reload,
-            "workers": workers,
-            "log_level": log_level,
-            "access_log": access_log,
-            **kwargs
-        }
+            # Parse body if JSON
+            body_data = None
+            if body:
+                content_type = headers.get(b"content-type", b"").decode()
+                if "application/json" in content_type:
+                    try:
+                        body_data = json.loads(body.decode())
+                    except json.JSONDecodeError:
+                        pass
 
-        # Run with uvicorn
-        uvicorn.run(self, **config)
+            # Resolve dependencies
+            if not self._compiled:
+                self.compile()
+
+            resolved_deps = await self.resolve_dependencies(handler, context)
+
+            # Build handler kwargs
+            kwargs = {}
+
+            # Extract parameters from handler signature
+            sig = inspect.signature(handler)
+            for param_name, param in sig.parameters.items():
+                # Check if it's a dependency
+                if param_name in resolved_deps:
+                    kwargs[param_name] = resolved_deps[param_name]
+                # Check if it's a path parameter
+                elif param_name in scope.get("path_params", {}):
+                    kwargs[param_name] = scope["path_params"][param_name]
+                # Check if it's a query parameter
+                elif param_name in scope.get("query_string", b"").decode():
+                    # Simple query param extraction (not robust)
+                    pass
+                # Check for Body annotation
+                elif body_data is not None:
+                    kwargs[param_name] = body_data
+
+            # Call handler
+            result = await handler(**kwargs) if asyncio.iscoroutinefunction(handler) else handler(**kwargs)
+
+            # Convert result to response
+            if isinstance(result, Response):
+                response_body = result.body
+                status_code = result.status_code
+                response_headers = [[k.encode(), v.encode()] for k, v in result.headers.items()]
+            elif isinstance(result, dict):
+                response_body = json.dumps(result).encode()
+                status_code = route_info.status_code if route_info else 200
+                response_headers = [[b"content-type", b"application/json"]]
+            elif isinstance(result, str):
+                response_body = result.encode()
+                status_code = route_info.status_code if route_info else 200
+                response_headers = [[b"content-type", b"text/plain"]]
+            else:
+                response_body = str(result).encode()
+                status_code = route_info.status_code if route_info else 200
+                response_headers = [[b"content-type", b"text/plain"]]
+
+            # Send response
+            await send({
+                "type": "http.response.start",
+                "status": status_code,
+                "headers": response_headers,
+            })
+            await send({
+                "type": "http.response.body",
+                "body": response_body,
+            })
+
+        except HTTPException as e:
+            # Handle HTTP exceptions
+            await send({
+                "type": "http.response.start",
+                "status": e.status_code,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": json.dumps({"error": e.detail}).encode(),
+            })
+        except Exception as e:
+            # Handle unexpected errors
+            import traceback
+            traceback.print_exc()
+            await send({
+                "type": "http.response.start",
+                "status": 500,
+                "headers": [[b"content-type", b"application/json"]],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": json.dumps({"error": "Internal server error", "detail": str(e)}).encode(),
+            })
 
 
 def setup_signal_handlers(app: "App") -> None:
