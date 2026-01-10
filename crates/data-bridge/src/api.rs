@@ -7,9 +7,9 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use pyo3_async_runtimes::tokio::into_future;
 
 use data_bridge_api::{
     Router,
@@ -26,19 +26,50 @@ use data_bridge_api::{
 use crate::error_handling::sanitize_error_message;
 
 // ============================================================================
+// Thread-Local Python Event Loop
+// ============================================================================
+
+thread_local! {
+    /// Thread-local Python event loop that persists across async handler invocations.
+    /// This avoids creating a new event loop for every async request.
+    /// The event loop lives for the lifetime of the blocking thread,
+    /// which is reused by Tokio's thread pool.
+    static PYTHON_EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
+}
+
+/// Get or create the thread-local Python event loop.
+/// The event loop is created lazily on first use and persists for the thread's lifetime.
+fn get_or_create_event_loop(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    PYTHON_EVENT_LOOP.with(|cell| {
+        let mut opt = cell.borrow_mut();
+        if opt.is_none() {
+            // Create new event loop for this thread
+            let asyncio = py.import("asyncio")?;
+            let new_loop = asyncio.call_method0("new_event_loop")?;
+            asyncio.call_method1("set_event_loop", (new_loop.clone(),))?;
+            *opt = Some(new_loop.unbind());
+        }
+        // Return a clone of the Py<PyAny> (cheap reference count increment)
+        Ok(opt.as_ref().unwrap().clone_ref(py))
+    })
+}
+
+// ============================================================================
 // Path Syntax Conversion
 // ============================================================================
 
 /// Convert FastAPI-style path parameters {param} to matchit-style :param
 fn convert_path_syntax(path: &str) -> String {
     let mut result = String::with_capacity(path.len());
+    let mut in_brace = false;
     for c in path.chars() {
         match c {
             '{' => {
+                in_brace = true;
                 result.push(':');
             }
             '}' => {
-                // Skip closing brace
+                in_brace = false;
             }
             _ => {
                 result.push(c);
@@ -327,21 +358,28 @@ impl PyApiApp {
 
                 // Phase 2: Execute coroutine if needed and convert response
                 let response = if is_coroutine {
-                    // Async handler - convert coroutine to future and await it
-                    // Step 1: Convert coroutine to future (GIL held)
-                    let future = Python::with_gil(|py| -> PyResult<_> {
-                        let coro_bound = handler_result.into_bound(py);
-                        into_future(coro_bound)
-                    }).map_err(|e| {
-                        ApiError::Handler(format!("Failed to convert coroutine to future: {}", e))
-                    })?;
+                    // Async handler - spawn a blocking task to run Python coroutine
+                    // We move handler_result into the closure (no need to clone)
+                    let result_obj = tokio::task::spawn_blocking(move || {
+                        Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                            let coro_bound = handler_result.into_bound(py);
 
-                    // Step 2: Await the future (GIL released automatically by into_future)
-                    let result_obj = future.await.map_err(|e| {
+                            // Get or create thread-local event loop (persists across requests)
+                            let event_loop = get_or_create_event_loop(py)?;
+                            let event_loop_bound = event_loop.bind(py);
+
+                            // Run coroutine to completion
+                            let result = event_loop_bound.call_method1("run_until_complete", (coro_bound,))?;
+
+                            Ok(result.unbind())
+                        })
+                    }).await.map_err(|e| {
+                        ApiError::Internal(format!("Task join error: {}", e))
+                    })?.map_err(|e| {
                         ApiError::Handler(format!("Async handler error: {}", e))
                     })?;
 
-                    // Step 3: Convert Python result to Rust Response (re-acquire GIL)
+                    // Convert Python result to Rust Response (re-acquire GIL)
                     Python::with_gil(|py| -> PyResult<Response> {
                         py_result_to_response(py, &result_obj.bind(py))
                     }).map_err(|e| {
