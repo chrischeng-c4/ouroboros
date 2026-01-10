@@ -123,6 +123,8 @@ impl Server {
 
         info!("Server listening on http://{}", addr);
         info!("Max body size: {} bytes", self.config.max_body_size);
+        info!("TCP_NODELAY enabled for low-latency connections");
+        info!("HTTP/1.1 keep-alive and pipelining enabled");
         info!("Press Ctrl+C to shutdown");
 
         let router = self.router.clone();
@@ -136,6 +138,12 @@ impl Server {
             result = async {
                 loop {
                     let (stream, remote_addr) = listener.accept().await?;
+
+                    // Enable TCP_NODELAY for lower latency (disable Nagle's algorithm)
+                    if let Err(e) = stream.set_nodelay(true) {
+                        warn!("Failed to set TCP_NODELAY: {}", e);
+                    }
+
                     let io = TokioIo::new(stream);
                     let router = router.clone();
                     let config = config.clone();
@@ -146,7 +154,10 @@ impl Server {
                             handle_request(req, router.clone(), config.clone(), remote_addr)
                         });
 
+                        // Configure HTTP/1.1 with performance optimizations
                         if let Err(err) = http1::Builder::new()
+                            .keep_alive(true)           // Enable HTTP keep-alive
+                            .pipeline_flush(true)       // Enable pipelined request flushing
                             .serve_connection(io, service)
                             .await
                         {
@@ -249,7 +260,7 @@ async fn convert_hyper_request(
     path: String,
     url: String,
     headers: HeaderMap,
-    body_bytes: Vec<u8>,
+    body_bytes: Bytes,
 ) -> ApiResult<SerializableRequest> {
     let mut req = SerializableRequest::new(method, path);
 
@@ -294,10 +305,10 @@ async fn convert_hyper_request(
         let content_type = req.content_type.as_deref().unwrap_or("");
 
         if content_type.contains("application/json") {
-            // Parse JSON body
-            match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+            // Parse JSON body with sonic-rs (3-7x faster)
+            match sonic_rs::from_slice::<sonic_rs::Value>(&body_bytes) {
                 Ok(json) => {
-                    req = req.with_body(SerializableValue::from_json(&json));
+                    req = req.with_body(SerializableValue::from_sonic_value(&json));
                 }
                 Err(err) => {
                     return Err(ApiError::BadRequest(format!(
@@ -322,14 +333,14 @@ async fn convert_hyper_request(
                 .ok_or_else(|| ApiError::BadRequest("Missing multipart boundary".to_string()))?;
 
             // Parse multipart form data
-            let form_data = crate::request::parse_multipart(boundary, body_bytes)
+            let form_data = crate::request::parse_multipart(boundary, body_bytes.to_vec())
                 .await
                 .map_err(|e| ApiError::BadRequest(format!("Invalid multipart data: {}", e)))?;
 
             req.form_data = Some(form_data);
         } else {
             // Store as raw bytes
-            req = req.with_body(SerializableValue::Bytes(body_bytes));
+            req = req.with_body(SerializableValue::Bytes(body_bytes.to_vec()));
         }
     }
 
@@ -354,7 +365,7 @@ fn extract_boundary(content_type: &str) -> Option<String> {
 async fn collect_body(
     body: Incoming,
     max_size: usize,
-) -> Result<Vec<u8>, String> {
+) -> Result<Bytes, String> {
     use http_body_util::BodyExt;
 
     let collected = body.collect().await.map_err(|e| e.to_string())?;
@@ -368,7 +379,7 @@ async fn collect_body(
         ));
     }
 
-    Ok(bytes.to_vec())
+    Ok(bytes)
 }
 
 /// Process the request through the router
@@ -552,7 +563,7 @@ mod tests {
             "/api/users".to_string(),
             "http://localhost/api/users".to_string(),
             headers,
-            json_body.as_bytes().to_vec(),
+            Bytes::from(json_body.as_bytes().to_vec()),
         )
         .await
         .unwrap();
@@ -583,7 +594,7 @@ mod tests {
             "/api/users".to_string(),
             "http://localhost/api/users".to_string(),
             headers,
-            form_body.to_vec(),
+            Bytes::from(form_body.to_vec()),
         )
         .await
         .unwrap();
@@ -689,7 +700,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -722,7 +733,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -750,7 +761,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -777,7 +788,7 @@ mod tests {
             "/api/users".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();

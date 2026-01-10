@@ -144,6 +144,39 @@ impl SerializableValue {
             }
         }
     }
+
+    /// Create from sonic-rs Value (3-7x faster than serde_json)
+    pub fn from_sonic_value(value: &sonic_rs::Value) -> Self {
+        use sonic_rs::{JsonValueTrait, JsonContainerTrait};
+
+        if value.is_null() {
+            Self::Null
+        } else if value.is_boolean() {
+            Self::Bool(value.as_bool().unwrap())
+        } else if value.is_number() {
+            if let Some(i) = value.as_i64() {
+                Self::Int(i)
+            } else if let Some(f) = value.as_f64() {
+                Self::Float(f)
+            } else {
+                Self::Null
+            }
+        } else if value.is_str() {
+            Self::String(value.as_str().unwrap().to_string())
+        } else if value.is_array() {
+            let arr = value.as_array().unwrap();
+            Self::List(arr.iter().map(Self::from_sonic_value).collect())
+        } else if value.is_object() {
+            let obj = value.as_object().unwrap();
+            Self::Object(
+                obj.iter()
+                    .map(|(k, v): (&str, &sonic_rs::Value)| (k.to_string(), Self::from_sonic_value(v)))
+                    .collect(),
+            )
+        } else {
+            Self::Null
+        }
+    }
 }
 
 /// Serializable HTTP request (GIL-free processing)
@@ -774,5 +807,50 @@ Binary data\r
         let request = Request::new(req);
         let retrieved_form = request.form_data().unwrap();
         assert_eq!(retrieved_form.fields.get("name"), Some(&"Alice".to_string()));
+    }
+
+    #[test]
+    fn test_sonic_value_conversion() {
+        // Test JSON parsing with sonic-rs
+        let json_str = r#"{"name":"Alice","age":30,"active":true,"tags":["rust","python"]}"#;
+        let sonic_value: sonic_rs::Value = sonic_rs::from_str(json_str).unwrap();
+
+        // Convert to SerializableValue
+        let serializable = SerializableValue::from_sonic_value(&sonic_value);
+
+        // Verify conversion
+        if let SerializableValue::Object(pairs) = serializable {
+            assert_eq!(pairs.len(), 4);
+
+            // Find and check name
+            let name = pairs.iter().find(|(k, _)| k == "name");
+            assert!(name.is_some());
+            if let (_, SerializableValue::String(s)) = name.unwrap() {
+                assert_eq!(s, "Alice");
+            }
+
+            // Find and check age
+            let age = pairs.iter().find(|(k, _)| k == "age");
+            assert!(age.is_some());
+            if let (_, SerializableValue::Int(i)) = age.unwrap() {
+                assert_eq!(*i, 30);
+            }
+
+            // Find and check active
+            let active = pairs.iter().find(|(k, _)| k == "active");
+            assert!(active.is_some());
+            if let (_, SerializableValue::Bool(b)) = active.unwrap() {
+                assert_eq!(*b, true);
+            }
+
+            // Find and check tags
+            let tags = pairs.iter().find(|(k, _)| k == "tags");
+            assert!(tags.is_some());
+            if let (_, SerializableValue::List(items)) = tags.unwrap() {
+                assert_eq!(items.len(), 2);
+            }
+        } else {
+            panic!("Expected Object variant");
+        }
     }
 }

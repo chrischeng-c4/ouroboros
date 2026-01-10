@@ -27,6 +27,7 @@ serde_json = { workspace = true }
 sonic-rs = "0.3"  # 3-7x faster JSON serialization
 serde_yaml = "0.9"
 base64 = "0.22"
+bytes = "1.10"  # Zero-copy byte operations
 
 # OpenAPI
 utoipa = "4"
