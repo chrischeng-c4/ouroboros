@@ -14,11 +14,25 @@
 
 ## Benchmark Results
 
-| Scenario | Before | After | Change |
-|----------|--------|-------|--------|
+### Phase 1: Rust-side Optimizations (sonic-rs, Bytes, Hyper tuning)
+
+| Scenario | Before | After Phase 1 | Change |
+|----------|--------|---------------|--------|
 | Plaintext | 835 ops/s | 916 ops/s | **+9.7%** |
 | Serialize 10KB | 712 ops/s | 807 ops/s | **+13.3%** |
 | Serialize 100KB | 310 ops/s | 338 ops/s | **+9.0%** |
 | Serialize 1MB | 47 ops/s | 48 ops/s | +2.1% |
 
-**Note**: Still slower than FastAPI. Further optimization needed in Phase 2 (Python handler invocation, GIL management).
+### Phase 2: Python Handler Optimizations (GIL consolidation)
+
+Consolidated GIL acquisitions from 3-4 per request down to 2:
+- Phase 1: Call handler + check coroutine (single GIL)
+- Phase 2: Execute coroutine + convert response (single GIL)
+
+| Scenario | data-bridge | FastAPI | Ratio |
+|----------|-------------|---------|-------|
+| Plaintext | 766 ops/s | 801 ops/s | 0.96x |
+| Path Params | 660 ops/s | 794 ops/s | 0.83x |
+| JSON Response | 675 ops/s | 755 ops/s | 0.89x |
+
+**Summary**: Performance improved by ~10-15% with Rust-side optimizations. GIL consolidation maintains stable performance. Further optimization requires architectural changes (e.g., async event loop reuse, handler pooling).

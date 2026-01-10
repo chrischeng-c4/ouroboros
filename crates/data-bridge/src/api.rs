@@ -303,8 +303,8 @@ impl PyApiApp {
             let rid = rid.clone();
 
             Box::pin(async move {
-                // 1. Convert request to Python dict and call handler (all within GIL)
-                let handler_result = Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                // Phase 1: Call handler and check coroutine status (single GIL acquisition)
+                let (is_coroutine, handler_result) = Python::with_gil(|py| -> PyResult<(bool, Py<PyAny>)> {
                     // Get handler from state
                     let state = inner.read().map_err(|e| {
                         PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e))
@@ -320,45 +320,29 @@ impl PyApiApp {
                     let handler_bound = handler.bind(py);
                     let result_bound = handler_bound.call1((py_args,))?;
 
-                    // Return the result as Py<PyAny> (unbounded, can cross GIL release)
-                    Ok(result_bound.unbind())
+                    // Check if it's a coroutine by checking for __await__ attribute
+                    let is_coro = result_bound.hasattr("__await__")?;
+
+                    // Return coroutine status and result (unbounded, can cross GIL release)
+                    Ok((is_coro, result_bound.unbind()))
                 }).map_err(|e| {
                     ApiError::Handler(format!("Handler call error: {}", e))
                 })?;
 
-                // 2. Check if result is a coroutine and await if needed
-                let is_coroutine = Python::with_gil(|py| -> PyResult<bool> {
-                    let result_bound = handler_result.bind(py);
-                    // Check if it's a coroutine by checking for __await__ attribute
-                    result_bound.hasattr("__await__")
-                }).map_err(|e| {
-                    ApiError::Handler(format!("Coroutine check error: {}", e))
-                })?;
-
-                let final_result: Py<PyAny> = if is_coroutine {
-                    // Async handler - await the coroutine
-                    // We need to create a Python event loop and run the coroutine in it
-                    // This is done synchronously by running the event loop until the coroutine completes
-                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                // Phase 2: Execute coroutine if needed and convert response (single GIL acquisition)
+                let response = Python::with_gil(|py| -> PyResult<Response> {
+                    let final_result = if is_coroutine {
+                        // Async handler - await the coroutine using asyncio.run
                         let asyncio = py.import("asyncio")?;
-
-                        // Run the coroutine in a new event loop
                         let coro_bound = handler_result.bind(py);
-                        let result = asyncio.call_method1("run", (coro_bound,))?;
+                        asyncio.call_method1("run", (coro_bound,))?
+                    } else {
+                        // Sync handler - result is ready
+                        handler_result.bind(py).clone()
+                    };
 
-                        Ok(result.unbind())
-                    }).map_err(|e| {
-                        ApiError::Handler(format!("Handler execution error: {}", e))
-                    })?
-                } else {
-                    // Sync handler - result is ready
-                    handler_result
-                };
-
-                // 3. Convert response (GIL held briefly)
-                let response = Python::with_gil(|py| {
-                    let result_bound = final_result.bind(py);
-                    py_result_to_response(py, &result_bound)
+                    // Convert response to Rust Response
+                    py_result_to_response(py, &final_result)
                 }).map_err(|e| {
                     ApiError::Internal(format!("Response conversion error: {}", e))
                 })?;
