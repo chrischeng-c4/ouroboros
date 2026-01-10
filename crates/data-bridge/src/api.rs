@@ -7,7 +7,10 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
+use pyo3_async_runtimes::into_future_with_locals;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use data_bridge_api::{
@@ -23,6 +26,31 @@ use data_bridge_api::{
 };
 
 use crate::error_handling::sanitize_error_message;
+
+// ============================================================================
+// Path Syntax Conversion
+// ============================================================================
+
+/// Convert FastAPI-style path parameters {param} to matchit-style :param
+fn convert_path_syntax(path: &str) -> String {
+    let mut result = String::with_capacity(path.len());
+    let mut in_brace = false;
+    for c in path.chars() {
+        match c {
+            '{' => {
+                in_brace = true;
+                result.push(':');
+            }
+            '}' => {
+                in_brace = false;
+            }
+            _ => {
+                result.push(c);
+            }
+        }
+    }
+    result
+}
 
 // ============================================================================
 // Python Value Conversion
@@ -307,14 +335,19 @@ impl PyApiApp {
                     ApiError::Handler(format!("Coroutine check error: {}", e))
                 })?;
 
-                let final_result = if is_coroutine {
+                let final_result: Py<PyAny> = if is_coroutine {
                     // Async handler - await the coroutine
-                    Python::with_gil(|py| {
+                    // We need to create a Python event loop and run the coroutine in it
+                    // This is done synchronously by running the event loop until the coroutine completes
+                    Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                        let asyncio = py.import("asyncio")?;
+
+                        // Run the coroutine in a new event loop
                         let coro_bound = handler_result.bind(py);
-                        pyo3_async_runtimes::tokio::into_future(coro_bound.clone())
+                        let result = asyncio.call_method1("run", (coro_bound,))?;
+
+                        Ok(result.unbind())
                     }).map_err(|e| {
-                        ApiError::Handler(format!("Coroutine conversion error: {}", e))
-                    })?.await.map_err(|e| {
                         ApiError::Handler(format!("Handler execution error: {}", e))
                     })?
                 } else {
@@ -340,7 +373,10 @@ impl PyApiApp {
             )
         })?;
 
-        router.route(http_method, path, rust_handler, validator, metadata)
+        // Convert FastAPI-style path {param} to matchit-style :param
+        let converted_path = convert_path_syntax(path);
+
+        router.route(http_method, &converted_path, rust_handler, validator, metadata)
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
                 sanitize_error_message(&e.to_string())
             ))?;
@@ -427,9 +463,8 @@ impl PyApiApp {
         // Release GIL and run server
         // This blocks the current thread until shutdown signal
         py.allow_threads(|| {
-            // Create a new Tokio runtime for the server
-            tokio::runtime::Runtime::new()
-                .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?
+            // Use pyo3_async_runtimes managed runtime for proper asyncio integration
+            pyo3_async_runtimes::tokio::get_runtime()
                 .block_on(server.run())
                 .map_err(|e| format!("Server error: {}", e))
         }).map_err(|e: String| {
@@ -740,4 +775,40 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRequest>()?;
     m.add_class::<PyResponse>()?;
     Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_path_syntax() {
+        // Test simple path parameter
+        assert_eq!(convert_path_syntax("/users/{id}"), "/users/:id");
+
+        // Test multiple path parameters
+        assert_eq!(
+            convert_path_syntax("/users/{user_id}/posts/{post_id}"),
+            "/users/:user_id/posts/:post_id"
+        );
+
+        // Test path without parameters
+        assert_eq!(convert_path_syntax("/health"), "/health");
+
+        // Test path with mixed content
+        assert_eq!(
+            convert_path_syntax("/api/v1/users/{user_id}/items/{item_id}/details"),
+            "/api/v1/users/:user_id/items/:item_id/details"
+        );
+
+        // Test path with complex parameter names
+        assert_eq!(
+            convert_path_syntax("/resources/{resource_id_123}"),
+            "/resources/:resource_id_123"
+        );
+    }
 }

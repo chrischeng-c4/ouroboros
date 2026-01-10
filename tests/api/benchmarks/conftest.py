@@ -10,7 +10,8 @@ import subprocess
 import sys
 import time
 from typing import Dict
-import requests
+import asyncio
+from data_bridge.http import HttpClient
 
 # =====================
 # Constants
@@ -60,15 +61,20 @@ class ServerProcess:
                 self.process.kill()
 
     def wait_ready(self, timeout=30):
-        """Wait for server to be ready."""
+        """Wait for server to become ready by polling /health endpoint."""
         start = time.time()
         while time.time() - start < timeout:
             try:
-                response = requests.get(f"http://localhost:{self.port}/health", timeout=1)
-                if response.status_code == 200:
+                async def check():
+                    client = HttpClient()
+                    response = await client.get(f"http://localhost:{self.port}/health", timeout=1.0)
+                    return response.status_code == 200
+
+                if asyncio.run(check()):
                     return True
-            except:
-                time.sleep(0.1)
+            except Exception:
+                pass
+            time.sleep(0.1)
         return False
 
 
@@ -86,28 +92,30 @@ from data_bridge.api import App
 app = App()
 
 @app.get("/plaintext")
-async def plaintext():
+async def plaintext(request):
     return "Hello, World!"
 
 @app.get("/items/{{item_id}}")
-async def get_item(item_id: int):
+async def get_item(request):
+    item_id = int(request["path_params"]["item_id"])
     return {{"item_id": item_id, "name": f"Item {{item_id}}"}}
 
 @app.post("/items")
-async def create_item(item: dict):
+async def create_item(request):
+    item = request.get("body", {{}})
     return {{"id": 1, **item}}
 
 @app.get("/json/{{size}}")
-async def json_response(size: int):
+async def json_response(request):
+    size = int(request["path_params"]["size"])
     return {{"data": "x" * size}}
 
 @app.get("/health")
-async def health():
+async def health(request):
     return {{"status": "ok"}}
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port={DATA_BRIDGE_PORT}, log_level="error")
+    app.run(host="0.0.0.0", port={DATA_BRIDGE_PORT})
 """
 
     with open("/tmp/bench_databridge_server.py", "w") as f:
@@ -181,18 +189,6 @@ if __name__ == "__main__":
     yield f"http://localhost:{FASTAPI_PORT}"
 
     server.stop()
-
-
-# =====================
-# HTTP Client
-# =====================
-
-@pytest.fixture(scope="session")
-def http_client():
-    """Create HTTP client session."""
-    session = requests.Session()
-    yield session
-    session.close()
 
 
 # =====================

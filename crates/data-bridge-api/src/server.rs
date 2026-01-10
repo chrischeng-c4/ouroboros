@@ -251,7 +251,36 @@ async fn convert_hyper_request(
     headers: HeaderMap,
     body_bytes: Vec<u8>,
 ) -> ApiResult<SerializableRequest> {
-    let mut req = SerializableRequest::new(method, path).with_url(url);
+    let mut req = SerializableRequest::new(method, path);
+
+    // Parse query parameters from URL before moving url into with_url()
+    if let Some(query_start) = url.find('?') {
+        let query_string = &url[query_start + 1..];
+        for pair in query_string.split('&') {
+            if let Some((key, value)) = pair.split_once('=') {
+                // URL decode key and value (replace + with space first for query string compatibility)
+                let key_with_spaces = key.replace('+', " ");
+                let value_with_spaces = value.replace('+', " ");
+                let decoded_key = urlencoding::decode(&key_with_spaces).unwrap_or_else(|_| key_with_spaces.as_str().into());
+                let decoded_value = urlencoding::decode(&value_with_spaces).unwrap_or_else(|_| value_with_spaces.as_str().into());
+                req = req.with_query_param(
+                    decoded_key.to_string(),
+                    SerializableValue::String(decoded_value.to_string()),
+                );
+            } else if !pair.is_empty() {
+                // Handle parameters without values (e.g., ?flag)
+                let pair_with_spaces = pair.replace('+', " ");
+                let decoded_key = urlencoding::decode(&pair_with_spaces).unwrap_or_else(|_| pair_with_spaces.as_str().into());
+                req = req.with_query_param(
+                    decoded_key.to_string(),
+                    SerializableValue::String(String::new()),
+                );
+            }
+        }
+    }
+
+    // Now set the URL (moves url)
+    req = req.with_url(url);
 
     // Extract headers
     for (name, value) in headers.iter() {
@@ -259,10 +288,6 @@ async fn convert_hyper_request(
             req = req.with_header(name.as_str(), value_str);
         }
     }
-
-    // Parse query parameters from URL
-    // Note: In a full implementation, we'd parse the query string here
-    // For now, this is a simplified version
 
     // Parse body based on content type
     if !body_bytes.is_empty() {
@@ -652,5 +677,111 @@ mod tests {
         let hyper_response = error_response(error);
 
         assert_eq!(hyper_response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_convert_hyper_request_query_params() {
+        let headers = HeaderMap::new();
+        let url = "http://localhost/api/search?q=hello&limit=5&sort=desc".to_string();
+
+        let req = convert_hyper_request(
+            HttpMethod::Get,
+            "/api/search".to_string(),
+            url,
+            headers,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(req.method, HttpMethod::Get);
+        assert_eq!(req.path, "/api/search");
+        assert_eq!(req.query_params.len(), 3);
+
+        assert_eq!(
+            req.query_params.get("q"),
+            Some(&SerializableValue::String("hello".to_string()))
+        );
+        assert_eq!(
+            req.query_params.get("limit"),
+            Some(&SerializableValue::String("5".to_string()))
+        );
+        assert_eq!(
+            req.query_params.get("sort"),
+            Some(&SerializableValue::String("desc".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_convert_hyper_request_query_params_with_encoding() {
+        let headers = HeaderMap::new();
+        let url = "http://localhost/api/search?q=hello%20world&filter=status%3Dactive".to_string();
+
+        let req = convert_hyper_request(
+            HttpMethod::Get,
+            "/api/search".to_string(),
+            url,
+            headers,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(req.query_params.len(), 2);
+
+        assert_eq!(
+            req.query_params.get("q"),
+            Some(&SerializableValue::String("hello world".to_string()))
+        );
+        assert_eq!(
+            req.query_params.get("filter"),
+            Some(&SerializableValue::String("status=active".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_convert_hyper_request_query_params_plus_encoding() {
+        let headers = HeaderMap::new();
+        // Test + as space encoding (common in query strings)
+        let url = "http://localhost/api/search?q=hello+world&name=John+Doe".to_string();
+
+        let req = convert_hyper_request(
+            HttpMethod::Get,
+            "/api/search".to_string(),
+            url,
+            headers,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(req.query_params.len(), 2);
+
+        assert_eq!(
+            req.query_params.get("q"),
+            Some(&SerializableValue::String("hello world".to_string()))
+        );
+        assert_eq!(
+            req.query_params.get("name"),
+            Some(&SerializableValue::String("John Doe".to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_convert_hyper_request_no_query_params() {
+        let headers = HeaderMap::new();
+        let url = "http://localhost/api/users".to_string();
+
+        let req = convert_hyper_request(
+            HttpMethod::Get,
+            "/api/users".to_string(),
+            url,
+            headers,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(req.query_params.len(), 0);
     }
 }

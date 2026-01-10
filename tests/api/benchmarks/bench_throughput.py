@@ -1,7 +1,7 @@
 """Throughput benchmarks for API servers."""
 
 from data_bridge.test import BenchmarkGroup, register_group
-import benchmark_setup
+from . import benchmark_setup
 
 
 # =====================

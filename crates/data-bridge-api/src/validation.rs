@@ -274,17 +274,17 @@ impl RequestValidator {
     ) -> Result<ValidatedRequest, ValidationErrors> {
         let mut errors = ValidationErrors::new();
 
-        // Validate path params
-        let validated_path = self.validate_params(
+        // Validate path params - start with all raw params, then apply validation
+        let validated_path = self.validate_params_with_passthrough(
             &self.path_params,
-            |name| path_params.get(name).map(|s| SerializableValue::String(s.clone())),
+            path_params,
             &mut errors,
         );
 
-        // Validate query params
-        let validated_query = self.validate_params(
+        // Validate query params - start with all raw params, then apply validation
+        let validated_query = self.validate_params_with_value_passthrough(
             &self.query_params,
-            |name| query_params.get(name).cloned(),
+            query_params,
             &mut errors,
         );
 
@@ -327,6 +327,107 @@ impl RequestValidator {
         } else {
             Err(errors)
         }
+    }
+
+    /// Validate path parameters with pass-through for router-extracted params
+    ///
+    /// This method ensures ALL path parameters from the router are available in the handler,
+    /// with optional validation applied to those that have validators defined.
+    fn validate_params_with_passthrough(
+        &self,
+        validators: &[ParamValidator],
+        raw_params: &HashMap<String, String>,
+        errors: &mut ValidationErrors,
+    ) -> HashMap<String, SerializableValue> {
+        // Start with all raw path params from the router
+        let mut result: HashMap<String, SerializableValue> = raw_params
+            .iter()
+            .map(|(k, v)| (k.clone(), SerializableValue::String(v.clone())))
+            .collect();
+
+        // Apply validation to parameters that have validators
+        for validator in validators {
+            if let Some(raw_value) = raw_params.get(&validator.name) {
+                let value = SerializableValue::String(raw_value.clone());
+
+                // Validate the value
+                validate_type(
+                    &value,
+                    &validator.type_desc,
+                    validator.location.as_str(),
+                    &validator.name,
+                    errors,
+                );
+
+                // Overwrite with validated value (which may have been type-converted)
+                result.insert(validator.name.clone(), value);
+            } else if validator.required {
+                // Required validator but no value in raw params
+                if let Some(default) = &validator.default {
+                    result.insert(validator.name.clone(), default.clone());
+                } else {
+                    errors.add(ValidationError {
+                        location: validator.location.as_str().to_string(),
+                        field: validator.name.clone(),
+                        message: "Required path parameter is missing".to_string(),
+                        error_type: "missing".to_string(),
+                    });
+                }
+            } else if let Some(default) = &validator.default {
+                // Optional with default
+                result.insert(validator.name.clone(), default.clone());
+            }
+        }
+
+        result
+    }
+
+    /// Validate query/header parameters with pass-through for all extracted params
+    ///
+    /// This method ensures ALL query/header parameters from the request are available in the handler,
+    /// with optional validation applied to those that have validators defined.
+    fn validate_params_with_value_passthrough(
+        &self,
+        validators: &[ParamValidator],
+        raw_params: &HashMap<String, SerializableValue>,
+        errors: &mut ValidationErrors,
+    ) -> HashMap<String, SerializableValue> {
+        // Start with all raw params from the request
+        let mut result: HashMap<String, SerializableValue> = raw_params.clone();
+
+        // Apply validation to parameters that have validators
+        for validator in validators {
+            if let Some(value) = raw_params.get(&validator.name) {
+                // Validate the value
+                validate_type(
+                    value,
+                    &validator.type_desc,
+                    validator.location.as_str(),
+                    &validator.name,
+                    errors,
+                );
+
+                // Overwrite with validated value (which may have been type-converted)
+                result.insert(validator.name.clone(), value.clone());
+            } else if validator.required {
+                // Required validator but no value in raw params
+                if let Some(default) = &validator.default {
+                    result.insert(validator.name.clone(), default.clone());
+                } else {
+                    errors.add(ValidationError {
+                        location: validator.location.as_str().to_string(),
+                        field: validator.name.clone(),
+                        message: format!("Required {} parameter is missing", validator.location.as_str()),
+                        error_type: "missing".to_string(),
+                    });
+                }
+            } else if let Some(default) = &validator.default {
+                // Optional with default
+                result.insert(validator.name.clone(), default.clone());
+            }
+        }
+
+        result
     }
 
     /// Validate a set of parameters
@@ -1482,6 +1583,70 @@ mod tests {
     }
 
     #[test]
+    fn test_path_params_passthrough() {
+        // Test that path params are passed through even when no validators are defined
+        let validator = RequestValidator::new();
+
+        let mut path_params = HashMap::new();
+        path_params.insert("user_id".to_string(), "user-123".to_string());
+        path_params.insert("resource_id".to_string(), "resource-456".to_string());
+
+        let result = validator.validate(&path_params, &HashMap::new(), &HashMap::new(), None);
+
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+
+        // Both path params should be present
+        assert_eq!(validated.path_params.len(), 2);
+        assert_eq!(
+            validated.path_params.get("user_id"),
+            Some(&SerializableValue::String("user-123".to_string()))
+        );
+        assert_eq!(
+            validated.path_params.get("resource_id"),
+            Some(&SerializableValue::String("resource-456".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_path_params_with_partial_validation() {
+        // Test that some path params can have validators while others pass through
+        let mut validator = RequestValidator::new();
+        validator.path_params.push(ParamValidator {
+            name: "user_id".to_string(),
+            location: ParamLocation::Path,
+            type_desc: TypeDescriptor::String(StringConstraints {
+                min_length: Some(5),
+                max_length: None,
+                pattern: None,
+                format: None,
+            }),
+            required: true,
+            default: None,
+        });
+
+        let mut path_params = HashMap::new();
+        path_params.insert("user_id".to_string(), "user-123".to_string());
+        path_params.insert("resource_id".to_string(), "resource-456".to_string());
+
+        let result = validator.validate(&path_params, &HashMap::new(), &HashMap::new(), None);
+
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+
+        // Both path params should be present
+        assert_eq!(validated.path_params.len(), 2);
+        assert_eq!(
+            validated.path_params.get("user_id"),
+            Some(&SerializableValue::String("user-123".to_string()))
+        );
+        assert_eq!(
+            validated.path_params.get("resource_id"),
+            Some(&SerializableValue::String("resource-456".to_string()))
+        );
+    }
+
+    #[test]
     fn test_validate_list() {
         let mut errors = ValidationErrors::new();
         let item_type = TypeDescriptor::Int(Default::default());
@@ -1795,5 +1960,111 @@ mod tests {
         validate_type(&invalid, &obj_type, "body", "", &mut errors);
         assert!(!errors.is_empty());
         assert!(errors.errors[0].field.contains("extra_field"));
+    }
+
+    #[test]
+    fn test_query_params_passthrough() {
+        // Test that query params are passed through even when no validators are defined
+        let validator = RequestValidator::new();
+
+        let mut query_params = HashMap::new();
+        query_params.insert("search".to_string(), SerializableValue::String("test".to_string()));
+        query_params.insert("page".to_string(), SerializableValue::Int(1));
+        query_params.insert("limit".to_string(), SerializableValue::Int(10));
+
+        let result = validator.validate(&HashMap::new(), &query_params, &HashMap::new(), None);
+
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+
+        // All query params should be present
+        assert_eq!(validated.query_params.len(), 3);
+        assert_eq!(
+            validated.query_params.get("search"),
+            Some(&SerializableValue::String("test".to_string()))
+        );
+        assert_eq!(
+            validated.query_params.get("page"),
+            Some(&SerializableValue::Int(1))
+        );
+        assert_eq!(
+            validated.query_params.get("limit"),
+            Some(&SerializableValue::Int(10))
+        );
+    }
+
+    #[test]
+    fn test_query_params_with_partial_validation() {
+        // Test that some query params can have validators while others pass through
+        let mut validator = RequestValidator::new();
+        validator.query_params.push(ParamValidator {
+            name: "page".to_string(),
+            location: ParamLocation::Query,
+            type_desc: TypeDescriptor::Int(NumericConstraints {
+                minimum: Some(1),
+                maximum: Some(1000),
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }),
+            required: false,
+            default: Some(SerializableValue::Int(1)),
+        });
+
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), SerializableValue::Int(5));
+        query_params.insert("search".to_string(), SerializableValue::String("test".to_string()));
+        query_params.insert("filter".to_string(), SerializableValue::String("active".to_string()));
+
+        let result = validator.validate(&HashMap::new(), &query_params, &HashMap::new(), None);
+
+        assert!(result.is_ok());
+        let validated = result.unwrap();
+
+        // All query params should be present, with page validated
+        assert_eq!(validated.query_params.len(), 3);
+        assert_eq!(
+            validated.query_params.get("page"),
+            Some(&SerializableValue::Int(5))
+        );
+        assert_eq!(
+            validated.query_params.get("search"),
+            Some(&SerializableValue::String("test".to_string()))
+        );
+        assert_eq!(
+            validated.query_params.get("filter"),
+            Some(&SerializableValue::String("active".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_query_params_validation_failure_still_passes_through() {
+        // Test that even when validation fails, other params are still passed through
+        let mut validator = RequestValidator::new();
+        validator.query_params.push(ParamValidator {
+            name: "page".to_string(),
+            location: ParamLocation::Query,
+            type_desc: TypeDescriptor::Int(NumericConstraints {
+                minimum: Some(1),
+                maximum: Some(100),
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }),
+            required: true,
+            default: None,
+        });
+
+        let mut query_params = HashMap::new();
+        query_params.insert("page".to_string(), SerializableValue::Int(999)); // Invalid (> 100)
+        query_params.insert("search".to_string(), SerializableValue::String("test".to_string()));
+
+        let result = validator.validate(&HashMap::new(), &query_params, &HashMap::new(), None);
+
+        // Should fail validation
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.errors.len(), 1);
+        assert_eq!(errors.errors[0].field, "page");
     }
 }
