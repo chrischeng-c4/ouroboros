@@ -164,26 +164,38 @@ fn request_to_py_dict(
 ) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
 
-    // Add validated path parameters
-    let path_params = PyDict::new(py);
-    for (key, value) in &validated.path_params {
-        path_params.set_item(key, serializable_to_py(py, value)?)?;
+    // Add validated path parameters (lazy dict creation)
+    if !validated.path_params.is_empty() {
+        let path_params = PyDict::new(py);
+        for (key, value) in &validated.path_params {
+            path_params.set_item(key, serializable_to_py(py, value)?)?;
+        }
+        dict.set_item("path_params", path_params)?;
+    } else {
+        dict.set_item("path_params", PyDict::new(py))?;
     }
-    dict.set_item("path_params", path_params)?;
 
-    // Add validated query parameters
-    let query_params = PyDict::new(py);
-    for (key, value) in &validated.query_params {
-        query_params.set_item(key, serializable_to_py(py, value)?)?;
+    // Add validated query parameters (lazy dict creation)
+    if !validated.query_params.is_empty() {
+        let query_params = PyDict::new(py);
+        for (key, value) in &validated.query_params {
+            query_params.set_item(key, serializable_to_py(py, value)?)?;
+        }
+        dict.set_item("query_params", query_params)?;
+    } else {
+        dict.set_item("query_params", PyDict::new(py))?;
     }
-    dict.set_item("query_params", query_params)?;
 
-    // Add headers
-    let headers = PyDict::new(py);
-    for (key, value) in req.inner.headers.iter() {
-        headers.set_item(key, value)?;
+    // Add headers (lazy dict creation)
+    if !req.inner.headers.is_empty() {
+        let headers = PyDict::new(py);
+        for (key, value) in req.inner.headers.iter() {
+            headers.set_item(key, value)?;
+        }
+        dict.set_item("headers", headers)?;
+    } else {
+        dict.set_item("headers", PyDict::new(py))?;
     }
-    dict.set_item("headers", headers)?;
 
     // Add validated body (if present)
     if let Some(body) = &validated.body {
