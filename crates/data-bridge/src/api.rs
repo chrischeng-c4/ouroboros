@@ -7,16 +7,14 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
-use pyo3_async_runtimes::into_future_with_locals;
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 use data_bridge_api::{
     Router,
     request::{HttpMethod, SerializableValue, SerializableRequest, Request},
-    response::{SerializableResponse, ResponseBody, Response},
+    response::{SerializableResponse, Response},
     validation::{
         TypeDescriptor, StringConstraints, NumericConstraints,
         RequestValidator, ParamValidator, ParamLocation, ValidatedRequest,
@@ -26,6 +24,35 @@ use data_bridge_api::{
 };
 
 use crate::error_handling::sanitize_error_message;
+
+// ============================================================================
+// Thread-Local Python Event Loop
+// ============================================================================
+
+thread_local! {
+    /// Thread-local Python event loop that persists across async handler invocations.
+    /// This avoids creating a new event loop for every async request.
+    /// The event loop lives for the lifetime of the blocking thread,
+    /// which is reused by Tokio's thread pool.
+    static PYTHON_EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
+}
+
+/// Get or create the thread-local Python event loop.
+/// The event loop is created lazily on first use and persists for the thread's lifetime.
+fn get_or_create_event_loop(py: Python<'_>) -> PyResult<Py<PyAny>> {
+    PYTHON_EVENT_LOOP.with(|cell| {
+        let mut opt = cell.borrow_mut();
+        if opt.is_none() {
+            // Create new event loop for this thread
+            let asyncio = py.import("asyncio")?;
+            let new_loop = asyncio.call_method0("new_event_loop")?;
+            asyncio.call_method1("set_event_loop", (new_loop.clone(),))?;
+            *opt = Some(new_loop.unbind());
+        }
+        // Return a clone of the Py<PyAny> (cheap reference count increment)
+        Ok(opt.as_ref().unwrap().clone_ref(py))
+    })
+}
 
 // ============================================================================
 // Path Syntax Conversion
@@ -329,23 +356,43 @@ impl PyApiApp {
                     ApiError::Handler(format!("Handler call error: {}", e))
                 })?;
 
-                // Phase 2: Execute coroutine if needed and convert response (single GIL acquisition)
-                let response = Python::with_gil(|py| -> PyResult<Response> {
-                    let final_result = if is_coroutine {
-                        // Async handler - await the coroutine using asyncio.run
-                        let asyncio = py.import("asyncio")?;
-                        let coro_bound = handler_result.bind(py);
-                        asyncio.call_method1("run", (coro_bound,))?
-                    } else {
-                        // Sync handler - result is ready
-                        handler_result.bind(py).clone()
-                    };
+                // Phase 2: Execute coroutine if needed and convert response
+                let response = if is_coroutine {
+                    // Async handler - spawn a blocking task to run Python coroutine
+                    // We move handler_result into the closure (no need to clone)
+                    let result_obj = tokio::task::spawn_blocking(move || {
+                        Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+                            let coro_bound = handler_result.into_bound(py);
 
-                    // Convert response to Rust Response
-                    py_result_to_response(py, &final_result)
-                }).map_err(|e| {
-                    ApiError::Internal(format!("Response conversion error: {}", e))
-                })?;
+                            // Get or create thread-local event loop (persists across requests)
+                            let event_loop = get_or_create_event_loop(py)?;
+                            let event_loop_bound = event_loop.bind(py);
+
+                            // Run coroutine to completion
+                            let result = event_loop_bound.call_method1("run_until_complete", (coro_bound,))?;
+
+                            Ok(result.unbind())
+                        })
+                    }).await.map_err(|e| {
+                        ApiError::Internal(format!("Task join error: {}", e))
+                    })?.map_err(|e| {
+                        ApiError::Handler(format!("Async handler error: {}", e))
+                    })?;
+
+                    // Convert Python result to Rust Response (re-acquire GIL)
+                    Python::with_gil(|py| -> PyResult<Response> {
+                        py_result_to_response(py, &result_obj.bind(py))
+                    }).map_err(|e| {
+                        ApiError::Internal(format!("Response conversion error: {}", e))
+                    })?
+                } else {
+                    // Sync handler - result is ready, just convert
+                    Python::with_gil(|py| -> PyResult<Response> {
+                        py_result_to_response(py, &handler_result.bind(py))
+                    }).map_err(|e| {
+                        ApiError::Internal(format!("Response conversion error: {}", e))
+                    })?
+                };
 
                 Ok(response)
             }) as data_bridge_api::router::BoxFuture<'static, data_bridge_api::error::ApiResult<Response>>
@@ -447,8 +494,9 @@ impl PyApiApp {
         // Release GIL and run server
         // This blocks the current thread until shutdown signal
         py.allow_threads(|| {
-            // Use pyo3_async_runtimes managed runtime for proper asyncio integration
-            pyo3_async_runtimes::tokio::get_runtime()
+            // Create a new Tokio runtime for the server
+            tokio::runtime::Runtime::new()
+                .map_err(|e| format!("Failed to create runtime: {}", e))?
                 .block_on(server.run())
                 .map_err(|e| format!("Server error: {}", e))
         }).map_err(|e: String| {

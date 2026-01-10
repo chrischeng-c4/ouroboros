@@ -21,7 +21,33 @@ This benchmark suite validates performance claims against the industry baseline 
 
 ## Running Benchmarks
 
-### Run All Benchmarks
+### Option 1: Rust Framework (Recommended)
+
+Run benchmarks using the native data-bridge-test framework:
+
+```bash
+# Run all benchmarks with default settings (3 rounds)
+uv run python tests/api/benchmarks/bench_comparison_rust.py
+
+# Quick mode (1 round, no warmup) - faster for development
+uv run python tests/api/benchmarks/bench_comparison_rust.py --quick
+
+# Verbose mode (detailed statistics)
+uv run python tests/api/benchmarks/bench_comparison_rust.py --verbose
+
+# Custom rounds and warmup
+uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2
+```
+
+**Advantages:**
+- Uses pure Rust benchmark framework (no pytest-benchmark dependency)
+- Consistent with other data-bridge benchmarks
+- Better GIL release verification
+- Standalone script (no pytest overhead)
+
+### Option 2: pytest Integration
+
+Run benchmarks through pytest (uses same Rust framework under the hood):
 
 ```bash
 pytest tests/api/benchmarks/test_api_benchmarks.py -v
@@ -64,11 +90,13 @@ tests/api/benchmarks/
 ├── README.md                    # This file
 ├── conftest.py                  # pytest fixtures (server startup, HTTP client)
 ├── benchmark_setup.py           # Shared utilities and state management
+├── bench_comparison_rust.py     # Standalone Rust framework runner (recommended)
+├── run_benchmarks.py            # Alternative standalone runner
 ├── bench_throughput.py          # Throughput benchmarks
 ├── bench_serialization.py       # Serialization benchmarks
 ├── bench_latency.py             # Latency benchmarks (P50, P99)
 ├── bench_gil.py                 # GIL release verification
-└── test_api_benchmarks.py       # Main test file
+└── test_api_benchmarks.py       # pytest integration
 ```
 
 ## Performance Targets
