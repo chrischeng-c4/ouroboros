@@ -4,7 +4,7 @@
 **data-bridge** is a unified high-performance data platform designed to bridge the gap between Python's ease of use and Rust's performance. It serves as a foundational infrastructure layer combining:
 *   **High-Performance MongoDB ORM**: A Beanie-compatible ORM that offloads all BSON serialization, deserialization, and validation to Rust, achieving 1.4-5.4x speed improvements.
 *   **Spreadsheet Engine**: A WASM-powered spreadsheet core with real-time collaboration (CRDTs), formula evaluation, and canvas rendering.
-*   **Unified Infrastructure**: Integrated HTTP Client, Task Queue, and Key-Value Store, all backed by Rust for optimal concurrency and resource usage.
+*   **Unified Infrastructure**: Integrated HTTP Client, Task Queue, Key-Value Store, and API Server, all backed by Rust for optimal concurrency and resource usage.
 
 The primary goal is to solve the "Python serialization bottleneck" in data-intensive applications by enforcing a **Zero Python Byte Handling** policy.
 
@@ -17,7 +17,7 @@ The primary goal is to solve the "Python serialization bottleneck" in data-inten
 
 ### Backend (Rust Crates)
 *   **Database**: `mongodb` (Rust driver), `bson`, `postgres`, `deadpool`
-*   **Web/Net**: `axum`, `reqwest`, `tower`
+*   **Web/Net**: `axum`, `hyper` (1.0), `reqwest`, `tower`, `matchit`
 *   **Concurrency**: `rayon` (Parallelism), `dashmap`, `async-nats`
 *   **Utils**: `serde`, `thiserror`, `tracing`, `chrono`, `rust_decimal`
 
@@ -77,6 +77,11 @@ The primary goal is to solve the "Python serialization bottleneck" in data-inten
 *   **Problem**: Browser-based spreadsheets lag with large datasets or complex formulas.
 *   **Solution**: Formula execution and data storage happen in WASM (Rust). UI updates via Canvas.
 *   **Collaboration**: Uses CRDTs (Conflict-free Replicated Data Types) for seamless multi-user editing.
+
+### API Server
+*   **Problem**: Python web frameworks like FastAPI rely on ASGI servers (uvicorn) with Python event loops.
+*   **Solution**: Rust HTTP server (Hyper 1.0) directly invokes Python handlers, managing GIL and async context bridging.
+*   **API**: FastAPI-compatible decorator syntax (`@app.get`, `@app.post`) with automatic path/query parameter extraction.
 
 ## 7. Important Constraints
 
