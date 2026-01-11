@@ -1,5 +1,6 @@
 """Integration tests for PostgreSQL extensions (Full-Text Search, PostGIS, Arrays)."""
 import pytest
+from data_bridge.test import expect
 from data_bridge.postgres import (
     Table, Column, init,
     FullTextSearch, fts,
@@ -286,8 +287,7 @@ async def test_raiseload_raises_on_access(postgres_connection):
     assert len(books) == 1
 
     # Accessing the relationship should raise
-    with pytest.raises(RuntimeError) as exc_info:
-        _ = await books[0].author
+    exc_info = expect(lambda: await books[0].author).to_raise(RuntimeError)
 
     assert "Attempted to access unloaded relationship 'author'" in str(exc_info.value)
     assert "Use selectinload()" in str(exc_info.value)
@@ -324,7 +324,6 @@ async def test_raiseload_with_selectinload_works(postgres_connection):
 @pytest.mark.asyncio
 async def test_raiseload_invalid_relationship():
     """Test raiseload with invalid relationship name."""
-    with pytest.raises(ValueError) as exc_info:
-        books = await Book.find().options(raiseload("invalid_rel")).to_list()
+    exc_info = expect(lambda: books = await Book.find().options(raiseload("invalid_rel")).to_list()).to_raise(ValueError)
 
     assert "Unknown relationship: invalid_rel" in str(exc_info.value)

@@ -163,24 +163,26 @@ START: What layer needs testing?
 │             No MongoDB required
 │
 ├─► PyO3 bindings (Rust → Python)?
-│   └─ YES → pytest tests/unit/
-│             Mock MongoDB if possible
-│             SKIP_INTEGRATION=true
+│   └─ YES → Use data-bridge-test (Rust runner)
+│             Write test in Python, run with data-bridge-test
+│             Example: tests/unit/test_*.py
+│             uv run python tests/unit/test_*.py
 │
 ├─► Integration (MongoDB required)?
-│   └─ YES → pytest tests/integration/
+│   └─ YES → Use data-bridge-test (Rust runner)
 │             Requires MongoDB on localhost:27017
 │             Full CRUD lifecycle
+│             uv run python tests/integration/test_*.py
 │
-├─► Performance regression?
-│   └─ YES → pytest tests/mongo/benchmarks/
-│             MONGODB_URI="mongodb://localhost:27017/bench"
-│             Compare before/after
+├─► Performance benchmarks?
+│   └─ YES → Use data-bridge-test (Rust runner)
+│             Example: tests/api/benchmarks/bench_comparison_rust.py
+│             uv run python benchmarks/bench_*.py --rounds 5 --warmup 2
 │
-└─► Full stack (Rust + Python + MongoDB)?
-    └─ YES → pytest tests/mongo/
-             All layers tested together
-             313+ tests should pass
+└─► Benchmark pytest vs data-bridge-test?
+    └─ YES → Use pytest ONLY for comparison
+             Compare: pytest-benchmark vs data-bridge-test
+             Verify data-bridge-test is faster
 </tree>
 
 </decision-trees>
@@ -326,13 +328,17 @@ cargo test -p data-bridge-mongodb    # MongoDB crate only
 cargo test -p data-bridge-sheet-core # Sheet core only
 cargo clippy                         # Lint check
 
-# Python tests
-uv run pytest tests/ -v              # All tests (requires MongoDB)
-SKIP_INTEGRATION=true uv run pytest # Unit tests only (no MongoDB)
-uv run pytest --cov=data_bridge      # With coverage
+# Python tests (use data-bridge-test, NOT pytest)
+uv run python tests/unit/test_*.py                        # Unit tests (no MongoDB)
+uv run python tests/integration/test_*.py                 # Integration tests (MongoDB required)
+uv run python tests/api/test_*.py                         # API tests
 
-# Benchmarks
-MONGODB_URI="mongodb://localhost:27017/bench" uv run python benchmarks/bench_comparison.py
+# Performance benchmarks (use data-bridge-test, NOT pytest-benchmark)
+uv run python benchmarks/bench_comparison.py --rounds 5 --warmup 2              # MongoDB ORM benchmarks
+uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2  # API benchmarks
+
+# pytest (ONLY for comparing pytest-benchmark vs data-bridge-test performance)
+uv run pytest tests/ -v --benchmark-only                  # Benchmark comparison only
 
 # Frontend/WASM build (Spreadsheet)
 just build-wasm                      # Build WASM module
@@ -624,7 +630,7 @@ After each work session, report in this format:
     <check name="cargo build" status="PASS"/>
     <check name="cargo test" status="PASS" note="315 tests"/>
     <check name="cargo clippy" status="PASS"/>
-    <check name="pytest" status="PASS" note="313 tests"/>
+    <check name="data-bridge-test" status="PASS" note="313 tests"/>
   </build-status>
 
   <performance>
@@ -664,11 +670,11 @@ Before committing or creating PR, verify ALL items:
 
 <checklist name="Testing">
   <item>Rust unit tests written (cargo test)?</item>
-  <item>Python unit tests written (pytest)?</item>
+  <item>Python unit tests written (data-bridge-test)?</item>
   <item>Integration tests cover CRUD lifecycle?</item>
-  <item>All tests pass (Rust + Python)?</item>
+  <item>All tests pass (Rust + Python via data-bridge-test)?</item>
   <item>Edge cases covered?</item>
-  <item>SKIP_INTEGRATION=true tests work?</item>
+  <item>Unit tests work without MongoDB?</item>
 </checklist>
 
 <checklist name="Performance">
@@ -703,19 +709,18 @@ If ANY item is NO, fix it before proceeding.
 DEVELOPMENT WORKFLOW:
   1. Understand requirements and create plan
   2. Implement feature/fix
-  3. Run tests (cargo test + pytest)
+  3. Run tests (cargo test + data-bridge-test)
   4. Run benchmarks (if performance-related)
   5. Create commit and PR
 
 BUILD CYCLE:
   maturin develop                    # Build Python extension
   cargo test                         # Rust tests
-  uv run pytest tests/ -v            # Python tests
+  uv run python tests/unit/test_*.py # Python tests (data-bridge-test)
   cargo clippy                       # Lint check
 
 PERFORMANCE CHECK:
-  MONGODB_URI="mongodb://localhost:27017/bench" \
-  uv run python benchmarks/bench_comparison.py
+  uv run python benchmarks/bench_comparison.py --rounds 5 --warmup 2
 
 COMMIT FORMAT:
   feat(NNN): description
@@ -724,10 +729,10 @@ COMMIT FORMAT:
   perf(NNN): description
 
 TEST MODES:
-  Full: uv run pytest tests/ -v
-  Unit only: SKIP_INTEGRATION=true uv run pytest
-  MongoDB: tests/mongo/, tests/integration/
-  Benchmarks: tests/mongo/benchmarks/
+  Unit: uv run python tests/unit/test_*.py
+  Integration: uv run python tests/integration/test_*.py
+  API: uv run python tests/api/test_*.py
+  Benchmarks: uv run python benchmarks/bench_*.py --rounds 5 --warmup 2
 </quick-reference>
 
 ---

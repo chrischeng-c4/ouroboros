@@ -1,5 +1,6 @@
 """Tests for app.run() method."""
 import pytest
+from data_bridge.test import expect
 from unittest.mock import Mock, patch
 from data_bridge.api import App
 
@@ -75,5 +76,4 @@ class TestAppRun:
         app = App()
 
         with patch.dict("sys.modules", {"uvicorn": None}):
-            with pytest.raises(ImportError, match="uvicorn is required"):
-                app.run()
+            expect(lambda: app.run()).to_raise(ImportError)

@@ -5,6 +5,7 @@ works end-to-end through the Python → Rust boundary.
 """
 
 import pytest
+from data_bridge.test import expect
 from typing import Annotated
 from data_bridge import Document, init, MinLen, MaxLen, Min, Max, Email, Url
 from data_bridge.mongodb.types import PydanticObjectId
@@ -92,8 +93,7 @@ async def test_minlen_validation_failure(setup_db):
     """Test that MinLen validation rejects strings that are too short."""
     user = UserWithStringConstraints(name="Al", email="al@example.com")  # Only 2 chars
 
-    with pytest.raises(ValueError) as exc_info:
-        await user.save()
+    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -123,8 +123,7 @@ async def test_maxlen_validation_failure(setup_db):
         email="test@example.com"
     )
 
-    with pytest.raises(ValueError) as exc_info:
-        await user.save()
+    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -166,8 +165,7 @@ async def test_email_validation_failure(setup_db):
     for email in invalid_emails:
         user = UserWithEmailConstraint(name="Test User", email=email)
 
-        with pytest.raises(ValueError) as exc_info:
-            await user.save()
+        exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
         error_msg = str(exc_info.value)
         assert "ValidationError" in error_msg
@@ -208,8 +206,7 @@ async def test_url_validation_failure(setup_db):
     for url in invalid_urls:
         user = UserWithUrlConstraint(name="Test User", website=url)
 
-        with pytest.raises(ValueError) as exc_info:
-            await user.save()
+        exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
         error_msg = str(exc_info.value)
         assert "ValidationError" in error_msg
@@ -242,8 +239,7 @@ async def test_min_validation_failure_float(setup_db):
         quantity=10
     )
 
-    with pytest.raises(ValueError) as exc_info:
-        await product.save()
+    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -260,8 +256,7 @@ async def test_min_validation_failure_int(setup_db):
         quantity=-1  # Below minimum (0)
     )
 
-    with pytest.raises(ValueError) as exc_info:
-        await product.save()
+    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -293,8 +288,7 @@ async def test_max_validation_failure_float(setup_db):
         quantity=100
     )
 
-    with pytest.raises(ValueError) as exc_info:
-        await product.save()
+    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -311,8 +305,7 @@ async def test_max_validation_failure_int(setup_db):
         quantity=1000001  # Above maximum (1000000)
     )
 
-    with pytest.raises(ValueError) as exc_info:
-        await product.save()
+    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "ValidationError" in error_msg
@@ -352,8 +345,7 @@ async def test_error_message_includes_field_name(setup_db):
     """Test that validation errors include the field name."""
     user = UserWithStringConstraints(name="AB", email="test@example.com")
 
-    with pytest.raises(ValueError) as exc_info:
-        await user.save()
+    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     assert "name" in error_msg  # Field name should be in error message
@@ -364,8 +356,7 @@ async def test_error_message_includes_constraint_details(setup_db):
     """Test that validation errors include constraint details."""
     user = UserWithStringConstraints(name="AB", email="test@example.com")
 
-    with pytest.raises(ValueError) as exc_info:
-        await user.save()
+    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     # Should mention the minimum length (3)
@@ -377,8 +368,7 @@ async def test_error_message_from_rust(setup_db):
     """Test that validation errors originate from Rust (not Python)."""
     user = UserWithEmailConstraint(name="Test", email="invalid")
 
-    with pytest.raises(ValueError) as exc_info:
-        await user.save()
+    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
 
     error_msg = str(exc_info.value)
     # Rust error messages start with "ValidationError:"

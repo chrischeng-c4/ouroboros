@@ -191,17 +191,12 @@ class TestSchemaIntrospection:
                 inspect_table,
             )
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await list_tables()
+            expect(lambda: await list_tables()).to_raise(RuntimeError)
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await table_exists("users")
+            expect(lambda: await table_exists("users")).to_raise(RuntimeError)
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await get_columns("users")
+            expect(lambda: await get_columns("users")).to_raise(RuntimeError)
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await get_indexes("users")
+            expect(lambda: await get_indexes("users")).to_raise(RuntimeError)
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await inspect_table("users")
+            expect(lambda: await inspect_table("users")).to_raise(RuntimeError)

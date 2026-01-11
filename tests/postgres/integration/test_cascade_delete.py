@@ -115,8 +115,7 @@ async def test_delete_with_cascade_restrict_violation(setup_cascade_tables):
     """)
 
     # Try to delete post - should fail due to RESTRICT
-    with pytest.raises(Exception) as exc_info:
-        await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])
+    exc_info = expect(lambda: await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])).to_raise(Exception)
 
     expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 
@@ -228,8 +227,7 @@ async def test_delete_checked_blocks_restrict(setup_cascade_tables):
     """)
 
     # Try to delete post - should fail due to RESTRICT from comments
-    with pytest.raises(Exception) as exc_info:
-        await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])
+    exc_info = expect(lambda: await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])).to_raise(Exception)
 
     expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 
@@ -325,8 +323,7 @@ async def test_delete_with_cascade_transaction_rollback(setup_cascade_tables):
     comment_id = comment_result[0]["id"]
 
     # Try to delete post - should fail due to RESTRICT
-    with pytest.raises(Exception):
-        await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])
+    expect(lambda: await execute("DELETE FROM cascade_posts WHERE id = $1", [post_id])).to_raise(Exception)
 
     # Verify nothing was deleted (RESTRICT prevented deletion)
     found_user = await execute("SELECT * FROM cascade_users WHERE id = $1", [user_id])
@@ -489,8 +486,7 @@ class TestNestedCascadeDelete:
             await execute(f"INSERT INTO mixed_comments (post_id, text) VALUES ({post_id}, 'Comment')")
 
             # Try to delete user - should fail because of nested RESTRICT on comment
-            with pytest.raises(Exception) as exc_info:
-                await execute("DELETE FROM mixed_users WHERE id = $1", [user_id])
+            exc_info = expect(lambda: await execute("DELETE FROM mixed_users WHERE id = $1", [user_id])).to_raise(Exception)
 
             expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 
@@ -708,8 +704,7 @@ class TestNestedCascadeDelete:
             await execute(f"INSERT INTO diamond_comments (user_id, post_id, text) VALUES ({user_id}, {post_id}, 'Comment')")
 
             # Try to delete user - should fail because comment has RESTRICT on post
-            with pytest.raises(Exception) as exc_info:
-                await execute("DELETE FROM diamond_users WHERE id = $1", [user_id])
+            exc_info = expect(lambda: await execute("DELETE FROM diamond_users WHERE id = $1", [user_id])).to_raise(Exception)
 
             expect("violate" in str(exc_info.value).lower() or "restrict" in str(exc_info.value).lower()).to_be_true()
 

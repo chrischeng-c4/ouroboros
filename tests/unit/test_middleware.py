@@ -2,6 +2,7 @@
 Tests for middleware system.
 """
 import pytest
+from data_bridge.test import expect
 import asyncio
 import logging
 from data_bridge.api import (
@@ -21,16 +22,14 @@ class TestBaseMiddleware:
 
     def test_base_middleware_cannot_be_instantiated(self):
         """Test that BaseMiddleware cannot be instantiated directly"""
-        with pytest.raises(TypeError):
-            BaseMiddleware()
+        expect(lambda: BaseMiddleware()).to_raise(TypeError)
 
     def test_base_middleware_requires_call_method(self):
         """Test that BaseMiddleware subclasses must implement __call__"""
         class IncompleteMiddleware(BaseMiddleware):
             pass
 
-        with pytest.raises(TypeError):
-            IncompleteMiddleware()
+        expect(lambda: IncompleteMiddleware()).to_raise(TypeError)
 
 
 class TestMiddlewareStack:

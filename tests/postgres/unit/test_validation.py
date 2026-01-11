@@ -1,6 +1,7 @@
 """Tests for PostgreSQL ORM validation module."""
 
 import pytest
+from data_bridge.test import expect
 from datetime import datetime, date
 from decimal import Decimal
 
@@ -33,8 +34,7 @@ class TestCoercionFunctions:
         assert coerce_int(3.14) == 3
         assert coerce_int(None) is None
 
-        with pytest.raises(ValueError):
-            coerce_int("not a number")
+        expect(lambda: coerce_int("not a number")).to_raise(ValueError)
 
     def test_coerce_float(self):
         """Test float coercion."""
@@ -43,8 +43,7 @@ class TestCoercionFunctions:
         assert coerce_float(42) == 42.0
         assert coerce_float(None) is None
 
-        with pytest.raises(ValueError):
-            coerce_float("not a number")
+        expect(lambda: coerce_float("not a number")).to_raise(ValueError)
 
     def test_coerce_str(self):
         """Test string coercion."""
@@ -77,8 +76,7 @@ class TestCoercionFunctions:
         assert coerce_bool(None) is None
 
         # Invalid
-        with pytest.raises(ValueError):
-            coerce_bool("invalid")
+        expect(lambda: coerce_bool("invalid")).to_raise(ValueError)
 
     def test_coerce_datetime(self):
         """Test datetime coercion."""
@@ -110,8 +108,7 @@ class TestCoercionFunctions:
         assert coerce_datetime(None) is None
 
         # Invalid
-        with pytest.raises(ValueError):
-            coerce_datetime("not a datetime")
+        expect(lambda: coerce_datetime("not a datetime")).to_raise(ValueError)
 
     def test_coerce_date(self):
         """Test date coercion."""
@@ -134,8 +131,7 @@ class TestCoercionFunctions:
         assert coerce_date(None) is None
 
         # Invalid
-        with pytest.raises(ValueError):
-            coerce_date("not a date")
+        expect(lambda: coerce_date("not a date")).to_raise(ValueError)
 
     def test_coerce_decimal(self):
         """Test decimal coercion."""
@@ -168,11 +164,9 @@ class TestBuiltinValidators:
         """Test non-empty validation."""
         assert validate_not_empty("hello") is True
 
-        with pytest.raises(ValueError):
-            validate_not_empty("")
+        expect(lambda: validate_not_empty("")).to_raise(ValueError)
 
-        with pytest.raises(ValueError):
-            validate_not_empty(None)
+        expect(lambda: validate_not_empty(None)).to_raise(ValueError)
 
     def test_validate_email(self):
         """Test email validation."""
@@ -201,23 +195,20 @@ class TestBuiltinValidators:
         assert validate_min_length("hello", 3) is True
         assert validate_min_length("hello", 5) is True
 
-        with pytest.raises(ValueError):
-            validate_min_length("hi", 5)
+        expect(lambda: validate_min_length("hi", 5)).to_raise(ValueError)
 
     def test_validate_max_length(self):
         """Test maximum length validation."""
         assert validate_max_length("hello", 10) is True
         assert validate_max_length("hello", 5) is True
 
-        with pytest.raises(ValueError):
-            validate_max_length("hello world", 5)
+        expect(lambda: validate_max_length("hello world", 5)).to_raise(ValueError)
 
     def test_validate_regex(self):
         """Test regex validation."""
         assert validate_regex("abc123", r"^[a-z]+[0-9]+$") is True
 
-        with pytest.raises(ValueError):
-            validate_regex("123abc", r"^[a-z]+[0-9]+$")
+        expect(lambda: validate_regex("123abc", r"^[a-z]+[0-9]+$")).to_raise(ValueError)
 
     def test_validate_range(self):
         """Test range validation."""
@@ -225,53 +216,45 @@ class TestBuiltinValidators:
         assert validate_range(1, 1, 10) is True
         assert validate_range(10, 1, 10) is True
 
-        with pytest.raises(ValueError):
-            validate_range(0, 1, 10)
+        expect(lambda: validate_range(0, 1, 10)).to_raise(ValueError)
 
-        with pytest.raises(ValueError):
-            validate_range(11, 1, 10)
+        expect(lambda: validate_range(11, 1, 10)).to_raise(ValueError)
 
     def test_validate_min_value(self):
         """Test minimum value validation."""
         assert validate_min_value(5, 1) is True
         assert validate_min_value(1, 1) is True
 
-        with pytest.raises(ValueError):
-            validate_min_value(0, 1)
+        expect(lambda: validate_min_value(0, 1)).to_raise(ValueError)
 
     def test_validate_max_value(self):
         """Test maximum value validation."""
         assert validate_max_value(5, 10) is True
         assert validate_max_value(10, 10) is True
 
-        with pytest.raises(ValueError):
-            validate_max_value(11, 10)
+        expect(lambda: validate_max_value(11, 10)).to_raise(ValueError)
 
     def test_validate_in_list(self):
         """Test in-list validation."""
         assert validate_in_list("red", ["red", "green", "blue"]) is True
 
-        with pytest.raises(ValueError):
-            validate_in_list("yellow", ["red", "green", "blue"])
+        expect(lambda: validate_in_list("yellow", ["red", "green", "blue"])).to_raise(ValueError)
 
     def test_validate_positive(self):
         """Test positive validation."""
         assert validate_positive(1) is True
         assert validate_positive(0.1) is True
 
-        with pytest.raises(ValueError):
-            validate_positive(0)
+        expect(lambda: validate_positive(0)).to_raise(ValueError)
 
-        with pytest.raises(ValueError):
-            validate_positive(-1)
+        expect(lambda: validate_positive(-1)).to_raise(ValueError)
 
     def test_validate_non_negative(self):
         """Test non-negative validation."""
         assert validate_non_negative(0) is True
         assert validate_non_negative(1) is True
 
-        with pytest.raises(ValueError):
-            validate_non_negative(-1)
+        expect(lambda: validate_non_negative(-1)).to_raise(ValueError)
 
 
 # ============================================================================
@@ -387,8 +370,7 @@ class TestValidatorRegistry:
         assert result == {'password': 'secret', 'password_confirm': 'secret'}
 
         # Test validation error
-        with pytest.raises(ValidationError) as exc_info:
-            registry.validate_many(instance, {'password': 'secret', 'password_confirm': 'different'})
+        exc_info = expect(lambda: registry.validate_many(instance, {'password': 'secret', 'password_confirm': 'different'})).to_raise(ValidationError)
         assert exc_info.value.field == 'password'
 
 

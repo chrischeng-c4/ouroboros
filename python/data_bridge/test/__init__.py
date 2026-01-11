@@ -87,8 +87,23 @@ ProfileResult = _test.ProfileResult
 ProfileConfig = _test.ProfileConfig
 generate_flamegraph = _test.generate_flamegraph
 
+# Fixture types from Rust
+FixtureScope = _test.FixtureScope
+FixtureMeta = _test.FixtureMeta
+FixtureRegistry = _test.FixtureRegistry
+
+# Parametrize types from Rust
+ParameterValue = _test.ParameterValue
+ParameterSet = _test.ParameterSet
+Parameter = _test.Parameter
+ParametrizedTest = _test.ParametrizedTest
+
+# Hooks types from Rust
+HookType = _test.HookType
+HookRegistry = _test.HookRegistry
+
 # Import Python layer
-from .decorators import test, profile, stress, security
+from .decorators import test, profile, stress, security, fixture, parametrize
 from .suite import (
     TestSuite, run_suite, run_suites,
     run_suite_with_coverage, run_suites_with_coverage,
@@ -129,6 +144,8 @@ __all__ = [
     "profile",
     "stress",
     "security",
+    "fixture",
+    "parametrize",
     # Suite
     "TestSuite",
     "run_suite",
@@ -188,4 +205,16 @@ __all__ = [
     "ProfileConfig",
     "ProfileRunner",
     "generate_flamegraph",
+    # Fixtures
+    "FixtureScope",
+    "FixtureMeta",
+    "FixtureRegistry",
+    # Parametrize
+    "ParameterValue",
+    "ParameterSet",
+    "Parameter",
+    "ParametrizedTest",
+    # Hooks
+    "HookType",
+    "HookRegistry",
 ]

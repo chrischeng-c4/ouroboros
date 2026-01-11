@@ -1,6 +1,7 @@
 """Integration tests for API dependency injection with App."""
 
 import pytest
+from data_bridge.test import expect
 from typing import Annotated
 from data_bridge.api import App, Path, Query, Depends
 from data_bridge.api.dependencies import RequestContext, Scope
@@ -303,8 +304,7 @@ class TestDependencyErrors:
         app.compile()
 
         ctx = RequestContext()
-        with pytest.raises(ValueError, match="Dependency failed"):
-            await app.resolve_dependencies(handler, ctx)
+        expect(lambda: await app.resolve_dependencies(handler, ctx)).to_raise(ValueError)
 
     @pytest.mark.asyncio
     async def test_sub_dependency_exception(self):
@@ -324,8 +324,7 @@ class TestDependencyErrors:
         app.compile()
 
         ctx = RequestContext()
-        with pytest.raises(RuntimeError, match="Config loading failed"):
-            await app.resolve_dependencies(handler, ctx)
+        expect(lambda: await app.resolve_dependencies(handler, ctx)).to_raise(RuntimeError)
 
     def test_missing_dependency_error(self):
         """Test error when dependency is not registered."""

@@ -7,9 +7,9 @@
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::cell::RefCell;
 
 use data_bridge_api::{
     Router,
@@ -26,31 +26,31 @@ use data_bridge_api::{
 use crate::error_handling::sanitize_error_message;
 
 // ============================================================================
-// Thread-Local Python Event Loop
+// Thread-Local Event Loop
 // ============================================================================
 
 thread_local! {
-    /// Thread-local Python event loop that persists across async handler invocations.
-    /// This avoids creating a new event loop for every async request.
-    /// The event loop lives for the lifetime of the blocking thread,
-    /// which is reused by Tokio's thread pool.
-    static PYTHON_EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
+    /// Thread-local Python event loop for executing async handlers
+    /// Avoids creating a new event loop for each request
+    static EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
 }
 
-/// Get or create the thread-local Python event loop.
-/// The event loop is created lazily on first use and persists for the thread's lifetime.
+/// Get or create the thread-local event loop
 fn get_or_create_event_loop(py: Python<'_>) -> PyResult<Py<PyAny>> {
-    PYTHON_EVENT_LOOP.with(|cell| {
+    EVENT_LOOP.with(|cell| {
         let mut opt = cell.borrow_mut();
-        if opt.is_none() {
+        if let Some(ref loop_obj) = *opt {
+            // Return existing event loop
+            Ok(loop_obj.clone_ref(py))
+        } else {
             // Create new event loop for this thread
             let asyncio = py.import("asyncio")?;
             let new_loop = asyncio.call_method0("new_event_loop")?;
-            asyncio.call_method1("set_event_loop", (new_loop.clone(),))?;
-            *opt = Some(new_loop.unbind());
+            asyncio.call_method1("set_event_loop", (&new_loop,))?;
+            let loop_py = new_loop.unbind();
+            *opt = Some(loop_py.clone_ref(py));
+            Ok(loop_py)
         }
-        // Return a clone of the Py<PyAny> (cheap reference count increment)
-        Ok(opt.as_ref().unwrap().clone_ref(py))
     })
 }
 
@@ -370,28 +370,22 @@ impl PyApiApp {
 
                 // Phase 2: Execute coroutine if needed and convert response
                 let response = if is_coroutine {
-                    // Async handler - spawn a blocking task to run Python coroutine
-                    // We move handler_result into the closure (no need to clone)
-                    let result_obj = tokio::task::spawn_blocking(move || {
-                        Python::with_gil(|py| -> PyResult<Py<PyAny>> {
-                            let coro_bound = handler_result.into_bound(py);
-
-                            // Get or create thread-local event loop (persists across requests)
+                    // Execute Python coroutine in spawn_blocking context with thread-local event loop
+                    let result_obj = tokio::task::spawn_blocking(move || -> PyResult<Py<PyAny>> {
+                        Python::with_gil(|py| {
+                            // Get or create thread-local event loop
                             let event_loop = get_or_create_event_loop(py)?;
-                            let event_loop_bound = event_loop.bind(py);
 
-                            // Run coroutine to completion
-                            let result = event_loop_bound.call_method1("run_until_complete", (coro_bound,))?;
-
+                            // Run the coroutine to completion
+                            let result = event_loop.bind(py).call_method1("run_until_complete", (handler_result.bind(py),))?;
                             Ok(result.unbind())
                         })
-                    }).await.map_err(|e| {
-                        ApiError::Internal(format!("Task join error: {}", e))
-                    })?.map_err(|e| {
-                        ApiError::Handler(format!("Async handler error: {}", e))
-                    })?;
+                    })
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("Task join error: {}", e)))?
+                    .map_err(|e| ApiError::Handler(format!("Async handler error: {}", e)))?;
 
-                    // Convert Python result to Rust Response (re-acquire GIL)
+                    // Convert result to Response
                     Python::with_gil(|py| -> PyResult<Response> {
                         py_result_to_response(py, &result_obj.bind(py))
                     }).map_err(|e| {
@@ -472,6 +466,9 @@ impl PyApiApp {
     #[pyo3(signature = (host = "127.0.0.1", port = 8000))]
     fn serve(&self, py: Python<'_>, host: &str, port: u16) -> PyResult<()> {
         use data_bridge_api::{Server, ServerConfig};
+
+        // Thread-local event loops will be created on-demand in spawn_blocking threads
+        // No explicit initialization needed
 
         // Get or create the Arc<Router>
         let router_arc = {

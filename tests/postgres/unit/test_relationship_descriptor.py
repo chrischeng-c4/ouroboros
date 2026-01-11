@@ -5,6 +5,7 @@ requiring a database connection.
 """
 
 import pytest
+from data_bridge.test import expect
 
 from data_bridge.postgres import Table, Column, relationship
 from data_bridge.postgres.relationships import (
@@ -110,8 +111,7 @@ async def test_relationship_loader_not_implemented():
     post = Post(id=1, title="Test Post", author_id=123)
 
     # Attempting to await the loader should raise NotImplementedError
-    with pytest.raises(NotImplementedError) as exc_info:
-        await post.author
+    exc_info = expect(lambda: await post.author).to_raise(NotImplementedError)
 
     # Check error message
     assert "Lazy loading not yet implemented" in str(exc_info.value)

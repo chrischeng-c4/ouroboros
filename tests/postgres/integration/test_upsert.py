@@ -540,8 +540,7 @@ class TestUpsertErrors:
         """)
 
         # Try to upsert with invalid conflict column
-        with pytest.raises(Exception) as exc_info:
-            await upsert_one(
+        exc_info = expect(lambda: await upsert_one().to_raise(Exception)
                 "test_upsert_users",
                 {"email": "alice@example.com", "name": "Alice", "age": 30},
                 conflict_target="nonexistent_column"  # Invalid column
@@ -569,8 +568,7 @@ class TestUpsertErrors:
         """)
 
         # Try to upsert with empty conflict target (empty list)
-        with pytest.raises(Exception) as exc_info:
-            await upsert_one(
+        exc_info = expect(lambda: await upsert_one().to_raise(Exception)
                 "test_upsert_users",
                 {"email": "alice@example.com", "name": "Alice", "age": 30},
                 conflict_target=[]  # Empty list
@@ -616,8 +614,7 @@ class TestUpsertErrors:
         Verifies that appropriate error is raised when table doesn't exist.
         """
         # Try to upsert to non-existent table
-        with pytest.raises(Exception) as exc_info:
-            await upsert_one(
+        exc_info = expect(lambda: await upsert_one().to_raise(Exception)
                 "nonexistent_table",
                 {"email": "alice@example.com", "name": "Alice"},
                 conflict_target="email"

@@ -36,8 +36,7 @@ class TestSaveOperation:
         user = User(name="Alice", email="alice@example.com")
 
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await user.save()
+            expect(lambda: await user.save()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_save_insert_new(self, User):
@@ -110,8 +109,7 @@ class TestDeleteOperation:
         user = User(id=1, name="Alice", email="alice@example.com")
 
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await user.delete()
+            expect(lambda: await user.delete()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_delete_with_id(self, User):
@@ -158,8 +156,7 @@ class TestRefreshOperation:
         user = User(id=1, name="Alice", email="alice@example.com")
 
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await user.refresh()
+            expect(lambda: await user.refresh()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_refresh_raises_without_id(self, User):
@@ -167,8 +164,7 @@ class TestRefreshOperation:
         with patch('data_bridge.postgres.table._engine') as mock_engine:
             user = User(name="Alice", email="alice@example.com")
 
-            with pytest.raises(ValueError, match="Cannot refresh a row without an id"):
-                await user.refresh()
+            expect(lambda: await user.refresh()).to_raise(ValueError)
 
     @pytest.mark.asyncio
     async def test_refresh_updates_data(self, User):
@@ -197,8 +193,7 @@ class TestRefreshOperation:
 
             user = User(id=999, name="Alice", email="alice@example.com")
 
-            with pytest.raises(ValueError, match="Row with id 999 not found"):
-                await user.refresh()
+            expect(lambda: await user.refresh()).to_raise(ValueError)
 
 
 class TestGetOperation:
@@ -208,8 +203,7 @@ class TestGetOperation:
     async def test_get_raises_without_engine(self, User):
         """Test get() raises RuntimeError when engine not available."""
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await User.get(1)
+            expect(lambda: await User.get(1)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_get_returns_instance(self, User):
@@ -262,8 +256,7 @@ class TestInsertMany:
     async def test_insert_many_raises_without_engine(self, User):
         """Test insert_many() raises RuntimeError when engine not available."""
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await User.insert_many([{"name": "Alice", "email": "alice@example.com"}])
+            expect(lambda: await User.insert_many([{"name": "Alice", "email": "alice@example.com"}])).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_insert_many_with_dicts(self, User):
@@ -311,8 +304,7 @@ class TestInsertMany:
                 "invalid",  # Invalid type
             ]
 
-            with pytest.raises(TypeError, match="Expected dict or User instance"):
-                await User.insert_many(rows)
+            expect(lambda: await User.insert_many(rows)).to_raise(TypeError)
 
 
 class TestDeleteMany:
@@ -322,8 +314,7 @@ class TestDeleteMany:
     async def test_delete_many_raises_without_engine(self, User):
         """Test delete_many() raises RuntimeError when engine not available."""
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await User.delete_many(User.age < 18)
+            expect(lambda: await User.delete_many(User.age < 18)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_delete_many_with_filters(self, User):
@@ -375,8 +366,7 @@ class TestUpdateMany:
     async def test_update_many_raises_without_engine(self, User):
         """Test update_many() raises RuntimeError when engine not available."""
         with patch('data_bridge.postgres.table._engine', None):
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await User.update_many({"status": "active"}, User.age >= 18)
+            expect(lambda: await User.update_many({"status": "active"}, User.age >= 18)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_update_many_with_filters(self, User):

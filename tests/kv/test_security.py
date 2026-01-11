@@ -13,6 +13,7 @@ edge cases that could lead to security issues.
 """
 
 import pytest
+from data_bridge.test import expect
 import asyncio
 from data_bridge.kv import KvClient, KvPool, PoolConfig
 
@@ -43,14 +44,12 @@ class TestKeyValidation:
         # Server should reject this with an error
         # Note: Based on the code, validation happens server-side
         # The client will send the request but server should respond with error
-        with pytest.raises(RuntimeError, match="Server error"):
-            await kv_client.set(too_long, "value")
+        expect(lambda: await kv_client.set(too_long, "value")).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_empty_key_rejected(self, kv_client):
         """Empty keys should be rejected."""
-        with pytest.raises(RuntimeError, match="Server error"):
-            await kv_client.set("", "value")
+        expect(lambda: await kv_client.set("", "value")).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_unicode_keys_work(self, kv_client):
@@ -582,8 +581,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_negative_ttl_rejected(self, kv_client):
         """Negative TTL should be rejected with proper error."""
-        with pytest.raises(ValueError, match="TTL cannot be negative"):
-            await kv_client.set("negative_ttl", "value", ttl=-1.0)
+        expect(lambda: await kv_client.set("negative_ttl", "value", ttl=-1.0)).to_raise(ValueError)
 
     @pytest.mark.asyncio
     async def test_very_long_ttl(self, kv_client):

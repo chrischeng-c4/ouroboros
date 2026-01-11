@@ -14,6 +14,8 @@ use data_bridge_test::{
         DiscoveryConfig, FileType, FileInfo, TestRegistry, BenchmarkRegistry,
         DiscoveryStats, walk_files, filter_files,
     },
+    fixtures::{FixtureMeta, FixtureRegistry, FixtureScope},
+    parametrize::{Parameter, ParameterSet, ParameterValue, ParametrizedTest},
     // Profiler types are now re-exported from the top level (from performance module)
     ProfilePhase, PhaseTiming, PhaseBreakdown,
     GilTestConfig, GilContentionResult,
@@ -2000,7 +2002,7 @@ impl PyBenchmarkReport {
 // Test Server
 // =====================
 
-use data_bridge_test::http_server::{TestServer, TestServerHandle};
+use data_bridge_test::http_server::{TestServer, TestServerHandle, TestServerConfig};
 use tokio::sync::Mutex as TokioMutex;
 
 /// Python wrapper for TestServerHandle
@@ -2025,6 +2027,15 @@ impl PyTestServerHandle {
         self.port
     }
 
+    /// Get an HTTP client for making requests (returns HttpClient from data-bridge-http)
+    /// For now, this is a placeholder - users should use the server URL with their own client
+    #[getter]
+    fn client(&self) -> String {
+        // Return the base URL for now
+        // In the future, we could return an actual HttpClient instance
+        self.url.clone()
+    }
+
     /// Stop the server
     fn stop(&self) -> PyResult<()> {
         let handle = self.handle.clone();
@@ -2047,6 +2058,8 @@ impl PyTestServerHandle {
 pub struct PyTestServer {
     routes: std::collections::HashMap<String, serde_json::Value>,
     port: Option<u16>,
+    /// Configuration for Python app mode
+    app_config: Option<TestServerConfig>,
 }
 
 #[pymethods]
@@ -2057,6 +2070,37 @@ impl PyTestServer {
         Self {
             routes: std::collections::HashMap::new(),
             port: None,
+            app_config: None,
+        }
+    }
+
+    /// Create a test server from a Python application
+    #[staticmethod]
+    #[pyo3(signature = (
+        app_module,
+        app_callable = "app".to_string(),
+        port = 18765,
+        startup_timeout = 10.0,
+        health_endpoint = None
+    ))]
+    fn from_app(
+        app_module: String,
+        app_callable: String,
+        port: u16,
+        startup_timeout: f64,
+        health_endpoint: Option<String>,
+    ) -> Self {
+        let config = TestServerConfig {
+            app_module,
+            app_callable,
+            port,
+            startup_timeout,
+            health_endpoint,
+        };
+        Self {
+            routes: std::collections::HashMap::new(),
+            port: Some(port),
+            app_config: Some(config),
         }
     }
 
@@ -2086,17 +2130,26 @@ impl PyTestServer {
     fn start<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyAny>> {
         let routes = self.routes.clone();
         let port = self.port;
+        let app_config = self.app_config.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut builder = TestServer::new();
+            let builder = if let Some(config) = app_config {
+                // Create from Python app
+                TestServer::from_app(config)
+            } else {
+                // Create Axum server with routes
+                let mut builder = TestServer::new();
 
-            if let Some(p) = port {
-                builder = builder.port(p);
-            }
+                if let Some(p) = port {
+                    builder = builder.port(p);
+                }
 
-            for (path, response) in routes {
-                builder = builder.get(&path, response);
-            }
+                for (path, response) in routes {
+                    builder = builder.get(&path, response);
+                }
+
+                builder
+            };
 
             let handle = builder.start().await
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
@@ -3078,6 +3131,725 @@ fn generate_flamegraph(folded_stacks: Vec<String>, title: &str, output_path: &st
 }
 
 // =====================
+// Parametrize
+// =====================
+
+/// Python ParameterValue class
+#[pyclass(name = "ParameterValue")]
+#[derive(Clone)]
+pub struct PyParameterValue {
+    inner: ParameterValue,
+}
+
+#[pymethods]
+impl PyParameterValue {
+    /// Create an integer parameter value
+    #[staticmethod]
+    fn int(value: i64) -> Self {
+        Self {
+            inner: ParameterValue::Int(value),
+        }
+    }
+
+    /// Create a float parameter value
+    #[staticmethod]
+    fn float(value: f64) -> Self {
+        Self {
+            inner: ParameterValue::Float(value),
+        }
+    }
+
+    /// Create a string parameter value
+    #[staticmethod]
+    fn string(value: String) -> Self {
+        Self {
+            inner: ParameterValue::String(value),
+        }
+    }
+
+    /// Create a boolean parameter value
+    #[staticmethod]
+    fn bool(value: bool) -> Self {
+        Self {
+            inner: ParameterValue::Bool(value),
+        }
+    }
+
+    /// Create a None parameter value
+    #[staticmethod]
+    fn none() -> Self {
+        Self {
+            inner: ParameterValue::None,
+        }
+    }
+
+    /// Create from Python object (auto-conversion)
+    #[staticmethod]
+    fn from_py(obj: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(v) = obj.extract::<i64>() {
+            Ok(Self::int(v))
+        } else if let Ok(v) = obj.extract::<f64>() {
+            Ok(Self::float(v))
+        } else if let Ok(v) = obj.extract::<String>() {
+            Ok(Self::string(v))
+        } else if let Ok(v) = obj.extract::<bool>() {
+            Ok(Self::bool(v))
+        } else if obj.is_none() {
+            Ok(Self::none())
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                format!("Unsupported parameter type: {}", obj.get_type())
+            ))
+        }
+    }
+
+    /// Format for test name
+    fn format_for_name(&self) -> String {
+        self.inner.format_for_name()
+    }
+
+    /// Convert to Python object
+    fn to_py(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner {
+            ParameterValue::Int(v) => Ok(v.to_object(py)),
+            ParameterValue::Float(v) => Ok(v.to_object(py)),
+            ParameterValue::String(v) => Ok(v.to_object(py)),
+            ParameterValue::Bool(v) => Ok(v.to_object(py)),
+            ParameterValue::None => Ok(py.None()),
+            ParameterValue::List(_) => Err(PyErr::new::<pyo3::exceptions::PyNotImplementedError, _>(
+                "List parameter values not yet supported for Python conversion"
+            )),
+            ParameterValue::Dict(_) => Err(PyErr::new::<pyo3::exceptions::PyNotImplementedError, _>(
+                "Dict parameter values not yet supported for Python conversion"
+            )),
+        }
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ParameterValue({})", self.inner)
+    }
+}
+
+/// Python ParameterSet class
+#[pyclass(name = "ParameterSet")]
+#[derive(Clone)]
+pub struct PyParameterSet {
+    inner: ParameterSet,
+}
+
+#[pymethods]
+impl PyParameterSet {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: ParameterSet::new(),
+        }
+    }
+
+    /// Add a parameter
+    fn add(&mut self, name: String, value: PyParameterValue) {
+        self.inner.add(name, value.inner);
+    }
+
+    /// Get a parameter value
+    fn get(&self, name: &str) -> Option<PyParameterValue> {
+        self.inner.get(name).map(|v| PyParameterValue { inner: v.clone() })
+    }
+
+    /// Format for test name
+    fn format_for_name(&self) -> String {
+        self.inner.format_for_name()
+    }
+
+    /// Convert to Python dict
+    fn to_dict(&self, py: Python<'_>) -> PyResult<PyObject> {
+        let dict = PyDict::new(py);
+        for (k, v) in &self.inner.params {
+            let py_val = PyParameterValue { inner: v.clone() }.to_py(py)?;
+            dict.set_item(k, py_val)?;
+        }
+        Ok(dict.to_object(py))
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ParameterSet({})", self.inner.format_for_name())
+    }
+}
+
+/// Python Parameter class
+#[pyclass(name = "Parameter")]
+#[derive(Clone)]
+pub struct PyParameter {
+    inner: Parameter,
+}
+
+#[pymethods]
+impl PyParameter {
+    #[new]
+    fn new(name: String, values: Vec<PyParameterValue>) -> Self {
+        let values = values.into_iter().map(|v| v.inner).collect();
+        Self {
+            inner: Parameter::new(name, values),
+        }
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        &self.inner.name
+    }
+
+    #[getter]
+    fn values(&self) -> Vec<PyParameterValue> {
+        self.inner.values.iter().map(|v| PyParameterValue { inner: v.clone() }).collect()
+    }
+
+    /// Validate the parameter
+    fn validate(&self) -> PyResult<()> {
+        self.inner.validate().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(e)
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("Parameter(name='{}', values={} items)", self.inner.name, self.inner.values.len())
+    }
+}
+
+/// Python ParametrizedTest class
+#[pyclass(name = "ParametrizedTest")]
+#[derive(Clone)]
+pub struct PyParametrizedTest {
+    inner: ParametrizedTest,
+}
+
+#[pymethods]
+impl PyParametrizedTest {
+    #[new]
+    fn new(base_name: String) -> Self {
+        Self {
+            inner: ParametrizedTest::new(base_name),
+        }
+    }
+
+    /// Add a parameter
+    fn add_parameter(&mut self, param: PyParameter) -> PyResult<()> {
+        self.inner.add_parameter(param.inner).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(e)
+        })
+    }
+
+    /// Expand into test instances
+    fn expand(&self) -> Vec<(String, PyParameterSet)> {
+        self.inner.expand().into_iter().map(|(name, set)| {
+            (name, PyParameterSet { inner: set })
+        }).collect()
+    }
+
+    /// Count total instances
+    fn count_instances(&self) -> usize {
+        self.inner.count_instances()
+    }
+
+    #[getter]
+    fn base_name(&self) -> &str {
+        &self.inner.base_name
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ParametrizedTest(base_name='{}', parameters={}, instances={})",
+            self.inner.base_name,
+            self.inner.parameters.len(),
+            self.inner.count_instances()
+        )
+    }
+}
+
+// =====================
+// Fixtures
+// =====================
+
+/// Python FixtureScope enum
+#[pyclass(name = "FixtureScope", eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PyFixtureScope {
+    Function,
+    Class,
+    Module,
+    Session,
+}
+
+impl From<PyFixtureScope> for FixtureScope {
+    fn from(py_scope: PyFixtureScope) -> Self {
+        match py_scope {
+            PyFixtureScope::Function => FixtureScope::Function,
+            PyFixtureScope::Class => FixtureScope::Class,
+            PyFixtureScope::Module => FixtureScope::Module,
+            PyFixtureScope::Session => FixtureScope::Session,
+        }
+    }
+}
+
+impl From<FixtureScope> for PyFixtureScope {
+    fn from(scope: FixtureScope) -> Self {
+        match scope {
+            FixtureScope::Function => PyFixtureScope::Function,
+            FixtureScope::Class => PyFixtureScope::Class,
+            FixtureScope::Module => PyFixtureScope::Module,
+            FixtureScope::Session => PyFixtureScope::Session,
+        }
+    }
+}
+
+impl std::fmt::Display for PyFixtureScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PyFixtureScope::Function => write!(f, "function"),
+            PyFixtureScope::Class => write!(f, "class"),
+            PyFixtureScope::Module => write!(f, "module"),
+            PyFixtureScope::Session => write!(f, "session"),
+        }
+    }
+}
+
+#[pymethods]
+impl PyFixtureScope {
+    fn __str__(&self) -> &'static str {
+        match self {
+            PyFixtureScope::Function => "function",
+            PyFixtureScope::Class => "class",
+            PyFixtureScope::Module => "module",
+            PyFixtureScope::Session => "session",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("FixtureScope.{}", self.__str__().to_uppercase())
+    }
+
+    #[staticmethod]
+    fn from_string(s: &str) -> PyResult<Self> {
+        s.parse::<FixtureScope>()
+            .map(PyFixtureScope::from)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+}
+
+/// Python FixtureRegistry wrapper
+#[pyclass(name = "FixtureRegistry")]
+pub struct PyFixtureRegistry {
+    inner: Arc<Mutex<FixtureRegistry>>,
+}
+
+#[pymethods]
+impl PyFixtureRegistry {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(FixtureRegistry::new())),
+        }
+    }
+
+    /// Register a fixture from Python
+    fn register(
+        &self,
+        name: &str,
+        scope: PyFixtureScope,
+        autouse: bool,
+        dependencies: Vec<String>,
+        has_teardown: bool,
+    ) -> PyResult<()> {
+        let mut registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        // Create fixture metadata
+        let meta = FixtureMeta::new(name, scope.into(), autouse)
+            .with_dependencies(dependencies)
+            .with_teardown(has_teardown);
+
+        registry.register(meta);
+        Ok(())
+    }
+
+    /// Get fixture metadata by name
+    fn get_meta(&self, name: &str) -> PyResult<Option<PyFixtureMeta>> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        Ok(registry.get_meta(name).map(|m| PyFixtureMeta {
+            name: m.name.clone(),
+            scope: m.scope.into(),
+            autouse: m.autouse,
+            dependencies: m.dependencies.clone(),
+            has_teardown: m.has_teardown,
+        }))
+    }
+
+    /// Get all fixture names
+    fn get_all_names(&self) -> PyResult<Vec<String>> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        Ok(registry.get_all_names())
+    }
+
+    /// Get autouse fixtures for a scope
+    fn get_autouse_fixtures(&self, scope: PyFixtureScope) -> PyResult<Vec<String>> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        let fixtures = registry.get_autouse_fixtures(scope.into());
+        Ok(fixtures.iter().map(|f| f.name.clone()).collect())
+    }
+
+    /// Resolve fixture dependency order
+    fn resolve_order(&self, fixture_names: Vec<String>) -> PyResult<Vec<String>> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        registry.resolve_order(&fixture_names)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))
+    }
+
+    /// Detect circular dependencies
+    fn detect_circular_deps(&self) -> PyResult<()> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        registry.detect_circular_deps().map_err(|cycle| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Circular fixture dependency detected: {}", cycle.join(" -> "))
+            )
+        })
+    }
+
+    /// Check if fixture exists
+    fn has_fixture(&self, name: &str) -> PyResult<bool> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        Ok(registry.has_fixture(name))
+    }
+
+    /// Get number of registered fixtures
+    fn __len__(&self) -> PyResult<usize> {
+        let registry = self.inner.lock().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to lock registry: {}", e)
+            )
+        })?;
+
+        Ok(registry.len())
+    }
+}
+
+/// Python wrapper for FixtureMeta
+#[pyclass(name = "FixtureMeta")]
+#[derive(Clone)]
+pub struct PyFixtureMeta {
+    #[pyo3(get)]
+    name: String,
+    #[pyo3(get)]
+    scope: PyFixtureScope,
+    #[pyo3(get)]
+    autouse: bool,
+    #[pyo3(get)]
+    dependencies: Vec<String>,
+    #[pyo3(get)]
+    has_teardown: bool,
+}
+
+#[pymethods]
+impl PyFixtureMeta {
+    fn __repr__(&self) -> String {
+        format!(
+            "FixtureMeta(name='{}', scope={}, autouse={}, dependencies={:?}, has_teardown={})",
+            self.name, self.scope, self.autouse, self.dependencies, self.has_teardown
+        )
+    }
+}
+
+// =====================
+// Hooks
+// =====================
+
+use data_bridge_test::HookType;
+
+/// Python HookType enum
+#[pyclass(name = "HookType", eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PyHookType {
+    SetupClass,
+    TeardownClass,
+    SetupModule,
+    TeardownModule,
+    SetupMethod,
+    TeardownMethod,
+}
+
+impl From<PyHookType> for HookType {
+    fn from(py_type: PyHookType) -> Self {
+        match py_type {
+            PyHookType::SetupClass => HookType::SetupClass,
+            PyHookType::TeardownClass => HookType::TeardownClass,
+            PyHookType::SetupModule => HookType::SetupModule,
+            PyHookType::TeardownModule => HookType::TeardownModule,
+            PyHookType::SetupMethod => HookType::SetupMethod,
+            PyHookType::TeardownMethod => HookType::TeardownMethod,
+        }
+    }
+}
+
+impl From<HookType> for PyHookType {
+    fn from(hook_type: HookType) -> Self {
+        match hook_type {
+            HookType::SetupClass => PyHookType::SetupClass,
+            HookType::TeardownClass => PyHookType::TeardownClass,
+            HookType::SetupModule => PyHookType::SetupModule,
+            HookType::TeardownModule => PyHookType::TeardownModule,
+            HookType::SetupMethod => PyHookType::SetupMethod,
+            HookType::TeardownMethod => PyHookType::TeardownMethod,
+        }
+    }
+}
+
+#[pymethods]
+impl PyHookType {
+    fn __str__(&self) -> &'static str {
+        match self {
+            PyHookType::SetupClass => "setup_class",
+            PyHookType::TeardownClass => "teardown_class",
+            PyHookType::SetupModule => "setup_module",
+            PyHookType::TeardownModule => "teardown_module",
+            PyHookType::SetupMethod => "setup_method",
+            PyHookType::TeardownMethod => "teardown_method",
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("HookType.{}", self.__str__().to_uppercase())
+    }
+}
+
+/// Python HookRegistry class
+#[pyclass(name = "HookRegistry")]
+pub struct PyHookRegistry {
+    hooks: Arc<Mutex<HashMap<HookType, Vec<PyObject>>>>,
+}
+
+#[pymethods]
+impl PyHookRegistry {
+    /// Create a new hook registry
+    #[new]
+    fn new() -> Self {
+        Self {
+            hooks: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Register a hook function
+    fn register_hook(&self, hook_type: PyHookType, hook_fn: PyObject) {
+        let mut hooks = self.hooks.lock().unwrap();
+        hooks
+            .entry(hook_type.into())
+            .or_insert_with(Vec::new)
+            .push(hook_fn);
+    }
+
+    /// Clear all hooks of a specific type
+    fn clear_hooks(&self, hook_type: PyHookType) {
+        let mut hooks = self.hooks.lock().unwrap();
+        hooks.remove(&hook_type.into());
+    }
+
+    /// Clear all hooks
+    fn clear_all(&self) {
+        let mut hooks = self.hooks.lock().unwrap();
+        hooks.clear();
+    }
+
+    /// Get the number of registered hooks for a specific type
+    fn hook_count(&self, hook_type: PyHookType) -> usize {
+        let hooks = self.hooks.lock().unwrap();
+        hooks
+            .get(&hook_type.into())
+            .map(|v| v.len())
+            .unwrap_or(0)
+    }
+
+    /// Run hooks of a specific type (async method)
+    fn run_hooks<'py>(
+        &self,
+        py: Python<'py>,
+        hook_type: PyHookType,
+        suite_instance: Option<PyObject>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        use pyo3_async_runtimes::tokio::future_into_py;
+
+        let hook_type_rust: HookType = hook_type.into();
+
+        // Clone hooks while holding the lock by explicitly cloning each PyObject
+        let hooks_to_run: Vec<PyObject> = {
+            let hooks = self.hooks.lock().unwrap();
+            hooks
+                .get(&hook_type_rust)
+                .map(|v| v.iter().map(|obj| obj.clone_ref(py)).collect())
+                .unwrap_or_default()
+        };
+
+        future_into_py(py, async move {
+            Python::with_gil(|py| {
+                run_hooks_impl(py, hook_type_rust, &hooks_to_run, suite_instance.as_ref())
+            })
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        let hooks = self.hooks.lock().unwrap();
+        format!(
+            "HookRegistry(setup_class={}, teardown_class={}, setup_method={}, teardown_method={}, setup_module={}, teardown_module={})",
+            hooks.get(&HookType::SetupClass).map(|v| v.len()).unwrap_or(0),
+            hooks.get(&HookType::TeardownClass).map(|v| v.len()).unwrap_or(0),
+            hooks.get(&HookType::SetupMethod).map(|v| v.len()).unwrap_or(0),
+            hooks.get(&HookType::TeardownMethod).map(|v| v.len()).unwrap_or(0),
+            hooks.get(&HookType::SetupModule).map(|v| v.len()).unwrap_or(0),
+            hooks.get(&HookType::TeardownModule).map(|v| v.len()).unwrap_or(0),
+        )
+    }
+}
+
+use std::collections::HashMap;
+
+/// Helper function to run hooks (synchronous implementation)
+fn run_hooks_impl(
+    py: Python<'_>,
+    hook_type: HookType,
+    hooks: &[PyObject],
+    suite_instance: Option<&PyObject>,
+) -> PyResult<PyObject> {
+    if hooks.is_empty() {
+        return Ok(py.None());
+    }
+
+    let mut errors = Vec::new();
+    let is_teardown = hook_type.is_teardown();
+
+    for (idx, hook_fn) in hooks.iter().enumerate() {
+        let hook_name = format!("{}[{}]", hook_type, idx);
+
+        // Check if hook is async
+        let asyncio = py.import_bound("asyncio")?;
+        let is_coroutine_fn = asyncio.getattr("iscoroutinefunction")?;
+        let is_async: bool = is_coroutine_fn.call1((hook_fn,))?.extract()?;
+
+        // Call the hook
+        let result = if is_async {
+            // Async hook - need to await it
+            run_async_hook_sync(py, hook_fn, suite_instance)
+        } else {
+            // Sync hook - call directly
+            run_sync_hook(py, hook_fn, suite_instance)
+        };
+
+        // Handle errors
+        if let Err(e) = result {
+            let error_msg = format!("{} failed: {}", hook_name, e);
+            errors.push(error_msg);
+
+            // For setup hooks, fail fast
+            if !is_teardown {
+                return Err(e);
+            }
+            // For teardown hooks, collect error but continue
+        }
+    }
+
+    // Return collected errors (if any)
+    if errors.is_empty() {
+        Ok(py.None())
+    } else {
+        Ok(errors.join("; ").into_py(py))
+    }
+}
+
+/// Run a synchronous hook
+fn run_sync_hook(
+    py: Python<'_>,
+    hook_fn: &PyObject,
+    suite_instance: Option<&PyObject>,
+) -> PyResult<()> {
+    if let Some(instance) = suite_instance {
+        // Call as instance method: hook_fn(self)
+        hook_fn.call1(py, (instance,))?;
+    } else {
+        // Call as standalone function: hook_fn()
+        hook_fn.call0(py)?;
+    }
+    Ok(())
+}
+
+/// Run an asynchronous hook synchronously (using asyncio.run)
+fn run_async_hook_sync(
+    py: Python<'_>,
+    hook_fn: &PyObject,
+    suite_instance: Option<&PyObject>,
+) -> PyResult<()> {
+    // Get the coroutine
+    let coro = if let Some(instance) = suite_instance {
+        // Call as instance method: await hook_fn(self)
+        hook_fn.call1(py, (instance,))?
+    } else {
+        // Call as standalone function: await hook_fn()
+        hook_fn.call0(py)?
+    };
+
+    // Check if it's actually a coroutine
+    let asyncio = py.import_bound("asyncio")?;
+    let is_coro = asyncio.getattr("iscoroutine")?;
+    let is_coroutine: bool = is_coro.call1((coro.clone_ref(py),))?.extract()?;
+
+    if !is_coroutine {
+        // Not a coroutine, just return
+        return Ok(());
+    }
+
+    // Use asyncio.run to execute the coroutine
+    let run_fn = asyncio.getattr("run")?;
+    run_fn.call1((coro,))?;
+
+    Ok(())
+}
+
+// =====================
 // Module registration
 // =====================
 
@@ -3144,6 +3916,21 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyProfileResult>()?;
     m.add_class::<PyProfileConfig>()?;
     m.add_function(wrap_pyfunction!(generate_flamegraph, m)?)?;
+
+    // Fixtures
+    m.add_class::<PyFixtureScope>()?;
+    m.add_class::<PyFixtureMeta>()?;
+    m.add_class::<PyFixtureRegistry>()?;
+
+    // Parametrize
+    m.add_class::<PyParameterValue>()?;
+    m.add_class::<PyParameterSet>()?;
+    m.add_class::<PyParameter>()?;
+    m.add_class::<PyParametrizedTest>()?;
+
+    // Hooks
+    m.add_class::<PyHookType>()?;
+    m.add_class::<PyHookRegistry>()?;
 
     Ok(())
 }

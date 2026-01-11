@@ -278,3 +278,109 @@ def security(
     if func is not None:
         return decorator(func)
     return decorator
+
+
+def fixture(
+    func: Optional[F] = None,
+    *,
+    scope: str = "function",
+    autouse: bool = False,
+) -> Union[F, Callable[[F], F]]:
+    """
+    Decorator to mark a method as a fixture (pytest-compatible API).
+
+    Fixtures provide reusable test resources with setup/teardown lifecycle.
+    They can depend on other fixtures and are cached based on their scope.
+
+    Args:
+        scope: Fixture scope - "function", "class", "module", or "session" (default: "function")
+        autouse: Whether fixture is automatically used for all tests (default: False)
+
+    Example:
+        from data_bridge.test import TestSuite, test, fixture, expect
+
+        class DatabaseTests(TestSuite):
+            @fixture(scope="class")
+            async def db_connection(self):
+                '''Class-scoped fixture with setup/teardown.'''
+                conn = await create_connection()
+                yield conn  # pytest-compatible yield syntax
+                await conn.close()
+
+            @fixture(scope="function")
+            async def test_user(self, db_connection):
+                '''Fixture depending on another fixture.'''
+                user = await db_connection.create_user("test@example.com")
+                yield user
+                await db_connection.delete_user(user.id)
+
+            @test
+            async def test_query(self, db_connection, test_user):
+                '''Fixtures auto-injected via parameter names.'''
+                result = await db_connection.query("SELECT * FROM users WHERE id = ?", test_user.id)
+                expect(result).to_not_be_none()
+    """
+
+    def decorator(f: F) -> F:
+        # Store fixture metadata on the function
+        f._fixture_meta = {  # type: ignore
+            "scope": scope,
+            "autouse": autouse,
+            "name": f.__name__,
+        }
+        return f
+
+    if func is not None:
+        return decorator(func)
+    return decorator
+
+
+def parametrize(name: str, values: List[Any]) -> Callable[[F], F]:
+    """
+    Decorator to parametrize a test function with multiple values.
+
+    Similar to pytest.mark.parametrize, this decorator generates multiple test instances
+    from a single test function, each with different parameter values.
+
+    Single parameter:
+        @parametrize("batch_size", [10, 100, 1000])
+        - Generates 3 test instances
+
+    Multiple parameters (Cartesian product):
+        @parametrize("method", ["GET", "POST"])
+        @parametrize("auth", [True, False])
+        - Generates 4 test instances (2 × 2)
+
+    Args:
+        name: Parameter name (must match test function argument)
+        values: List of values for this parameter
+
+    Example:
+        from data_bridge.test import TestSuite, test, parametrize, expect
+
+        class BulkTests(TestSuite):
+            @test
+            @parametrize("batch_size", [10, 100, 1000, 10000, 50000])
+            async def test_bulk_insert(self, batch_size):
+                '''Runs 5 times with different batch_size values.'''
+                docs = [{"value": i} for i in range(batch_size)]
+                result = await collection.insert_many(docs)
+                expect(len(result.inserted_ids)).to_equal(batch_size)
+
+            @test
+            @parametrize("method", ["GET", "POST", "PUT", "DELETE"])
+            @parametrize("auth", [True, False])
+            async def test_http_methods(self, method, auth):
+                '''Generates 8 test cases (4 × 2 cartesian product).'''
+                response = await client.request(method, "/api/test", auth=auth)
+                expect(response.status).to_equal(200)
+    """
+
+    def decorator(func: F) -> F:
+        # Store parametrize metadata on the function
+        if not hasattr(func, "_parametrize"):
+            func._parametrize = []  # type: ignore
+        func._parametrize.append((name, values))  # type: ignore
+        return func
+
+    return decorator

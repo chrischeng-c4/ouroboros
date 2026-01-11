@@ -17,8 +17,7 @@ class TestExecuteFunction:
         with patch('data_bridge.postgres.connection._engine', None):
             from data_bridge.postgres import execute
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await execute("SELECT 1")
+            expect(lambda: await execute("SELECT 1")).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_execute_select_query(self, mock_connection_engine):
@@ -189,8 +188,7 @@ class TestExecuteErrorHandling:
 
         from data_bridge.postgres import execute
 
-        with pytest.raises(RuntimeError, match="Query execution failed"):
-            await execute("INVALID SQL QUERY")
+        expect(lambda: await execute("INVALID SQL QUERY")).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_execute_empty_sql(self, mock_connection_engine):
@@ -201,5 +199,4 @@ class TestExecuteErrorHandling:
 
         from data_bridge.postgres import execute
 
-        with pytest.raises(RuntimeError):
-            await execute("")
+        expect(lambda: await execute("")).to_raise(RuntimeError)

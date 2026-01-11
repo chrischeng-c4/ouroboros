@@ -272,8 +272,7 @@ async def test_savepoint_error_handling(test_table):
         await tx._tx.savepoint("sp1")
 
         # Try to rollback to non-existent savepoint
-        with pytest.raises(Exception):
-            await tx._tx.rollback_to_savepoint("non_existent")
+        expect(lambda: await tx._tx.rollback_to_savepoint("non_existent")).to_raise(Exception)
 
 
 @pytest.mark.integration
@@ -318,8 +317,7 @@ async def test_savepoint_release_after_release(test_table):
         await tx._tx.release_savepoint("sp1")
 
         # Try to release again - should fail
-        with pytest.raises(Exception):
-            await tx._tx.release_savepoint("sp1")
+        expect(lambda: await tx._tx.release_savepoint("sp1")).to_raise(Exception)
 
 
 @pytest.mark.integration

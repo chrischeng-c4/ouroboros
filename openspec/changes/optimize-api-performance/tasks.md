@@ -270,3 +270,273 @@ app.get("/users/:id", python_handler);
 2. Provide optional pure Rust handler API for hot paths
 
 **Realistic Target**: 1.2x - 1.3x FastAPI with current architecture
+
+---
+
+## Phase 6: Single Global Event Loop (Architectural Experiment)
+
+**Status**: ✅ COMPLETED - Results show performance regression
+
+**Rationale**: User correctly identified that thread-local approach creates multiple Python event loops, which violates Python asyncio best practices ("理論上python應該也不推薦多個event loop?"). Attempted architectural change to align with Python conventions.
+
+### Implementation
+
+**Architecture Change**:
+```
+OLD (Thread-local):
+Request 1 ─┬─> Tokio thread pool ─┬─> spawn_blocking ─> Event loop 1
+Request 2 ─┼─> Tokio thread pool ─┼─> spawn_blocking ─> Event loop 2
+Request N ─┴─> Tokio thread pool ─┴─> spawn_blocking ─> Event loop N
+
+NEW (Global):
+Request 1 ─┐
+Request 2 ─┼─> Channel ─> Single dedicated thread ─> Global event loop
+Request N ─┘
+```
+
+**Key Changes**:
+1. Replaced `thread_local!` with `OnceCell<PythonEventLoopExecutor>`
+2. Created dedicated thread with single Python event loop
+3. Used `mpsc::unbounded_channel` + `oneshot::channel` for task distribution
+4. **Critical fix**: Release GIL while waiting for tasks in `blocking_recv()`
+
+**GIL Deadlock Fix**:
+```rust
+// WRONG (deadlocks):
+std::thread::spawn(move || {
+    Python::with_gil(|py| {
+        while let Some(task) = rx.blocking_recv() {  // Holds GIL while waiting!
+            // ...
+        }
+    });
+});
+
+// CORRECT:
+std::thread::spawn(move || {
+    let event_loop = Python::with_gil(|py| { /* create loop */ });
+
+    loop {
+        let task = rx.blocking_recv();  // Release GIL while waiting
+        Python::with_gil(|py| {         // Acquire GIL to execute
+            event_loop.bind(py).call_method1("run_until_complete", ...);
+        });
+    }
+});
+```
+
+**Files Modified**:
+- [Cargo.toml](../../Cargo.toml): Added `once_cell = "1.20"`
+- [crates/data-bridge/src/api.rs](../../crates/data-bridge/src/api.rs):
+  - Lines 29-112: Added `PythonEventLoopExecutor` module
+  - Lines 428-442: Updated handler invocation to use `PythonEventLoopExecutor::execute()`
+  - Lines 516-520: Initialize executor in `serve()`
+  - Removed: Lines 28-56 (thread-local event loop code)
+
+### Testing
+
+**Integration Tests**: ✅ All 12 tests pass
+```bash
+uv run pytest tests/api/test_handler_integration.py -v
+# 12 passed in 0.80s
+```
+
+**Tests passed**:
+- JSON response
+- Path parameters (including special chars)
+- Query parameters (with defaults)
+- POST JSON body
+- Sync handler
+- Health endpoint
+- Typed path parameters
+- Required query parameters
+- Query parameter passthrough
+
+### Performance Results
+
+**Benchmark**: `tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2`
+
+**Results** (Global Event Loop):
+```
+Plaintext Response:   877 ops/s  (0.93x FastAPI)
+JSON Response:        920 ops/s  (0.96x FastAPI)
+Path Parameters:      951 ops/s  (1.04x FastAPI)
+
+Average: 0.93x - 1.04x FastAPI
+```
+
+**Comparison to Thread-Local (Phase 3)**:
+```
+                    Thread-Local    Global Loop    Regression
+Plaintext:          1,063 ops/s     877 ops/s      -17.5%
+JSON:               1,011 ops/s     920 ops/s      -9.0%
+Path Params:        999 ops/s       951 ops/s      -4.8%
+
+Average regression: -10 to -18%
+```
+
+### Analysis
+
+**Why Performance Regressed**:
+
+1. **Serialization Bottleneck**: Single event loop thread processes all async handlers sequentially
+   - Thread-local: N handlers execute concurrently on N threads
+   - Global loop: N handlers queue and execute one-by-one
+
+2. **Channel Overhead**:
+   - Thread-local: Direct `spawn_blocking` → event loop
+   - Global loop: Task creation → mpsc send → oneshot wait → result receive
+
+3. **Reduced Parallelism**:
+   - Thread-local: Tokio thread pool (8+ threads) × event loops
+   - Global loop: 1 dedicated thread for all Python execution
+
+**Python Best Practices vs Performance**:
+- ✅ **Python convention**: Single event loop per process (aligns with asyncio design)
+- ❌ **Performance**: ~15% slower due to serialization
+
+### Conclusion
+
+**Decision**: **REVERT** to thread-local event loop approach
+
+**Rationale**:
+1. Performance regression (-10 to -18%) unacceptable
+2. Thread-local approach works correctly despite multiple event loops
+3. Python libraries don't actually share state across event loops in our use case
+4. The multiple event loops are isolated (no shared connection pools needed)
+
+**Lessons Learned**:
+- Python best practices don't always align with performance in hybrid Rust/Python systems
+- Thread-local event loops are acceptable when:
+  - Each loop is isolated (no cross-loop communication)
+  - Handlers don't share async resources (connections, pools)
+  - Performance > architectural purity
+
+**Alternative Considered**: Thread-per-core event loops (Gemini Phase 5 Option A)
+- Would maintain single loop per core (better than global)
+- More complex implementation
+- Expected: 10-20% improvement over spawn_blocking
+- May revisit in future if needed
+
+### Next Steps
+
+1. **Revert to thread-local**: Restore Phase 3-4 code
+2. **Document architecture**: Clarify that multiple event loops are acceptable in this context
+3. **Future optimization**: Consider Fused Execution (Phase 5 Gemini Option 1) instead
+
+**Final Status**: Phase 6 attempted, results documented, **recommend revert**
+
+---
+
+## Phase 7: Rust Event Loop Integration with pyo3-async-runtimes
+
+**Status**: ✅ PHASE 1 COMPLETED - Code compiles and builds successfully
+
+**Objective**: Replace custom PythonEventLoopExecutor with pyo3-async-runtimes for better integration with Tokio runtime
+
+### Phase 1: Replace Event Loop Executor (COMPLETED)
+
+**Changes Made**:
+
+1. **Removed Custom Implementation** (Lines 29-123):
+   - Removed `PythonEventLoopExecutor` struct and module
+   - Removed `tokio::sync::{mpsc, oneshot}` imports
+   - Removed `once_cell::sync::OnceCell` dependency
+   - **Code reduction**: 96 lines (916 → 820 lines)
+
+2. **Added pyo3-async-runtimes Import**:
+   ```rust
+   use pyo3_async_runtimes::tokio as pyo3_tokio;
+   ```
+
+3. **Updated Handler Invocation** (Lines 342-366):
+   ```rust
+   // Before (Custom executor with channels)
+   let result_obj = PythonEventLoopExecutor::execute(handler_result)
+       .await
+       .map_err(|e| ApiError::Handler(...))?;
+
+   // After (Direct Tokio integration)
+   let fut = Python::with_gil(|py| {
+       pyo3_tokio::into_future(handler_result.into_bound(py))
+   }).map_err(|e| ApiError::Internal(...))?;
+
+   let result_obj = fut.await
+       .map_err(|e| ApiError::Handler(...))?;
+   ```
+
+4. **Removed Executor Initialization** (Line 435-436):
+   ```rust
+   // Before
+   PythonEventLoopExecutor::init();
+
+   // After
+   // pyo3-async-runtimes will automatically initialize with default Tokio runtime
+   // No explicit initialization needed - get_runtime() will create it on first use
+   ```
+
+**Files Modified**:
+- [crates/data-bridge/src/api.rs](../../crates/data-bridge/src/api.rs):
+  - Lines 8-12: Updated imports
+  - Lines 29-123: Removed (custom executor)
+  - Lines 342-366: Updated handler invocation
+  - Lines 435-436: Removed initialization
+
+**Build Status**: ✅ SUCCESS
+```bash
+uv run maturin develop --features api
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.37s
+# 📦 Built wheel for abi3 Python ≥ 3.12
+# ✏️ Setting installed package as editable
+# 🛠 Installed data-bridge-0.1.0
+```
+
+**Warnings**: Only deprecation warnings for `to_object()` (pre-existing, not related to this change)
+
+### Expected Benefits
+
+1. **Simplified Architecture**:
+   - Eliminates custom channel-based executor
+   - Uses official pyo3-async-runtimes integration
+   - Better maintenance and future compatibility
+
+2. **Performance Improvements**:
+   - Removes channel overhead (mpsc + oneshot)
+   - Eliminates thread hopping (no dedicated executor thread)
+   - Direct Tokio-driven event loop execution
+   - Expected: 5-15% latency reduction
+
+3. **Better Integration**:
+   - pyo3-async-runtimes handles GIL management automatically
+   - Tokio runtime directly drives Python coroutines
+   - More efficient task scheduling
+
+### Next Steps
+
+**Phase 2: Performance Verification**
+- [ ] Run benchmark suite to measure actual performance impact
+- [ ] Compare against Phase 6 baseline (Global Event Loop)
+- [ ] Verify no regressions in integration tests
+
+**Phase 3: Testing**
+- [ ] Run `uv run pytest tests/api/test_handler_integration.py -v`
+- [ ] Verify all 12 handler tests pass
+- [ ] Test async and sync handlers
+
+**Phase 4: Benchmarking**
+- [ ] Run `tests/api/benchmarks/bench_comparison_rust.py`
+- [ ] Measure ops/s for:
+  - Plaintext response
+  - JSON response
+  - Path parameters
+- [ ] Compare to FastAPI baseline
+
+**Expected Results**:
+- Integration tests: 12/12 pass
+- Performance: 5-15% improvement over Phase 6
+- Target: 1.0x - 1.1x FastAPI parity or better
+
+**Architecture Notes**:
+- pyo3-async-runtimes uses Tokio's `spawn_blocking` internally
+- Python coroutines converted to Rust Futures via `into_future()`
+- GIL acquired only when needed (Python operations)
+- Compatible with existing two-phase GIL pattern

@@ -24,6 +24,79 @@ FileCoverage = _test.FileCoverage
 CoverageInfo = _test.CoverageInfo
 
 from .decorators import TestDescriptor
+from data_bridge import data_bridge as _rust_module
+_test = _rust_module.test
+ParameterValue = _test.ParameterValue
+Parameter = _test.Parameter
+ParametrizedTest = _test.ParametrizedTest
+HookType = _test.HookType
+HookRegistry = _test.HookRegistry
+
+
+class ParametrizedTestInstance:
+    """Wrapper for a single instance of a parametrized test"""
+
+    def __init__(self, test_desc: TestDescriptor, param_set: Any, instance_name: str):
+        self.test_desc = test_desc
+        self.param_set = param_set
+        self.instance_name = instance_name
+
+    def get_meta(self):
+        """Get TestMeta with parametrized name"""
+        # Get the base meta from the test descriptor
+        base_meta = self.test_desc.get_meta()
+
+        # Import TestMeta from Rust bindings
+        from data_bridge import data_bridge as _rust_module
+        _test = _rust_module.test
+        TestMeta = _test.TestMeta
+
+        # Create a new TestMeta with the parametrized name
+        meta = TestMeta(
+            name=self.instance_name,
+            test_type=base_meta.test_type,
+            timeout=base_meta.timeout,
+            tags=base_meta.tags,
+        )
+
+        # Update full_name to include parameters
+        base_full_name = base_meta.full_name
+        if '.' in base_full_name:
+            parts = base_full_name.rsplit('.', 1)
+            meta.full_name = f"{parts[0]}.{self.instance_name}"
+        else:
+            meta.full_name = self.instance_name
+
+        # Copy skip reason if present
+        if base_meta.is_skipped():
+            meta.skip(base_meta.skip_reason or "Skipped")
+
+        return meta
+
+    @property
+    def is_async(self) -> bool:
+        return self.test_desc.is_async
+
+    def __call__(self, suite_instance: Any) -> Any:
+        """Execute the test with parameter injection"""
+        import inspect
+
+        # Get the test function signature to extract parameter names
+        sig = inspect.signature(self.test_desc.func)
+        param_names = [p for p in sig.parameters.keys() if p != 'self']
+
+        # Build kwargs from ParameterSet by converting to dict first
+        param_dict = self.param_set.to_dict()
+
+        # Extract values for the specific parameters needed by this test
+        kwargs = {}
+        for param_name in param_names:
+            if param_name in param_dict:
+                kwargs[param_name] = param_dict[param_name]
+
+        # Call the original test function with injected parameters
+        # Return whatever the function returns (coroutine for async, value for sync)
+        return self.test_desc.func(suite_instance, **kwargs)
 
 
 class TestSuite:
@@ -61,7 +134,9 @@ class TestSuite:
 
     def __init__(self) -> None:
         self._tests: List[TestDescriptor] = []
+        self._hook_registry: HookRegistry = HookRegistry()
         self._discover_tests()
+        self._discover_hooks()
 
     def _discover_tests(self) -> None:
         """Discover all test methods in this suite"""
@@ -70,7 +145,82 @@ class TestSuite:
         for name in dir(self):
             attr = getattr(self.__class__, name, None)
             if isinstance(attr, TestDescriptor):
-                self._tests.append(attr)
+                # Check if test has parametrize decorators
+                if hasattr(attr.func, '_parametrize'):
+                    # Expand parametrized test into multiple instances
+                    expanded_tests = self._expand_parametrized_test(attr)
+                    self._tests.extend(expanded_tests)
+                else:
+                    # Regular test (no parametrization)
+                    self._tests.append(attr)
+
+    def _discover_hooks(self) -> None:
+        """Discover and register lifecycle hooks"""
+        # Class-level hooks (run once per test class)
+        if hasattr(self.__class__, 'setup_class') and callable(getattr(self.__class__, 'setup_class')):
+            setup_class = getattr(self.__class__, 'setup_class')
+            # Only register if it's not the base TestSuite method
+            if setup_class.__qualname__ != 'TestSuite.setup_class':
+                self._hook_registry.register_hook(HookType.SetupClass, setup_class)
+
+        if hasattr(self.__class__, 'teardown_class') and callable(getattr(self.__class__, 'teardown_class')):
+            teardown_class = getattr(self.__class__, 'teardown_class')
+            if teardown_class.__qualname__ != 'TestSuite.teardown_class':
+                self._hook_registry.register_hook(HookType.TeardownClass, teardown_class)
+
+        # Method-level hooks (run before/after each test)
+        if hasattr(self.__class__, 'setup_method') and callable(getattr(self.__class__, 'setup_method')):
+            setup_method = getattr(self.__class__, 'setup_method')
+            if setup_method.__qualname__ != 'TestSuite.setup_method':
+                self._hook_registry.register_hook(HookType.SetupMethod, setup_method)
+
+        if hasattr(self.__class__, 'teardown_method') and callable(getattr(self.__class__, 'teardown_method')):
+            teardown_method = getattr(self.__class__, 'teardown_method')
+            if teardown_method.__qualname__ != 'TestSuite.teardown_method':
+                self._hook_registry.register_hook(HookType.TeardownMethod, teardown_method)
+
+    def _expand_parametrized_test(self, test_desc: TestDescriptor) -> List:
+        """Expand a parametrized test into multiple test instances"""
+        # Get parametrize metadata from the function
+        parametrize_data = getattr(test_desc.func, '_parametrize', [])
+        if not parametrize_data:
+            return [test_desc]
+
+        # Create ParametrizedTest and add parameters
+        param_test = ParametrizedTest(test_desc.func.__name__)
+
+        for param_name, param_values in parametrize_data:
+            # Convert Python values to ParameterValue objects
+            converted_values = []
+            for value in param_values:
+                # Auto-convert based on Python type
+                # IMPORTANT: Check bool BEFORE int since bool is a subclass of int in Python
+                if isinstance(value, bool):
+                    converted_values.append(ParameterValue.bool(value))
+                elif isinstance(value, int):
+                    converted_values.append(ParameterValue.int(value))
+                elif isinstance(value, float):
+                    converted_values.append(ParameterValue.float(value))
+                elif isinstance(value, str):
+                    converted_values.append(ParameterValue.string(value))
+                elif value is None:
+                    converted_values.append(ParameterValue.none())
+                else:
+                    raise TypeError(f"Unsupported parameter type for value {value}: {type(value)}")
+
+            # Create Parameter and add to ParametrizedTest
+            param = Parameter(param_name, converted_values)
+            param_test.add_parameter(param)
+
+        # Expand into test instances
+        expanded = param_test.expand()
+
+        # Create ParametrizedTestInstance wrappers
+        instances = []
+        for instance_name, param_set in expanded:
+            instances.append(ParametrizedTestInstance(test_desc, param_set, instance_name))
+
+        return instances
 
     @property
     def test_count(self) -> int:
@@ -85,19 +235,37 @@ class TestSuite:
     # Lifecycle hooks (override in subclasses)
 
     async def setup_suite(self) -> None:
-        """Called once before all tests in the suite"""
+        """Called once before all tests in the suite (legacy, use setup_class)"""
         pass
 
     async def teardown_suite(self) -> None:
-        """Called once after all tests in the suite"""
+        """Called once after all tests in the suite (legacy, use teardown_class)"""
         pass
 
     async def setup(self) -> None:
-        """Called before each test"""
+        """Called before each test (legacy, use setup_method)"""
         pass
 
     async def teardown(self) -> None:
-        """Called after each test"""
+        """Called after each test (legacy, use teardown_method)"""
+        pass
+
+    # New hook methods (pytest-compatible)
+
+    async def setup_class(self) -> None:
+        """Called once before all tests in the class"""
+        pass
+
+    async def teardown_class(self) -> None:
+        """Called once after all tests in the class"""
+        pass
+
+    async def setup_method(self) -> None:
+        """Called before each test method"""
+        pass
+
+    async def teardown_method(self) -> None:
+        """Called after each test method"""
         pass
 
     # Test execution
@@ -137,14 +305,18 @@ class TestSuite:
 
         runner.start()
 
-        # Suite setup
+        # Run setup_class hooks (and legacy setup_suite)
         try:
-            await self.setup_suite()
+            await self.setup_suite()  # Legacy support
+            # Run setup_class hooks
+            error = await self._hook_registry.run_hooks(HookType.SetupClass, self)
+            if error:
+                raise RuntimeError(error)
         except Exception as e:
             # If setup fails, mark all tests as error
             for test_desc in self._tests:
                 meta = test_desc.get_meta()
-                result = TestResult.error(meta, 0, f"Suite setup failed: {e}")
+                result = TestResult.error(meta, 0, f"Class setup failed: {e}")
                 result.set_stack_trace(traceback.format_exc())
                 runner.record(result)
             return TestReport(self.suite_name, runner.results())
@@ -165,11 +337,15 @@ class TestSuite:
                     print(f"  SKIPPED: {meta.name}")
                 continue
 
-            # Run test setup
+            # Run setup_method hooks (and legacy setup)
             try:
-                await self.setup()
+                await self.setup()  # Legacy support
+                # Run setup_method hooks
+                error = await self._hook_registry.run_hooks(HookType.SetupMethod, self)
+                if error:
+                    raise RuntimeError(error)
             except Exception as e:
-                result = TestResult.error(meta, 0, f"Test setup failed: {e}")
+                result = TestResult.error(meta, 0, f"Method setup failed: {e}")
                 result.set_stack_trace(traceback.format_exc())
                 runner.record(result)
                 if verbose:
@@ -210,20 +386,28 @@ class TestSuite:
 
             runner.record(result)
 
-            # Run test teardown
+            # Run teardown_method hooks (and legacy teardown)
             try:
-                await self.teardown()
+                # Run teardown_method hooks first
+                error = await self._hook_registry.run_hooks(HookType.TeardownMethod, self)
+                if error and verbose:
+                    print(f"  WARNING: Method teardown error for {meta.name}: {error}")
+                await self.teardown()  # Legacy support
             except Exception as e:
                 # Log teardown error but don't override test result
                 if verbose:
-                    print(f"  WARNING: Teardown failed for {meta.name}: {e}")
+                    print(f"  WARNING: Method teardown failed for {meta.name}: {e}")
 
-        # Suite teardown
+        # Run teardown_class hooks (and legacy teardown_suite)
         try:
-            await self.teardown_suite()
+            # Run teardown_class hooks first
+            error = await self._hook_registry.run_hooks(HookType.TeardownClass, self)
+            if error and verbose:
+                print(f"WARNING: Class teardown error: {error}")
+            await self.teardown_suite()  # Legacy support
         except Exception as e:
             if verbose:
-                print(f"WARNING: Suite teardown failed: {e}")
+                print(f"WARNING: Class teardown failed: {e}")
 
         return TestReport(self.suite_name, runner.results())
 

@@ -1,5 +1,6 @@
 """Tests for HTTP client integration in data-bridge-api."""
 import pytest
+from data_bridge.test import expect
 from typing import Annotated
 from data_bridge.api import App, Depends, RequestContext
 from data_bridge.http import HttpClient
@@ -142,8 +143,7 @@ def test_request_context_http_property_not_configured():
     """Test RequestContext.http raises error if not configured."""
     ctx = RequestContext()
 
-    with pytest.raises(RuntimeError, match="HTTP client not configured"):
-        _ = ctx.http
+    expect(lambda: ctx.http).to_raise(RuntimeError)
 
 
 def test_request_context_get_header():

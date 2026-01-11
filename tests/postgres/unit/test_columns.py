@@ -335,15 +335,13 @@ class TestSqlExprCombining:
         """Test & raises TypeError for invalid type."""
         expr = SqlExpr("age", ">", 18)
 
-        with pytest.raises(TypeError):
-            _ = expr & "invalid"
+        expect(lambda: expr & "invalid").to_raise(TypeError)
 
     def test_invalid_or_type(self):
         """Test | raises TypeError for invalid type."""
         expr = SqlExpr("age", ">", 18)
 
-        with pytest.raises(TypeError):
-            _ = expr | 123
+        expect(lambda: expr | 123).to_raise(TypeError)
 
 
 class TestSqlExprRepr:

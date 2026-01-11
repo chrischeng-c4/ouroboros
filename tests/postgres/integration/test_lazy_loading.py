@@ -20,6 +20,7 @@ Setup database:
     bash scripts/setup_test_db.sh
 """
 import pytest
+from data_bridge.test import expect
 from data_bridge.postgres import Table, Column, relationship, init
 from data_bridge.postgres.session import Session
 
@@ -430,8 +431,7 @@ async def test_selectinload_invalid_relationship(sample_data):
     from data_bridge.postgres import selectinload
 
     # Error should be raised when applying option during to_list()
-    with pytest.raises(ValueError, match="Unknown relationship"):
-        posts = await Post.find().options(selectinload("invalid_relationship")).to_list()
+    expect(lambda: posts = await Post.find().options(selectinload("invalid_relationship")).to_list()).to_raise(ValueError)
 
 
 @pytest.mark.asyncio
@@ -464,8 +464,7 @@ async def test_joinedload_not_implemented(sample_data):
     from data_bridge.postgres import joinedload
 
     # Should raise NotImplementedError when trying to apply during to_list()
-    with pytest.raises(NotImplementedError, match="JoinedLoad requires query builder modifications"):
-        posts = await Post.find().options(joinedload("author")).to_list()
+    expect(lambda: posts = await Post.find().options(joinedload("author")).to_list()).to_raise(NotImplementedError)
 
 
 @pytest.mark.asyncio

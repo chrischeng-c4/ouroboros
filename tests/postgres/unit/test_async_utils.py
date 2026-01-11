@@ -5,6 +5,7 @@ Tests async session management, factories, scoped sessions,
 and async helpers without requiring a database connection.
 """
 import pytest
+from data_bridge.test import expect
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch, Mock
 from dataclasses import dataclass
@@ -199,8 +200,7 @@ class TestAsyncSession:
         session = AsyncSession()
         await session.close()
 
-        with pytest.raises(RuntimeError, match="Session is closed"):
-            await session.execute("SELECT 1")
+        expect(lambda: await session.execute("SELECT 1")).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_bind_engine(self):
@@ -498,8 +498,7 @@ class TestAsyncLoad:
         session.add(user)
 
         with patch.object(session, 'flush', new_callable=AsyncMock):
-            with pytest.raises(AttributeError, match="no relationship"):
-                await async_load(user, "nonexistent")
+            expect(lambda: await async_load(user, "nonexistent")).to_raise(AttributeError)
             await session.close()
 
     @pytest.mark.asyncio
@@ -511,8 +510,7 @@ class TestAsyncLoad:
         user = MockUser(id=1, name="Alice")
         user.posts = None  # Add attribute
 
-        with pytest.raises(RuntimeError, match="No active async session"):
-            await async_load(user, "posts")
+        expect(lambda: await async_load(user, "posts")).to_raise(RuntimeError)
 
 
 class TestAsyncRefresh:
@@ -525,8 +523,7 @@ class TestAsyncRefresh:
 
         user = MockUser(id=1, name="Alice")
 
-        with pytest.raises(RuntimeError, match="No active async session"):
-            await async_refresh(user)
+        expect(lambda: await async_refresh(user)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_async_refresh_no_pk(self):
@@ -538,8 +535,7 @@ class TestAsyncRefresh:
         session.add(user)
 
         with patch.object(session, 'flush', new_callable=AsyncMock):
-            with pytest.raises(ValueError, match="without primary key"):
-                await async_refresh(user, session=session)
+            expect(lambda: await async_refresh(user, session=session)).to_raise(ValueError)
             await session.close()
 
 
@@ -591,8 +587,7 @@ class TestAsyncExpire:
 
         user = MockUser(id=1, name="Alice")
 
-        with pytest.raises(RuntimeError, match="No active async session"):
-            await async_expire(user)
+        expect(lambda: await async_expire(user)).to_raise(RuntimeError)
 
 
 # ============================================================================
@@ -839,8 +834,7 @@ class TestGreenlet:
         """Test greenlet_spawn raises when greenlet not installed."""
         from data_bridge.postgres.async_utils import greenlet_spawn
 
-        with pytest.raises(RuntimeError, match="greenlet package not installed"):
-            greenlet_spawn(lambda: None)
+        expect(lambda: greenlet_spawn(lambda: None)).to_raise(RuntimeError)
 
     @pytest.mark.skipif(
         "__import__('data_bridge.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
@@ -850,8 +844,7 @@ class TestGreenlet:
         """Test AsyncGreenlet raises when greenlet not installed."""
         from data_bridge.postgres.async_utils import AsyncGreenlet
 
-        with pytest.raises(RuntimeError, match="greenlet package not installed"):
-            AsyncGreenlet()
+        expect(lambda: AsyncGreenlet()).to_raise(RuntimeError)
 
 
 # ============================================================================

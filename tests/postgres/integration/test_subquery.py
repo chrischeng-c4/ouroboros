@@ -4,6 +4,7 @@ Integration tests for subquery support.
 Tests subquery functionality (IN, NOT IN, EXISTS, NOT EXISTS) with real PostgreSQL database.
 """
 import pytest
+from data_bridge.test import expect
 from data_bridge.postgres import execute, insert_one, query_aggregate, query_with_cte
 
 
@@ -260,8 +261,7 @@ class TestSubqueryErrors:
 
     async def test_invalid_subquery_type(self, test_tables):
         """Test that invalid subquery type raises error."""
-        with pytest.raises(Exception) as exc_info:
-            await query_aggregate(
+        exc_info = expect(lambda: await query_aggregate().to_raise(Exception)
                 "users",
                 [("count", None, "total")],
                 group_by=None,
@@ -278,8 +278,7 @@ class TestSubqueryErrors:
 
     async def test_in_subquery_without_field(self, test_tables):
         """Test that IN subquery without field raises error."""
-        with pytest.raises(Exception) as exc_info:
-            await query_aggregate(
+        exc_info = expect(lambda: await query_aggregate().to_raise(Exception)
                 "users",
                 [("count", None, "total")],
                 group_by=None,

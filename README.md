@@ -683,11 +683,11 @@ maturin develop --release
 
 # Run tests
 cargo test                          # Rust tests
-uv run pytest tests/ -v             # Python tests (313 passing)
-SKIP_INTEGRATION=true uv run pytest # Unit tests only (no MongoDB)
+uv run python tests/unit/ -v        # Python tests (data-bridge-test)
+uv run python tests/integration/ -v # Integration tests (requires MongoDB)
 
 # Coverage
-uv run pytest --cov=data_bridge --cov-report=term-missing
+uv run python -m data_bridge.test tests/ --coverage --format=html
 
 # Security audit
 cargo audit
@@ -771,19 +771,27 @@ data-bridge/
 
 ## Testing
 
+**data-bridge uses its native test framework** (data-bridge-test) built in Rust for superior performance.
+
 ```bash
-# All tests (requires MongoDB on localhost:27017)
-uv run pytest tests/ -v
+# Run all tests
+uv run python -m data_bridge.test tests/ -v
 
-# Unit tests only (no MongoDB required)
-SKIP_INTEGRATION=true uv run pytest tests/ -v
+# Run specific directory
+uv run python tests/unit/ -v                    # Unit tests
+uv run python tests/integration/ -v             # Integration tests (requires MongoDB)
 
-# With coverage report
-uv run pytest tests/ --cov=data_bridge --cov-report=term-missing
+# Run benchmarks
+uv run python benchmarks/bench_comparison.py --rounds 5 --warmup 2
+
+# With coverage
+uv run python -m data_bridge.test tests/ --coverage --format=html
 
 # Specific test file
-uv run pytest tests/test_comprehensive.py -v
+uv run python tests/unit/test_validation.py
 ```
+
+**Note**: pytest is kept only for framework comparison benchmarks (`benchmarks/framework_comparison/`)
 
 ## License
 
@@ -816,7 +824,7 @@ MIT License - see LICENSE file for details.
 
 ### Infrastructure
 - [x] HTTP client
-- [x] Test framework
+- [x] Native test framework (data-bridge-test) - **faster than pytest**
 - [x] PostgreSQL support (partial)
 - [ ] Task queue (NATS/Redis)
 - [ ] Key-Value store
