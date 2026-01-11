@@ -19,6 +19,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Bytes, Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -252,6 +253,47 @@ async fn handle_request(
     Ok(convert_response_to_hyper(response))
 }
 
+/// Decode a query parameter component (key or value) with minimal allocations
+///
+/// Uses Cow to avoid allocations when no encoding is present.
+/// Only allocates when:
+/// 1. The string contains '+' characters (need to replace with spaces)
+/// 2. The string contains '%' characters (need URL decoding)
+///
+/// # Performance
+/// - No encoding: 0 allocations (returns borrowed str)
+/// - With encoding: 1-2 allocations (replace + decode)
+///
+/// # Arguments
+/// * `s` - The query parameter component to decode
+///
+/// # Returns
+/// A Cow<str> that is either borrowed (no encoding) or owned (decoded)
+#[inline]
+fn decode_query_component(s: &str) -> Cow<'_, str> {
+    // Fast path: no encoding at all
+    if !s.contains('+') && !s.contains('%') {
+        return Cow::Borrowed(s);
+    }
+
+    // Need to decode
+    if s.contains('+') {
+        // Replace + with spaces first, then decode
+        let with_spaces = s.replace('+', " ");
+        // Decode and convert to owned String to avoid lifetime issues
+        match urlencoding::decode(&with_spaces) {
+            Ok(decoded) => Cow::Owned(decoded.into_owned()),
+            Err(_) => Cow::Owned(with_spaces),
+        }
+    } else {
+        // Only percent-encoding, no plus signs
+        match urlencoding::decode(s) {
+            Ok(decoded) => decoded,
+            Err(_) => Cow::Borrowed(s),
+        }
+    }
+}
+
 /// Convert Hyper request to SerializableRequest
 ///
 /// Extracts all request data into a GIL-free representation
@@ -265,25 +307,23 @@ async fn convert_hyper_request(
     let mut req = SerializableRequest::new(method, path);
 
     // Parse query parameters from URL before moving url into with_url()
+    // Uses optimized decode_query_component to minimize allocations
     if let Some(query_start) = url.find('?') {
         let query_string = &url[query_start + 1..];
         for pair in query_string.split('&') {
             if let Some((key, value)) = pair.split_once('=') {
-                // URL decode key and value (replace + with space first for query string compatibility)
-                let key_with_spaces = key.replace('+', " ");
-                let value_with_spaces = value.replace('+', " ");
-                let decoded_key = urlencoding::decode(&key_with_spaces).unwrap_or_else(|_| key_with_spaces.as_str().into());
-                let decoded_value = urlencoding::decode(&value_with_spaces).unwrap_or_else(|_| value_with_spaces.as_str().into());
+                // Decode key and value with minimal allocations (0-2 allocations per component)
+                let decoded_key = decode_query_component(key);
+                let decoded_value = decode_query_component(value);
                 req = req.with_query_param(
-                    decoded_key.to_string(),
-                    SerializableValue::String(decoded_value.to_string()),
+                    decoded_key.into_owned(),
+                    SerializableValue::String(decoded_value.into_owned()),
                 );
             } else if !pair.is_empty() {
                 // Handle parameters without values (e.g., ?flag)
-                let pair_with_spaces = pair.replace('+', " ");
-                let decoded_key = urlencoding::decode(&pair_with_spaces).unwrap_or_else(|_| pair_with_spaces.as_str().into());
+                let decoded_key = decode_query_component(pair);
                 req = req.with_query_param(
-                    decoded_key.to_string(),
+                    decoded_key.into_owned(),
                     SerializableValue::String(String::new()),
                 );
             }
@@ -794,5 +834,61 @@ mod tests {
         .unwrap();
 
         assert_eq!(req.query_params.len(), 0);
+    }
+
+    // Tests for decode_query_component optimization
+    #[test]
+    fn test_decode_query_component_no_encoding() {
+        // Fast path: no encoding, should return borrowed str
+        let result = decode_query_component("simple");
+        assert_eq!(result, "simple");
+        // Verify it's borrowed
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_plus_only() {
+        // Has + but no %, should replace + with space
+        let result = decode_query_component("hello+world");
+        assert_eq!(result, "hello world");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_percent_only() {
+        // Has % but no +, should decode percent encoding
+        let result = decode_query_component("hello%20world");
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_decode_query_component_both() {
+        // Has both + and %, should handle both
+        let result = decode_query_component("hello+world%21");
+        assert_eq!(result, "hello world!");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_special_chars() {
+        // Test various special characters
+        let result = decode_query_component("test%40example.com");
+        assert_eq!(result, "test@example.com");
+    }
+
+    #[test]
+    fn test_decode_query_component_empty() {
+        // Empty string should be borrowed
+        let result = decode_query_component("");
+        assert_eq!(result, "");
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_invalid_encoding() {
+        // Invalid percent encoding should fall back gracefully
+        let result = decode_query_component("invalid%");
+        // Should still return something (borrowed original on error)
+        assert_eq!(result, "invalid%");
     }
 }
