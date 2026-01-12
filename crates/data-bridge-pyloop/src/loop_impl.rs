@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -58,6 +58,17 @@ pub struct PyLoop {
 
     /// Shared timer wheel for efficient timer management
     timer_wheel: Arc<TimerWheel>,
+
+    /// Condition variable for immediate wakeup (Phase 3.1.3 optimization)
+    ///
+    /// When new tasks are scheduled, the event loop can be woken immediately
+    /// instead of waiting for the sleep timer to expire. This reduces response
+    /// latency from ~0.5ms (average sleep wait) to ~10µs (condvar notification).
+    ///
+    /// The tuple contains:
+    /// - Mutex<bool>: wakeup flag (true when wakeup requested)
+    /// - Condvar: condition variable for notification
+    wakeup_condvar: Arc<(Mutex<bool>, Condvar)>,
 }
 
 #[pymethods]
@@ -90,6 +101,7 @@ impl PyLoop {
             task_receiver: Arc::new(Mutex::new(task_receiver)),
             start_time: Arc::new(Mutex::new(None)),
             timer_wheel,
+            wakeup_condvar: Arc::new((Mutex::new(false), Condvar::new())),
         })
     }
 
@@ -177,6 +189,14 @@ impl PyLoop {
             .map_err(|_| PyLoopError::TaskSpawn(
                 "Failed to schedule callback".to_string()
             ))?;
+
+        // Notify event loop of new task (Phase 3.1.3 optimization)
+        // This wakes the loop immediately instead of waiting for sleep timer
+        let (lock, cvar) = &*self.wakeup_condvar;
+        if let Ok(mut wakeup) = lock.lock() {
+            *wakeup = true;
+            cvar.notify_one();
+        }
 
         Ok(handle)
     }
@@ -512,6 +532,7 @@ impl PyLoop {
         let closed = self.closed.clone();
         let receiver = self.task_receiver.clone();
         let timer_wheel = self.timer_wheel.clone();
+        let wakeup_condvar = self.wakeup_condvar.clone();
 
         // Main event loop - release GIL for better concurrency
         py.allow_threads(|| {
@@ -531,14 +552,25 @@ impl PyLoop {
                     Self::process_tasks_internal(py, &receiver)
                 });
 
-                // Adaptive sleep based on timer wheel (Phase 3.1.2 optimization)
+                // Condvar-based adaptive sleep (Phase 3.1.3 optimization)
+                // Combines adaptive sleep (Phase 3.1.2) with immediate wakeup on new tasks
                 if !has_tasks {
                     // Calculate optimal sleep duration based on next timer expiration
                     let sleep_duration = timer_wheel.calculate_sleep_duration()
                         .unwrap_or(Duration::from_millis(1))  // Default to 1ms if no timers
                         .min(Duration::from_millis(1));        // Cap at 1ms for responsiveness
 
-                    std::thread::sleep(sleep_duration);
+                    // Use condvar to sleep with early wakeup capability
+                    let (lock, cvar) = &*wakeup_condvar;
+                    if let Ok(mut wakeup) = lock.lock() {
+                        // Reset wakeup flag before sleeping
+                        *wakeup = false;
+
+                        // Wait with timeout - will wake early if new task arrives
+                        let _ = cvar.wait_timeout(wakeup, sleep_duration);
+
+                        // Flag will be true if woken by notification, false if timeout
+                    }
                 }
             }
         });
@@ -604,6 +636,7 @@ impl PyLoop {
         let receiver = self.task_receiver.clone();
         let task_clone = task.clone();
         let timer_wheel = self.timer_wheel.clone();
+        let wakeup_condvar = self.wakeup_condvar.clone();
 
         // Release GIL and run loop
         py.allow_threads(|| {
@@ -623,13 +656,18 @@ impl PyLoop {
                     Self::process_tasks_internal(py, &receiver)
                 });
 
-                // Adaptive sleep based on timer wheel (Phase 3.1.2 optimization)
+                // Condvar-based adaptive sleep (Phase 3.1.3 optimization)
                 if !has_tasks {
                     let sleep_duration = timer_wheel.calculate_sleep_duration()
                         .unwrap_or(Duration::from_millis(1))
                         .min(Duration::from_millis(1));
 
-                    std::thread::sleep(sleep_duration);
+                    // Use condvar for early wakeup on new tasks
+                    let (lock, cvar) = &*wakeup_condvar;
+                    if let Ok(mut wakeup) = lock.lock() {
+                        *wakeup = false;
+                        let _ = cvar.wait_timeout(wakeup, sleep_duration);
+                    }
                 }
             }
         });
@@ -770,6 +808,7 @@ impl PyLoop {
             task_receiver: Arc::new(Mutex::new(task_receiver)),
             start_time: Arc::new(Mutex::new(None)),
             timer_wheel,
+            wakeup_condvar: Arc::new((Mutex::new(false), Condvar::new())),
         })
     }
 
