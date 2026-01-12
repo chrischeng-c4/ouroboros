@@ -65,7 +65,7 @@ Python API Layer (document.py, fields.py, query.py)
 
 ## Status
 
-**IN PROGRESS** - Core CRUD operations and schema introspection implemented.
+**Version**: 0.1.0-alpha (Pre-release)
 
 ### Implemented
 - Connection pooling and management ✅
@@ -74,18 +74,60 @@ Python API Layer (document.py, fields.py, query.py)
 - Query builder with WHERE, ORDER BY, LIMIT, OFFSET ✅
 - Transaction support with isolation levels ✅
 - Raw SQL execution ✅
-- **Schema introspection** ✅
-  - `list_tables()` - List all tables in a schema
-  - `table_exists()` - Check if a table exists
-  - `get_columns()` - Get column information (types, constraints, defaults)
-  - `get_indexes()` - Get index information
-  - `inspect_table()` - Get complete table information
+- Schema introspection (tables, columns, indexes, foreign keys) ✅
+- Migration management (up/down migrations) ✅
+- Advanced query features (JOINs) ✅
 
-### TODO
-- Migration management (up/down migrations)
-- Foreign key introspection
-- Advanced query features (JOINs, subqueries)
-- Bulk operations optimization
+### Roadmap (Future Releases)
+- Subquery support
+- Bulk operations optimization with Rayon
+- Connection pool metrics and monitoring
+- Prepared statement caching
+- Advanced migration features (rollback chains, dry-run)
+
+## Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+data-bridge-postgres = "0.1.0-alpha"
+```
+
+Or use via the Python `data-bridge` package:
+
+```bash
+pip install data-bridge[postgres]
+```
+
+## Quick Start
+
+```rust
+use data_bridge_postgres::{ConnectionPool, QueryBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create connection pool
+    let pool = ConnectionPool::new("postgresql://user:pass@localhost/db").await?;
+
+    // Insert data
+    let query = QueryBuilder::new("users")
+        .insert(vec![
+            ("name", "Alice".into()),
+            ("email", "alice@example.com".into()),
+        ]);
+    pool.execute(query).await?;
+
+    // Query data
+    let query = QueryBuilder::new("users")
+        .where_eq("name", "Alice")
+        .limit(10);
+    let rows = pool.fetch_all(query).await?;
+
+    println!("Found {} users", rows.len());
+    Ok(())
+}
+```
 
 ## Dependencies
 
@@ -102,12 +144,41 @@ Python API Layer (document.py, fields.py, query.py)
 # Check compilation
 cargo check -p data-bridge-postgres
 
-# Run tests (when implemented)
+# Run unit tests (no database required)
 cargo test -p data-bridge-postgres
+
+# Run integration tests (requires PostgreSQL)
+# Set POSTGRES_URL or DATABASE_URL environment variable
+export POSTGRES_URL="postgresql://localhost/test_db"
+cargo test -p data-bridge-postgres -- --ignored
+
+# Run specific test suite
+cargo test -p data-bridge-postgres --test test_migration -- --ignored
 
 # Lint
 cargo clippy -p data-bridge-postgres
 ```
+
+### Running Migration Tests
+
+The migration integration tests require a running PostgreSQL database. They are marked with `#[ignore]` to prevent them from running in CI without a database.
+
+```bash
+# Start PostgreSQL (using Docker)
+docker run -d --name postgres-test -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:15
+
+# Create test database
+docker exec -it postgres-test psql -U postgres -c "CREATE DATABASE test_db;"
+
+# Run migration tests
+export POSTGRES_URL="postgresql://postgres:postgres@localhost/test_db"
+cargo test -p data-bridge-postgres --test test_migration -- --ignored
+
+# Clean up
+docker stop postgres-test && docker rm postgres-test
+```
+
+Each test creates its own migration table with a unique name (e.g., `_test_migrations_apply`) to avoid conflicts when running tests in parallel. Tables are automatically cleaned up after each test.
 
 ## License
 

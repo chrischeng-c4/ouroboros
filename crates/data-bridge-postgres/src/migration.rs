@@ -96,9 +96,7 @@ impl Migration {
         })
     }
 
-    /// Parses filename to extract version and description.
-    ///
-    /// Expected format: `20250128_120000_create_users_table`
+    /// Parses filename to extract version and description (expected format: YYYYMMDD_HHMMSS_description).
     fn parse_filename(filename: &str) -> Result<(String, String)> {
         let parts: Vec<&str> = filename.splitn(3, '_').collect();
 
@@ -180,7 +178,7 @@ impl Migration {
         Ok((description, up_sql.trim().to_string(), down_sql.trim().to_string()))
     }
 
-    /// Calculates SHA256 checksum of content.
+    /// Calculates SHA256 checksum for migration content verification.
     fn calculate_checksum(content: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(content.as_bytes());
@@ -196,21 +194,7 @@ enum Section {
     Down,
 }
 
-/// Splits SQL into individual statements, handling comments, empty lines, and dollar-quoted strings.
-///
-/// This function properly handles:
-/// - Multiple statements separated by semicolons
-/// - PostgreSQL dollar-quoted strings ($$...$$ or $tag$...$tag$)
-/// - SQL comments (-- style)
-/// - Empty statements
-///
-/// # Arguments
-///
-/// * `sql` - SQL string potentially containing multiple statements
-///
-/// # Returns
-///
-/// Vector of individual SQL statements
+/// Splits SQL into individual statements, handling PostgreSQL syntax (dollar quotes, comments).
 fn split_sql_statements(sql: &str) -> Vec<String> {
     let mut statements = Vec::new();
     let mut current_statement = String::new();
@@ -301,19 +285,15 @@ fn split_sql_statements(sql: &str) -> Vec<String> {
     statements
 }
 
-/// Migration runner for applying and reverting migrations.
+/// Migration runner for applying, reverting, and tracking database migrations.
+#[derive(Debug)]
 pub struct MigrationRunner {
     conn: Connection,
     migrations_table: String,
 }
 
 impl MigrationRunner {
-    /// Creates a new migration runner.
-    ///
-    /// # Arguments
-    ///
-    /// * `conn` - Database connection
-    /// * `migrations_table` - Name of table to track applied migrations (default: "_migrations")
+    /// Creates a new migration runner with connection and optional custom tracking table.
     pub fn new(conn: Connection, migrations_table: Option<String>) -> Self {
         Self {
             conn,
@@ -344,7 +324,7 @@ impl MigrationRunner {
         Ok(())
     }
 
-    /// Gets list of applied migrations.
+    /// Returns version strings of all applied migrations in sorted order.
     pub async fn applied_migrations(&self) -> Result<Vec<String>> {
         let sql = format!(
             "SELECT version FROM {} ORDER BY version",
@@ -359,7 +339,7 @@ impl MigrationRunner {
         Ok(rows)
     }
 
-    /// Gets list of applied migrations with full details.
+    /// Returns full migration details (version, description, applied_at, checksum) for applied migrations.
     pub async fn applied_migrations_with_details(&self) -> Result<Vec<Migration>> {
         let sql = format!(
             "SELECT version, description, applied_at, checksum FROM {} ORDER BY version",
@@ -395,7 +375,7 @@ impl MigrationRunner {
         Ok(migrations)
     }
 
-    /// Gets list of pending migrations.
+    /// Returns migrations not yet applied by comparing with provided list.
     pub async fn pending_migrations(&self, all_migrations: &[Migration]) -> Result<Vec<Migration>> {
         let applied = self.applied_migrations().await?;
         let applied_set: std::collections::HashSet<_> = applied.into_iter().collect();
@@ -409,7 +389,7 @@ impl MigrationRunner {
         Ok(pending)
     }
 
-    /// Verifies checksum of an applied migration.
+    /// Verifies migration checksum matches stored value to detect modifications.
     async fn verify_checksum(&self, migration: &Migration) -> Result<bool> {
         let sql = format!(
             "SELECT checksum FROM {} WHERE version = $1",
@@ -428,7 +408,7 @@ impl MigrationRunner {
         }
     }
 
-    /// Applies a single migration.
+    /// Applies a migration by executing its up SQL in a transaction.
     pub async fn apply(&self, migration: &Migration) -> Result<()> {
         // Verify checksum if migration was already applied
         if !self.verify_checksum(migration).await? {
@@ -481,7 +461,7 @@ impl MigrationRunner {
         Ok(())
     }
 
-    /// Reverts a single migration.
+    /// Reverts a migration by executing its down SQL in a transaction.
     pub async fn revert(&self, migration: &Migration) -> Result<()> {
         // Begin transaction
         let mut tx = self.conn.pool().begin()
@@ -525,7 +505,7 @@ impl MigrationRunner {
         Ok(())
     }
 
-    /// Applies all pending migrations.
+    /// Applies all pending migrations sequentially, returning applied versions.
     pub async fn migrate(&self, migrations: &[Migration]) -> Result<Vec<String>> {
         let pending = self.pending_migrations(migrations).await?;
 
@@ -545,7 +525,7 @@ impl MigrationRunner {
         Ok(applied)
     }
 
-    /// Reverts the last N migrations.
+    /// Reverts the last N applied migrations in reverse order.
     pub async fn rollback(&self, migrations: &[Migration], count: usize) -> Result<Vec<String>> {
         let applied = self.applied_migrations().await?;
 
@@ -586,9 +566,7 @@ impl MigrationRunner {
         Ok(reverted)
     }
 
-    /// Loads migrations from a directory.
-    ///
-    /// Scans directory for .sql files and loads them as migrations.
+    /// Loads all .sql migration files from directory, sorted by version.
     pub fn load_from_directory(path: &Path) -> Result<Vec<Migration>> {
         if !path.exists() {
             return Err(DataBridgeError::Internal(
@@ -643,7 +621,7 @@ impl MigrationRunner {
         Ok(migrations)
     }
 
-    /// Gets migration status information.
+    /// Returns current migration status with applied and pending lists.
     pub async fn status(&self, migrations: &[Migration]) -> Result<MigrationStatus> {
         let applied = self.applied_migrations().await?;
         let pending = self.pending_migrations(migrations).await?;
@@ -655,12 +633,12 @@ impl MigrationRunner {
     }
 }
 
-/// Migration status information.
+/// Contains lists of applied and pending migration versions.
 #[derive(Debug, Clone)]
 pub struct MigrationStatus {
-    /// List of applied migration versions
+    /// Applied migration versions
     pub applied: Vec<String>,
-    /// List of pending migration versions
+    /// Pending migration versions
     pub pending: Vec<String>,
 }
 

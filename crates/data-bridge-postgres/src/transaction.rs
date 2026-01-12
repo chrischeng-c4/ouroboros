@@ -41,8 +41,14 @@ pub struct Transaction {
     tx: sqlx::Transaction<'static, Postgres>,
 }
 
+impl std::fmt::Debug for Transaction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Transaction").finish_non_exhaustive()
+    }
+}
+
 impl Transaction {
-    /// Returns a mutable reference to the underlying sqlx transaction.
+    /// Returns a mutable reference to the underlying sqlx transaction for direct query execution.
     pub fn as_mut_transaction(&mut self) -> &mut sqlx::Transaction<'static, Postgres> {
         &mut self.tx
     }

@@ -42,6 +42,15 @@ pub struct Connection {
     pool: PgPool,
 }
 
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Connection")
+            .field("size", &self.pool.size())
+            .field("num_idle", &self.pool.num_idle())
+            .finish()
+    }
+}
+
 impl Connection {
     /// Creates a new connection pool.
     ///

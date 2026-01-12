@@ -370,15 +370,22 @@ pub struct WindowSpec {
 }
 
 impl WindowSpec {
+    /// Creates a new empty window specification.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the PARTITION BY columns for the window.
+    ///
+    /// This divides rows into groups that share common values in the specified columns.
     pub fn partition_by(mut self, columns: &[&str]) -> Self {
         self.partition_by = columns.iter().map(|s| s.to_string()).collect();
         self
     }
 
+    /// Adds an ORDER BY clause to the window specification.
+    ///
+    /// This defines the ordering of rows within each partition.
     pub fn order_by(mut self, column: &str, direction: OrderDirection) -> Self {
         self.order_by.push((column.to_string(), direction));
         self

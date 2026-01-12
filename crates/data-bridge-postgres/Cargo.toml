@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "High-performance async PostgreSQL ORM for Python with Rust backend"
+repository.workspace = true
+keywords = ["postgres", "postgresql", "orm", "async", "database"]
+categories = ["database", "asynchronous"]
 
 [dependencies]
 # Async runtime
@@ -45,3 +48,9 @@ unicode-normalization = "0.1"
 [dev-dependencies]
 tokio-test = "0.4"
 data-bridge-test = { path = "../data-bridge-test" }
+criterion = "0.5"
+tempfile = "3.8"
+
+[[bench]]
+name = "main"
+harness = false

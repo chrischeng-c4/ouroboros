@@ -237,7 +237,9 @@ pub struct ManyToManyConfig {
 }
 
 impl ManyToManyConfig {
-    /// Create a new ManyToManyConfig with sensible defaults
+    /// Creates a new ManyToManyConfig with sensible defaults.
+    ///
+    /// Default reference columns are "id" and cascade rule is CASCADE.
     pub fn new(
         join_table: impl Into<String>,
         source_key: impl Into<String>,
@@ -255,19 +257,19 @@ impl ManyToManyConfig {
         }
     }
 
-    /// Set the source reference column
+    /// Sets the source reference column (default: "id").
     pub fn with_source_reference(mut self, col: impl Into<String>) -> Self {
         self.source_reference = col.into();
         self
     }
 
-    /// Set the target reference column
+    /// Sets the target reference column (default: "id").
     pub fn with_target_reference(mut self, col: impl Into<String>) -> Self {
         self.target_reference = col.into();
         self
     }
 
-    /// Set the on_delete cascade rule
+    /// Sets the on_delete cascade rule (default: CASCADE).
     pub fn with_on_delete(mut self, rule: CascadeRule) -> Self {
         self.on_delete = rule;
         self
@@ -289,55 +291,75 @@ pub struct TableInfo {
     pub foreign_keys: Vec<ForeignKeyInfo>,
 }
 
-/// Represents a change to a column
+/// Represents a change to a column.
 #[derive(Debug, Clone)]
 pub enum ColumnChange {
+    /// Column was added to the table.
     Added(ColumnInfo),
+    /// Column was removed from the table.
     Removed(ColumnInfo),
+    /// Column data type was changed.
     TypeChanged { old: ColumnInfo, new: ColumnInfo },
+    /// Column nullability constraint was changed.
     NullabilityChanged { old: ColumnInfo, new: ColumnInfo },
+    /// Column default value was changed.
     DefaultChanged { old: ColumnInfo, new: ColumnInfo },
 }
 
-/// Represents a change to an index
+/// Represents a change to an index.
 #[derive(Debug, Clone)]
 pub enum IndexChange {
+    /// Index was created.
     Added(IndexInfo),
+    /// Index was dropped.
     Removed(IndexInfo),
 }
 
-/// Represents a change to a foreign key
+/// Represents a change to a foreign key.
 #[derive(Debug, Clone)]
 pub enum ForeignKeyChange {
+    /// Foreign key constraint was added.
     Added(ForeignKeyInfo),
+    /// Foreign key constraint was removed.
     Removed(ForeignKeyInfo),
 }
 
-/// Represents a change to a table
+/// Represents a change to a table.
 #[derive(Debug, Clone)]
 pub enum TableChange {
+    /// Table was created.
     Created(TableInfo),
-    Dropped(String),  // table name
+    /// Table was dropped (contains table name).
+    Dropped(String),
+    /// Table was altered with column, index, or foreign key changes.
     Altered {
+        /// Name of the altered table.
         table_name: String,
+        /// Column modifications.
         column_changes: Vec<ColumnChange>,
+        /// Index modifications.
         index_changes: Vec<IndexChange>,
+        /// Foreign key modifications.
         foreign_key_changes: Vec<ForeignKeyChange>,
     },
 }
 
-/// Represents the difference between two schemas
+/// Represents the difference between two schemas.
 #[derive(Debug, Clone, Default)]
 pub struct SchemaDiff {
+    /// List of table changes detected.
     pub changes: Vec<TableChange>,
 }
 
 impl SchemaDiff {
+    /// Creates a new empty schema diff.
     pub fn new() -> Self {
         Self { changes: Vec::new() }
     }
 
-    /// Compare two sets of table info and generate the diff
+    /// Compares two sets of table info and generates the diff.
+    ///
+    /// Detects created, dropped, and altered tables including column, index, and foreign key changes.
     pub fn compare(current: &[TableInfo], desired: &[TableInfo]) -> Self {
         let mut diff = SchemaDiff::new();
 
@@ -471,12 +493,12 @@ impl SchemaDiff {
         changes
     }
 
-    /// Check if there are any changes
+    /// Checks if there are any changes.
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
 
-    /// Generate the UP migration SQL
+    /// Generates the UP migration SQL to apply changes.
     pub fn generate_up_sql(&self) -> String {
         let mut statements = Vec::new();
 
@@ -515,7 +537,9 @@ impl SchemaDiff {
         statements.join("\n\n")
     }
 
-    /// Generate the DOWN migration SQL (reverse of UP)
+    /// Generates the DOWN migration SQL to revert changes.
+    ///
+    /// Note: Dropped tables cannot be fully reconstructed and will include placeholder comments.
     pub fn generate_down_sql(&self) -> String {
         let mut statements = Vec::new();
 
@@ -734,18 +758,19 @@ impl SchemaDiff {
     }
 }
 
-/// Schema introspection utilities.
+/// Schema introspection utilities for querying database metadata.
+#[derive(Debug)]
 pub struct SchemaInspector {
     conn: Connection,
 }
 
 impl SchemaInspector {
-    /// Creates a new schema inspector.
+    /// Creates a new schema inspector from a connection.
     pub fn new(conn: Connection) -> Self {
         Self { conn }
     }
 
-    /// Lists all tables in the database.
+    /// Lists all tables in the specified schema (defaults to "public").
     pub async fn list_tables(&self, schema: Option<&str>) -> Result<Vec<String>> {
         let schema_name = schema.unwrap_or("public");
 
@@ -766,7 +791,7 @@ impl SchemaInspector {
         Ok(tables)
     }
 
-    /// Gets detailed information about a table.
+    /// Gets detailed information about a table including columns, indexes, and foreign keys.
     pub async fn inspect_table(&self, table: &str, schema: Option<&str>) -> Result<TableInfo> {
         let schema_name = schema.unwrap_or("public");
 
@@ -791,7 +816,7 @@ impl SchemaInspector {
         })
     }
 
-    /// Checks if a table exists.
+    /// Checks if a table exists in the specified schema.
     pub async fn table_exists(&self, table: &str, schema: Option<&str>) -> Result<bool> {
         let schema_name = schema.unwrap_or("public");
 
@@ -810,7 +835,7 @@ impl SchemaInspector {
         Ok(exists)
     }
 
-    /// Gets column information for a table.
+    /// Gets column information for a table including types, constraints, and defaults.
     pub async fn get_columns(&self, table: &str, schema: Option<&str>) -> Result<Vec<ColumnInfo>> {
         let schema_name = schema.unwrap_or("public");
 
@@ -918,7 +943,7 @@ impl SchemaInspector {
         }
     }
 
-    /// Gets index information for a table.
+    /// Gets index information for a table including columns and uniqueness constraints.
     pub async fn get_indexes(&self, table: &str, schema: Option<&str>) -> Result<Vec<IndexInfo>> {
         let schema_name = schema.unwrap_or("public");
 
@@ -1025,7 +1050,7 @@ impl SchemaInspector {
         Ok(foreign_keys)
     }
 
-    /// Get all tables that reference a given table (back-references).
+    /// Gets all tables that reference a given table (back-references).
     ///
     /// Returns a list of back-references showing which tables have foreign keys
     /// pointing to the specified table.
@@ -1078,7 +1103,7 @@ impl SchemaInspector {
         Ok(backrefs)
     }
 
-    /// Detect potential many-to-many relationships by finding join tables.
+    /// Detects potential many-to-many relationships by finding join tables.
     ///
     /// A join table is detected when:
     /// - Table has exactly 2 foreign key columns
@@ -1155,7 +1180,7 @@ impl SchemaInspector {
     }
 }
 
-/// Detect potential many-to-many relationships by finding join tables (standalone function).
+/// Detects potential many-to-many relationships by finding join tables (standalone function).
 ///
 /// A join table is detected when:
 /// - Table has exactly 2 foreign key columns
