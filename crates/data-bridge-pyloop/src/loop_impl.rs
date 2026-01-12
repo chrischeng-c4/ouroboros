@@ -511,6 +511,7 @@ impl PyLoop {
         let stopped = self.stopped.clone();
         let closed = self.closed.clone();
         let receiver = self.task_receiver.clone();
+        let timer_wheel = self.timer_wheel.clone();
 
         // Main event loop - release GIL for better concurrency
         py.allow_threads(|| {
@@ -530,9 +531,14 @@ impl PyLoop {
                     Self::process_tasks_internal(py, &receiver)
                 });
 
-                // If no tasks, sleep briefly to avoid busy-waiting
+                // Adaptive sleep based on timer wheel (Phase 3.1.2 optimization)
                 if !has_tasks {
-                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    // Calculate optimal sleep duration based on next timer expiration
+                    let sleep_duration = timer_wheel.calculate_sleep_duration()
+                        .unwrap_or(Duration::from_millis(1))  // Default to 1ms if no timers
+                        .min(Duration::from_millis(1));        // Cap at 1ms for responsiveness
+
+                    std::thread::sleep(sleep_duration);
                 }
             }
         });
@@ -597,6 +603,7 @@ impl PyLoop {
         let closed = self.closed.clone();
         let receiver = self.task_receiver.clone();
         let task_clone = task.clone();
+        let timer_wheel = self.timer_wheel.clone();
 
         // Release GIL and run loop
         py.allow_threads(|| {
@@ -612,12 +619,18 @@ impl PyLoop {
                 }
 
                 // Process pending tasks (reacquire GIL)
-                Python::with_gil(|py| {
-                    Self::process_tasks_internal(py, &receiver);
+                let has_tasks = Python::with_gil(|py| {
+                    Self::process_tasks_internal(py, &receiver)
                 });
 
-                // Brief sleep to avoid busy-waiting
-                std::thread::sleep(std::time::Duration::from_millis(1));
+                // Adaptive sleep based on timer wheel (Phase 3.1.2 optimization)
+                if !has_tasks {
+                    let sleep_duration = timer_wheel.calculate_sleep_duration()
+                        .unwrap_or(Duration::from_millis(1))
+                        .min(Duration::from_millis(1));
+
+                    std::thread::sleep(sleep_duration);
+                }
             }
         });
 

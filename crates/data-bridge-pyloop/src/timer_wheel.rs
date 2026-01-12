@@ -221,6 +221,48 @@ impl TimerWheel {
         timers.keys().next().copied()
     }
 
+    /// Calculate the optimal sleep duration until the next timer expires
+    ///
+    /// This method is used by the event loop to implement adaptive sleeping,
+    /// which reduces CPU usage and improves timer precision.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(Duration)` if there are pending timers
+    /// - `None` if there are no pending timers
+    ///
+    /// # Algorithm
+    ///
+    /// - If next timer expires in the future: sleep for that duration
+    /// - If next timer already expired: return Duration::ZERO (process immediately)
+    /// - If no timers: return None (caller should use default sleep)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let sleep_duration = timer_wheel.calculate_sleep_duration()
+    ///     .unwrap_or(Duration::from_millis(1))  // Default to 1ms
+    ///     .min(Duration::from_millis(1));        // Cap at 1ms
+    /// ```
+    pub fn calculate_sleep_duration(&self) -> Option<Duration> {
+        match self.get_next_expiration() {
+            Some(next_expiry) => {
+                let now = Instant::now();
+                if next_expiry > now {
+                    // Timer expires in the future - sleep until then
+                    Some(next_expiry - now)
+                } else {
+                    // Timer already expired - process immediately
+                    Some(Duration::ZERO)
+                }
+            }
+            None => {
+                // No timers pending
+                None
+            }
+        }
+    }
+
     /// Run the timer wheel processor
     ///
     /// This is the main loop that should be spawned as a background task.
