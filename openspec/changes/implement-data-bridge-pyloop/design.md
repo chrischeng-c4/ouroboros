@@ -57,6 +57,56 @@ data_bridge_pyloop::install(); // Sets asyncio event loop policy
 3.  **Phase 3**: Verify compliance with `pytest-asyncio`.
 4.  **Phase 4**: Refactor `data-bridge-api` to remove thread-local loops and rely on `pyloop`.
 
+## Why Not Existing Solutions?
+
+### Why Not uvloop?
+uvloop is the current market leader (3-5x faster than asyncio), but has critical limitations for data-bridge:
+
+1. **No Rust Integration**: uvloop is written in Cython/C, cannot access Tokio runtime
+2. **Single-threaded**: Cannot leverage multiple CPU cores (Python GIL limitation)
+3. **Not Composable**: Cannot mix with Rust-native async runtimes
+4. **Still requires thread-local loops**: Doesn't solve our core architectural problem
+
+**Benchmark comparison** (expected):
+```
+uvloop:            ~40,000 req/sec (libuv-based, single-threaded)
+data-bridge-pyloop: ~60,000 req/sec (Tokio-based, multicore)
+```
+
+### Why Not pyo3-asyncio?
+pyo3-asyncio bridges Tokio and asyncio, but uses a **dual event loop architecture**:
+
+```
+Python asyncio loop (main)
+    ↓
+    Spawns Tokio runtime as background thread
+    ↓
+    Marshaling overhead between loops
+```
+
+**Problems**:
+1. Two separate event loops running concurrently
+2. Marshaling overhead when converting between Python and Rust coroutines
+3. Complex state management (two runtime states)
+4. data-bridge already runs in Tokio - we need the reverse integration
+
+**data-bridge-pyloop approach** (single event loop):
+```
+Tokio runtime (main)
+    ↓
+    Python coroutines execute as Tokio tasks
+    ↓
+    Zero-copy, single runtime state
+```
+
+### Performance Foundation
+data-bridge MongoDB ORM already proves this architecture:
+- **1.4-5.4x faster than Beanie** (pure Python ORM)
+- Zero Python byte handling (all BSON in Rust)
+- GIL minimization (released during processing)
+
+Applying the same principles to the event loop should yield similar improvements.
+
 ## Risks
 - **Coroutine Lifecycle**: Python coroutines expect to be polled in a specific way. Mismatch can cause leaks (seen in Phase 7).
 - **Signal Handling**: Handling Ctrl+C correctly in a custom loop is tricky.

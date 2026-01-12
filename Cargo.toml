@@ -11,6 +11,7 @@ members = [
     "crates/data-bridge-kv-client",
     "crates/data-bridge-api",
     "crates/data-bridge-tasks",
+    "crates/data-bridge-pyloop",
     "crates/data-bridge-sheet-core",
     "crates/data-bridge-sheet-db",
     "crates/data-bridge-sheet-formula",

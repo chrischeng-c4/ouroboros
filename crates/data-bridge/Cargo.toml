@@ -38,6 +38,7 @@ data-bridge-postgres = { path = "../data-bridge-postgres", optional = true }
 data-bridge-kv-client = { path = "../data-bridge-kv-client", optional = true }
 data-bridge-api = { path = "../data-bridge-api", optional = true }
 data-bridge-tasks = { path = "../data-bridge-tasks", optional = true }
+data-bridge-pyloop = { path = "../data-bridge-pyloop", optional = true }
 data-bridge-common = { path = "../data-bridge-common" }
 
 # Base64 encoding for binary data
@@ -55,6 +56,7 @@ postgres = ["data-bridge-postgres", "sqlx"]
 kv = ["data-bridge-kv-client"]
 api = ["data-bridge-api"]
 tasks = ["data-bridge-tasks"]
+pyloop = ["data-bridge-pyloop"]
 tasks-nats = ["tasks", "data-bridge-tasks/nats"]
 tasks-pubsub = ["tasks", "data-bridge-tasks/pubsub"]
 tasks-redis = ["tasks", "data-bridge-tasks/redis"]

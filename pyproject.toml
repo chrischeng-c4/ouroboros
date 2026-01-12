@@ -49,7 +49,7 @@ comparison = [
 module-name = "data_bridge"
 python-source = "python"
 manifest-path = "crates/data-bridge/Cargo.toml"
-features = ["mongodb", "postgres", "http", "test", "kv", "api"]  # Build with all features
+features = ["mongodb", "postgres", "http", "test", "kv", "api", "pyloop"]  # Build with all features
 
 [tool.ruff]
 line-length = 100

@@ -53,6 +53,12 @@ try:
 except ImportError:
     kv = None  # KV feature not enabled
 
+# Import PyLoop module if available (feature-gated)
+try:
+    from .data_bridge import _pyloop
+except (ImportError, AttributeError):
+    _pyloop = None  # PyLoop feature not enabled
+
 # Re-export commonly used classes from mongodb for convenience/backward compatibility
 from .mongodb import (
     Document, Settings, EmbeddedDocument,

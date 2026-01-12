@@ -1142,6 +1142,7 @@ dependencies = [
  "data-bridge-kv-client",
  "data-bridge-mongodb",
  "data-bridge-postgres",
+ "data-bridge-pyloop",
  "data-bridge-tasks",
  "data-bridge-test",
  "futures",
@@ -1324,6 +1325,21 @@ dependencies = [
  "tracing",
  "unicode-normalization",
  "uuid",
+]
+
+[[package]]
+name = "data-bridge-pyloop"
+version = "0.1.0"
+dependencies = [
+ "data-bridge-common",
+ "futures",
+ "once_cell",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
 ]
 
 [[package]]
