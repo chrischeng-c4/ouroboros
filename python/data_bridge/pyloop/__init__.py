@@ -308,9 +308,9 @@ class App:
         self,
         document_cls,
         prefix: Optional[str] = None,
-        tags: Optional[list] = None,
-        # Operation control - can use boolean or string
+        *,
         operations: Optional[str] = None,
+        tags: Optional[list] = None,
         create: bool = True,
         read: bool = True,
         update: bool = True,
@@ -323,10 +323,11 @@ class App:
         Args:
             document_cls: Document class to generate CRUD for
             prefix: URL prefix (default: /collection_name)
-            tags: OpenAPI tags (default: [collection_name])
+                   Can be passed as positional argument: app.crud_routes(Product, "/products")
             operations: String specifying operations (e.g., "CRUDL", "CR", "RUD")
                        C=Create, R=Read, U=Update, D=Delete, L=List
                        If provided, overrides individual flags
+            tags: OpenAPI tags (default: [collection_name])
             create: Generate POST endpoint (default: True)
             read: Generate GET /{id} endpoint (default: True)
             update: Generate PUT /{id} endpoint (default: True)
@@ -334,17 +335,20 @@ class App:
             list: Generate GET / endpoint with pagination (default: True)
 
         Example:
-            # All operations (default)
+            # All operations with default prefix
             app.crud_routes(Product)
+
+            # Custom prefix (positional argument - recommended)
+            app.crud_routes(Product, "/products")
+
+            # With operation string
+            app.crud_routes(Product, "/products", operations="RL")
 
             # Only read operations
             app.crud_routes(Product, operations="RL")
 
             # Explicit flags
-            app.crud_routes(Product, create=True, read=True, list=False)
-
-            # Custom prefix
-            app.crud_routes(Product, prefix="/api/products")
+            app.crud_routes(Product, "/products", create=True, read=True, list=False)
         """
         # Parse operations string if provided
         if operations is not None:

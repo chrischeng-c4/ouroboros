@@ -188,6 +188,28 @@ def test_crud_routes_method_exists():
     assert callable(app.crud_routes)
 
 
+def test_crud_routes_positional_prefix():
+    """Test that prefix can be passed as positional argument."""
+    app = App(title="Test API", version="1.0.0")
+
+    # Prefix as positional argument (most concise syntax)
+    app.crud_routes(SampleProduct, "/api/products")
+
+    # Should also work with operations
+    app.crud_routes(SampleProduct, "/api/v2/products", operations="RL")
+
+
+def test_crud_routes_positional_and_keyword():
+    """Test mixing positional prefix with keyword arguments."""
+    app = App(title="Test API", version="1.0.0")
+
+    # Prefix positional, operations keyword
+    app.crud_routes(SampleProduct, "/products", operations="CRUDL")
+
+    # Prefix positional, boolean flags as keywords
+    app.crud_routes(SampleProduct, "/api/products", create=True, delete=False)
+
+
 if __name__ == "__main__":
     # Run tests
     pytest.main([__file__, "-v"])

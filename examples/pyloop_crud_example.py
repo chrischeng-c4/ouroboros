@@ -45,17 +45,17 @@ class Product(Document):
 # Create app
 app = App(title="Product API (Auto-CRUD)", version="1.0.0")
 
-# Method 1: All operations (default) - Direct call, no decorator!
+# Method 1: All operations with default prefix (/products)
 app.crud_routes(Product)
 
-# Method 2: Only enable read operations (string shorthand)
-# app.crud_routes(Product, operations="RL")  # Read + List only
+# Method 2: Custom prefix (positional argument - most concise!)
+# app.crud_routes(Product, "/api/products")
 
-# Method 3: Explicit flags (boolean parameters)
-# app.crud_routes(Product, create=True, read=True, update=False, delete=False, list=True)
+# Method 3: Custom prefix + operation string
+# app.crud_routes(Product, "/products", operations="RL")  # Read + List only
 
-# Method 4: Custom prefix
-# app.crud_routes(Product, prefix="/api/v1/products")
+# Method 4: Explicit boolean flags
+# app.crud_routes(Product, "/products", create=True, read=True, delete=False)
 
 # You can still add custom endpoints
 @app.get("/")
