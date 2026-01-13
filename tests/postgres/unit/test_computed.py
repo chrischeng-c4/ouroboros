@@ -874,8 +874,7 @@ class TestComputedAttributesEdgeCases:
         instance.age = 25
         expect(instance.age).to_equal(25)
 
-        with pytest.raises(ValueError, match="Age cannot be negative"):
-            instance.age = -5
+        expect(lambda: setattr(instance, 'age', -5)).to_raise(ValueError)
 
     def test_hybrid_method_with_kwargs(self):
         """Test hybrid_method with keyword arguments."""

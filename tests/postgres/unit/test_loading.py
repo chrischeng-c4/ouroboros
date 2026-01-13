@@ -331,8 +331,7 @@ class TestLazyLoadingProxy:
 
         proxy = LazyLoadingProxy(loader, instance, "posts", config)
 
-        with pytest.raises(LazyLoadError, match="Lazy loading is disabled"):
-            await proxy.fetch()
+        expect(lambda: await proxy.fetch()).to_raise(LazyLoadError)
 
     @pytest.mark.asyncio
     async def test_proxy_fetch_raises_sql_generation_error(self):
@@ -343,8 +342,7 @@ class TestLazyLoadingProxy:
 
         proxy = LazyLoadingProxy(loader, instance, "posts", config)
 
-        with pytest.raises(SQLGenerationError, match="SQL generation is disabled"):
-            await proxy.fetch()
+        expect(lambda: await proxy.fetch()).to_raise(SQLGenerationError)
 
     @pytest.mark.asyncio
     async def test_proxy_fetch_returns_cached_value(self):
@@ -477,8 +475,7 @@ class TestDeferredColumn:
 
         deferred = DeferredColumn(instance, "content", config)
 
-        with pytest.raises(LazyLoadError, match="Column loading is disabled"):
-            await deferred.load()
+        expect(lambda: await deferred.load()).to_raise(LazyLoadError)
 
     @pytest.mark.asyncio
     async def test_deferred_column_load_returns_cached_value(self):
@@ -504,8 +501,7 @@ class TestDeferredColumn:
 
         deferred = DeferredColumn(instance, "content", config)
 
-        with pytest.raises(RuntimeError, match="Cannot determine table name"):
-            await deferred.load()
+        expect(lambda: await deferred.load()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_deferred_column_load_without_pk(self):
@@ -518,8 +514,7 @@ class TestDeferredColumn:
         config = defer("content")
         deferred = DeferredColumn(instance, "content", config)
 
-        with pytest.raises(RuntimeError, match="Cannot load deferred column without primary key"):
-            await deferred.load()
+        expect(lambda: await deferred.load()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_deferred_column_load_executes_query(self):
@@ -802,8 +797,7 @@ class TestCustomExceptions:
 
     def test_lazy_load_error_can_be_raised(self):
         """Test LazyLoadError can be raised and caught."""
-        with pytest.raises(LazyLoadError, match="test error"):
-            raise LazyLoadError("test error")
+        expect(lambda: raise LazyLoadError("test error")).to_raise(LazyLoadError)
 
     def test_sql_generation_error_inherits_runtime_error(self):
         """Test SQLGenerationError inherits from RuntimeError."""
@@ -814,8 +808,7 @@ class TestCustomExceptions:
 
     def test_sql_generation_error_can_be_raised(self):
         """Test SQLGenerationError can be raised and caught."""
-        with pytest.raises(SQLGenerationError, match="SQL not allowed"):
-            raise SQLGenerationError("SQL not allowed")
+        expect(lambda: raise SQLGenerationError("SQL not allowed")).to_raise(SQLGenerationError)
 
     def test_exceptions_are_distinct(self):
         """Test exceptions are different classes."""

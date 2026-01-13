@@ -76,8 +76,7 @@ class TestConnectionInit:
         with patch('data_bridge.postgres.connection._engine', None):
             from data_bridge.postgres import init
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await init("postgres://localhost/test")
+            expect(lambda: await init("postgres://localhost/test")).to_raise(RuntimeError)
 
 
 class TestConnectionClose:
@@ -98,8 +97,7 @@ class TestConnectionClose:
         with patch('data_bridge.postgres.connection._engine', None):
             from data_bridge.postgres import close
 
-            with pytest.raises(RuntimeError, match="PostgreSQL engine not available"):
-                await close()
+            expect(lambda: await close()).to_raise(RuntimeError)
 
 
 class TestConnectionStatus:

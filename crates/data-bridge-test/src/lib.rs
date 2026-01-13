@@ -23,7 +23,10 @@ pub mod assertions;
 pub mod baseline;
 pub mod benchmark;
 pub mod discovery;
+pub mod fixtures;
+pub mod hooks;
 pub mod http_server;
+pub mod parametrize;
 pub mod performance;
 pub mod reporter;
 pub mod runner;
@@ -44,7 +47,12 @@ pub use discovery::{
     DiscoveryConfig, FileType, FileInfo, TestRegistry, BenchmarkRegistry, DiscoveryStats,
     walk_files, filter_files,
 };
-pub use http_server::{TestServer, TestServerHandle, RouteConfig};
+pub use fixtures::{FixtureMeta, FixtureRegistry, FixtureScope};
+pub use hooks::HookType;
+pub use http_server::{TestServer, TestServerHandle, TestServerConfig, RouteConfig};
+pub use parametrize::{
+    Parameter, ParameterSet, ParameterValue, ParametrizedTest,
+};
 
 // Re-export performance types (from performance module)
 pub use performance::{

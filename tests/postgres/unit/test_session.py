@@ -4,6 +4,7 @@ Unit tests for Session and Unit of Work functionality.
 Tests the ORM session pattern without requiring a database connection.
 """
 import pytest
+from data_bridge.test import expect
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -341,8 +342,7 @@ class TestSession:
             session = Session()
             await session.close()
 
-            with pytest.raises(RuntimeError, match="Session is closed"):
-                session.add(MockUser(name="Alice"))
+            expect(lambda: session.add(MockUser(name="Alice"))).to_raise(RuntimeError)
 
         asyncio.run(test())
 

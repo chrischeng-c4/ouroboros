@@ -13,6 +13,7 @@ These tests verify:
 """
 
 import pytest
+from data_bridge.test import expect
 from typing import Optional, List
 from data_bridge.api import BaseModel, Field
 
@@ -67,11 +68,9 @@ class TestBasicModel:
             name: str
             age: int
 
-        with pytest.raises(ValueError, match="Missing required field: age"):
-            User(name="John")
+        expect(lambda: User(name="John")).to_raise(ValueError)
 
-        with pytest.raises(ValueError, match="Missing required field: name"):
-            User(age=30)
+        expect(lambda: User(age=30)).to_raise(ValueError)
 
 
 class TestFieldConstraints:

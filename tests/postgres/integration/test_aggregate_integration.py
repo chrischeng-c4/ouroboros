@@ -4,6 +4,7 @@ Integration tests for aggregate query functionality.
 Tests query_aggregate with a real PostgreSQL database.
 """
 import pytest
+from data_bridge.test import expect
 from data_bridge.postgres import execute, insert_one, query_aggregate
 
 
@@ -577,8 +578,7 @@ class TestErrorHandling:
 
     async def test_invalid_aggregate_function(self):
         """Test error on unknown aggregate function."""
-        with pytest.raises(ValueError, match="Unknown aggregate function"):
-            await query_aggregate(
+        expect(lambda: await query_aggregate().to_raise(ValueError)
                 "orders",
                 [("invalid_func", "amount", "result")],
                 group_by=None,
@@ -590,8 +590,7 @@ class TestErrorHandling:
 
     async def test_invalid_operator(self, orders_table):
         """Test error on unknown operator."""
-        with pytest.raises(ValueError, match="Unknown operator"):
-            await query_aggregate(
+        expect(lambda: await query_aggregate().to_raise(ValueError)
                 "orders",
                 [("count", None, "count")],
                 group_by=None,

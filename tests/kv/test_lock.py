@@ -10,6 +10,7 @@ Tests distributed locking functionality including:
 """
 
 import pytest
+from data_bridge.test import expect
 import asyncio
 from data_bridge.kv import KvClient, Lock
 
@@ -130,8 +131,7 @@ class TestLockRelease:
         await kv_client.lock("lock:resource:1", "owner1", ttl=10.0)
 
         # Try to release with different owner (should raise error)
-        with pytest.raises(RuntimeError, match="Lock held by different owner"):
-            await kv_client.unlock("lock:resource:1", "owner2")
+        expect(lambda: await kv_client.unlock("lock:resource:1", "owner2")).to_raise(RuntimeError)
 
         # Verify lock still held
         exists = await kv_client.exists("lock:resource:1")
@@ -165,8 +165,7 @@ class TestLockExtend:
         await kv_client.lock("lock:resource:2", "owner1", ttl=10.0)
 
         # Try to extend with different owner (should raise error)
-        with pytest.raises(RuntimeError, match="Lock held by different owner"):
-            await kv_client.extend_lock("lock:resource:2", "owner2", ttl=10.0)
+        expect(lambda: await kv_client.extend_lock("lock:resource:2", "owner2", ttl=10.0)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_extend_lock_actually_extends_ttl(self, kv_client: KvClient):

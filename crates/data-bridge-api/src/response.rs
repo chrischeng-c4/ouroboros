@@ -289,6 +289,11 @@ impl Response {
         self
     }
 
+    /// Get the HTTP status code
+    pub fn get_status(&self) -> u16 {
+        self.inner.status_code
+    }
+
     /// Add header (builder pattern)
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.inner = self.inner.header(name, value);

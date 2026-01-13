@@ -603,8 +603,7 @@ class TestPolymorphicQueryMixin:
             name: str
             type: str
 
-        with pytest.raises(NotImplementedError) as exc_info:
-            await Employee.fetch_polymorphic()
+        exc_info = expect(lambda: await Employee.fetch_polymorphic()).to_raise(NotImplementedError)
 
         expect("Polymorphic queries require integration" in str(exc_info.value)).to_be_true()
 

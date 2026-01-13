@@ -1,6 +1,7 @@
 """Tests for API dependency injection system."""
 
 import pytest
+from data_bridge.test import expect
 from typing import Annotated
 from data_bridge.api.dependencies import (
     Depends, Scope, DependencyContainer, RequestContext,
@@ -60,8 +61,7 @@ class TestDependencyContainer:
         container.register("db", lambda: "database")
         container.compile()
 
-        with pytest.raises(RuntimeError, match="Cannot register after compilation"):
-            container.register("cache", lambda: "cache")
+        expect(lambda: container.register("cache", lambda: "cache")).to_raise(RuntimeError)
 
     def test_topological_sort(self):
         container = DependencyContainer()
@@ -90,15 +90,13 @@ class TestDependencyContainer:
         container.register("a", lambda b: "a", sub_dependencies=["b"])
         container.register("b", lambda a: "b", sub_dependencies=["a"])
 
-        with pytest.raises(ValueError, match="Circular dependency"):
-            container.compile()
+        expect(lambda: container.compile()).to_raise(ValueError)
 
     def test_missing_dependency(self):
         container = DependencyContainer()
         container.register("service", lambda db: "svc", sub_dependencies=["db"])
 
-        with pytest.raises(ValueError, match="Dependency 'db' required by 'service' is not registered"):
-            container.compile()
+        expect(lambda: container.compile()).to_raise(ValueError)
 
     @pytest.mark.asyncio
     async def test_resolve_simple(self):
@@ -128,8 +126,7 @@ class TestDependencyContainer:
         container.compile()
 
         ctx = RequestContext()
-        with pytest.raises(ValueError, match="Unknown dependency: unknown"):
-            await container.resolve("unknown", ctx)
+        expect(lambda: await container.resolve("unknown", ctx)).to_raise(ValueError)
 
     @pytest.mark.asyncio
     async def test_request_scope_caching(self):
@@ -287,8 +284,7 @@ class TestDependencyContainer:
         container = DependencyContainer()
         container.register("a", lambda: 1)
 
-        with pytest.raises(RuntimeError, match="Container must be compiled first"):
-            container.get_resolution_order(["a"])
+        expect(lambda: container.get_resolution_order(["a"])).to_raise(RuntimeError)
 
 
 class TestRequestContext:

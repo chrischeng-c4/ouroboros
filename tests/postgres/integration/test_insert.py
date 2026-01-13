@@ -77,8 +77,7 @@ class TestInsertOne:
         expect(result1["email"]).to_equal("alice@example.com")
 
         # Try to insert duplicate email (should fail)
-        with pytest.raises(Exception) as exc_info:
-            await insert_one(
+        exc_info = expect(lambda: await insert_one().to_raise(Exception)
                 "test_insert_users",
                 {"email": "alice@example.com", "name": "Alice Duplicate"}
             )
@@ -254,8 +253,7 @@ class TestInsertMany:
         ]
 
         # Should fail due to duplicate email in batch
-        with pytest.raises(Exception) as exc_info:
-            await insert_many("test_insert_users", users)
+        exc_info = expect(lambda: await insert_many("test_insert_users", users)).to_raise(Exception)
 
         # Verify error indicates unique constraint violation
         error_msg = str(exc_info.value).lower()
@@ -274,8 +272,7 @@ class TestInsertErrors:
         Verifies that appropriate error is raised when table doesn't exist.
         """
         # Try to insert to non-existent table
-        with pytest.raises(Exception) as exc_info:
-            await insert_one(
+        exc_info = expect(lambda: await insert_one().to_raise(Exception)
                 "nonexistent_table",
                 {"name": "Alice"}
             )
@@ -301,8 +298,7 @@ class TestInsertErrors:
         """)
 
         # Try to insert without required email column
-        with pytest.raises(Exception) as exc_info:
-            await insert_one(
+        exc_info = expect(lambda: await insert_one().to_raise(Exception)
                 "test_insert_users",
                 {"name": "Alice"}  # Missing required 'email'
             )

@@ -6,6 +6,17 @@ description = "High-performance API framework with Rust backend"
 license = "MIT OR Apache-2.0"
 rust-version = "1.70"
 
+[features]
+default = []
+# OpenTelemetry distributed tracing support
+# Enables trace context propagation, span creation, and OTLP export
+observability = [
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp"
+]
+
 [dependencies]
 # Core
 tokio = { workspace = true }
@@ -27,6 +38,7 @@ serde_json = { workspace = true }
 sonic-rs = "0.3"  # 3-7x faster JSON serialization
 serde_yaml = "0.9"
 base64 = "0.22"
+bytes = "1.10"  # Zero-copy byte operations
 
 # OpenAPI
 utoipa = "4"
@@ -34,8 +46,16 @@ utoipa = "4"
 # Routing
 matchit = "0.7"  # Radix tree router
 
-# Logging
+# Logging & Observability
+# Core tracing - always available (lightweight)
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# OpenTelemetry - optional (behind "observability" feature)
+tracing-opentelemetry = { version = "0.22", optional = true }
+opentelemetry = { version = "0.21", optional = true }
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"], optional = true }
+opentelemetry-otlp = { version = "0.14", optional = true }
 
 # Validation
 regex = "1"
@@ -46,8 +66,12 @@ multer = { workspace = true }
 urlencoding = { workspace = true }
 futures-util = { workspace = true }
 
+# Python integration
+pyo3 = { workspace = true }
+
 # Internal
 data-bridge-common = { path = "../data-bridge-common" }
+data-bridge-pyloop = { path = "../data-bridge-pyloop" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

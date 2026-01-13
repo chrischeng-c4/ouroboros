@@ -12,13 +12,23 @@ use crate::error::{ApiError, ApiResult};
 use crate::request::{HttpMethod, Request, SerializableRequest, SerializableValue};
 use crate::response::{Response, ResponseBody};
 use crate::router::Router;
+
+// OpenTelemetry imports - only with observability feature
+#[cfg(feature = "observability")]
+use crate::telemetry::TelemetryConfig;
+
+use data_bridge_pyloop::PyLoop;
 use http::header::CONTENT_LENGTH;
 use http::{HeaderMap, StatusCode};
+// HeaderValue only needed with observability feature
+#[cfg(feature = "observability")]
+use http::HeaderValue;
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Bytes, Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
+use std::borrow::Cow;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -26,6 +36,14 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::{error, info, warn};
+
+// OpenTelemetry-specific imports
+#[cfg(feature = "observability")]
+use opentelemetry::global;
+#[cfg(feature = "observability")]
+use opentelemetry::propagation::Injector;
+#[cfg(feature = "observability")]
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// HTTP server configuration
 #[derive(Debug, Clone)]
@@ -36,6 +54,10 @@ pub struct ServerConfig {
     pub max_body_size: usize,
     /// Enable request logging
     pub enable_logging: bool,
+    /// Optional OpenTelemetry telemetry configuration
+    /// Only available when "observability" feature is enabled
+    #[cfg(feature = "observability")]
+    pub telemetry: Option<TelemetryConfig>,
 }
 
 impl Default for ServerConfig {
@@ -44,6 +66,8 @@ impl Default for ServerConfig {
             bind_addr: "127.0.0.1:8000".to_string(),
             max_body_size: 10 * 1024 * 1024, // 10MB
             enable_logging: true,
+            #[cfg(feature = "observability")]
+            telemetry: None,
         }
     }
 }
@@ -68,12 +92,26 @@ impl ServerConfig {
         self.enable_logging = enabled;
         self
     }
+
+    /// Set OpenTelemetry telemetry configuration
+    /// Only available when "observability" feature is enabled
+    #[cfg(feature = "observability")]
+    pub fn with_telemetry(mut self, config: TelemetryConfig) -> Self {
+        self.telemetry = Some(config);
+        self
+    }
 }
 
 /// HTTP server wrapping the Router
 pub struct Server {
     router: Arc<Router>,
     config: ServerConfig,
+    /// Optional PyLoop instance for Python handler execution
+    ///
+    /// When present, the server can dispatch Python async/sync handlers
+    /// via PyLoop's event loop integration. If None, only pure Rust
+    /// handlers can be executed.
+    pyloop: Option<Arc<PyLoop>>,
 }
 
 impl Server {
@@ -82,6 +120,7 @@ impl Server {
         Self {
             router: Arc::new(router),
             config,
+            pyloop: None,
         }
     }
 
@@ -90,12 +129,47 @@ impl Server {
         Self {
             router,
             config,
+            pyloop: None,
         }
     }
 
     /// Create a new server with default configuration
     pub fn with_router(router: Router) -> Self {
         Self::new(router, ServerConfig::default())
+    }
+
+    /// Set the PyLoop instance for Python handler execution
+    ///
+    /// This enables the server to dispatch Python async/sync handlers.
+    /// The PyLoop instance is wrapped in Arc for shared ownership across
+    /// request handlers.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use data_bridge_api::{Router, server::{Server, ServerConfig}};
+    /// use data_bridge_pyloop::PyLoop;
+    /// use pyo3::Python;
+    /// use std::sync::Arc;
+    ///
+    /// # fn main() -> pyo3::PyResult<()> {
+    /// Python::with_gil(|py| {
+    ///     let router = Router::new();
+    ///     let pyloop = PyLoop::new()?;
+    ///     let server = Server::with_router(router)
+    ///         .with_pyloop(Arc::new(pyloop));
+    ///     Ok(())
+    /// })
+    /// # }
+    /// ```
+    pub fn with_pyloop(mut self, pyloop: Arc<PyLoop>) -> Self {
+        self.pyloop = Some(pyloop);
+        self
+    }
+
+    /// Get the PyLoop instance if configured
+    pub fn pyloop(&self) -> Option<&Arc<PyLoop>> {
+        self.pyloop.as_ref()
     }
 
     /// Run the server until a shutdown signal is received
@@ -123,6 +197,8 @@ impl Server {
 
         info!("Server listening on http://{}", addr);
         info!("Max body size: {} bytes", self.config.max_body_size);
+        info!("TCP_NODELAY enabled for low-latency connections");
+        info!("HTTP/1.1 keep-alive and pipelining enabled");
         info!("Press Ctrl+C to shutdown");
 
         let router = self.router.clone();
@@ -136,6 +212,12 @@ impl Server {
             result = async {
                 loop {
                     let (stream, remote_addr) = listener.accept().await?;
+
+                    // Enable TCP_NODELAY for lower latency (disable Nagle's algorithm)
+                    if let Err(e) = stream.set_nodelay(true) {
+                        warn!("Failed to set TCP_NODELAY: {}", e);
+                    }
+
                     let io = TokioIo::new(stream);
                     let router = router.clone();
                     let config = config.clone();
@@ -146,7 +228,10 @@ impl Server {
                             handle_request(req, router.clone(), config.clone(), remote_addr)
                         });
 
+                        // Configure HTTP/1.1 with performance optimizations
                         if let Err(err) = http1::Builder::new()
+                            .keep_alive(true)           // Enable HTTP keep-alive
+                            .pipeline_flush(true)       // Enable pipelined request flushing
                             .serve_connection(io, service)
                             .await
                         {
@@ -175,6 +260,53 @@ impl Server {
     }
 }
 
+// OpenTelemetry trace context injection - only with observability feature
+#[cfg(feature = "observability")]
+mod telemetry_support {
+    use super::*;
+
+    /// Adapter to inject OpenTelemetry context into HTTP headers
+    pub(super) struct HeaderMapCarrier<'a>(pub &'a mut HeaderMap);
+
+    impl<'a> Injector for HeaderMapCarrier<'a> {
+        fn set(&mut self, key: &str, value: String) {
+            // Convert key to owned HeaderName to satisfy 'static requirement
+            if let Ok(header_name) = key.parse::<http::HeaderName>() {
+                if let Ok(header_value) = HeaderValue::from_str(&value) {
+                    self.0.insert(header_name, header_value);
+                }
+            }
+        }
+    }
+
+    /// Inject the current trace context into HTTP headers
+    ///
+    /// This allows Python handlers to extract and continue the trace.
+    /// Uses W3C TraceContext propagation format (traceparent, tracestate headers).
+    pub(super) fn inject_trace_context(headers: &mut HeaderMap) {
+        let context = tracing::Span::current().context();
+        let mut carrier = HeaderMapCarrier(headers);
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&context, &mut carrier);
+        });
+    }
+}
+
+// No-op version when observability is disabled
+#[cfg(not(feature = "observability"))]
+mod telemetry_support {
+    use super::*;
+
+    /// No-op: Does nothing when observability feature is disabled
+    #[inline]
+    pub(super) fn inject_trace_context(_headers: &mut HeaderMap) {
+        // No-op: OpenTelemetry not available
+    }
+}
+
+// Import the appropriate version based on feature flag
+use telemetry_support::inject_trace_context;
+
 /// Handle a single HTTP request
 ///
 /// This function implements the two-phase GIL pattern:
@@ -192,6 +324,18 @@ async fn handle_request(
     let uri = parts.uri.clone();
     let path = uri.path().to_string();
 
+    // Create root span for distributed tracing
+    let span = tracing::info_span!(
+        "http.request",
+        http.method = %method,
+        http.target = %path,
+        http.scheme = %uri.scheme_str().unwrap_or("http"),
+        http.client_ip = %remote_addr.ip(),
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+    );
+    let _guard = span.enter();
+
     if config.enable_logging {
         info!("{} {} - from {}", method, path, remote_addr);
     }
@@ -201,6 +345,7 @@ async fn handle_request(
         Ok(m) => m,
         Err(_) => {
             warn!("Invalid HTTP method: {}", method);
+            span.record("otel.status_code", 405);
             return Ok(error_response(
                 ApiError::MethodNotAllowed(format!("Invalid method: {}", method)),
             ));
@@ -213,16 +358,21 @@ async fn handle_request(
         Ok(bytes) => bytes,
         Err(err) => {
             error!("Failed to read request body: {}", err);
+            span.record("otel.status_code", 400);
             return Ok(error_response(ApiError::BadRequest(err.to_string())));
         }
     };
+
+    // Inject trace context into headers for Python to inherit
+    let mut headers_with_context = parts.headers.clone();
+    inject_trace_context(&mut headers_with_context);
 
     // Convert Hyper request to SerializableRequest
     let serializable_req = match convert_hyper_request(
         http_method,
         path.clone(),
         uri.to_string(),
-        parts.headers,
+        headers_with_context,
         body_bytes,
     )
     .await
@@ -230,6 +380,7 @@ async fn handle_request(
         Ok(req) => req,
         Err(err) => {
             error!("Failed to convert request: {}", err);
+            span.record("otel.status_code", 400);
             return Ok(error_response(err));
         }
     };
@@ -237,8 +388,55 @@ async fn handle_request(
     // Phase 2: Process request (GIL-free in PyO3 context)
     let response = process_request(serializable_req, router).await;
 
+    // Record response status code in span
+    let status_code = response.get_status();
+    span.record("otel.status_code", status_code as i32);
+
     // Convert response to Hyper format
-    Ok(convert_response_to_hyper(response))
+    let hyper_response = convert_response_to_hyper(response);
+
+    Ok(hyper_response)
+}
+
+/// Decode a query parameter component (key or value) with minimal allocations
+///
+/// Uses Cow to avoid allocations when no encoding is present.
+/// Only allocates when:
+/// 1. The string contains '+' characters (need to replace with spaces)
+/// 2. The string contains '%' characters (need URL decoding)
+///
+/// # Performance
+/// - No encoding: 0 allocations (returns borrowed str)
+/// - With encoding: 1-2 allocations (replace + decode)
+///
+/// # Arguments
+/// * `s` - The query parameter component to decode
+///
+/// # Returns
+/// A Cow<str> that is either borrowed (no encoding) or owned (decoded)
+#[inline]
+fn decode_query_component(s: &str) -> Cow<'_, str> {
+    // Fast path: no encoding at all
+    if !s.contains('+') && !s.contains('%') {
+        return Cow::Borrowed(s);
+    }
+
+    // Need to decode
+    if s.contains('+') {
+        // Replace + with spaces first, then decode
+        let with_spaces = s.replace('+', " ");
+        // Decode and convert to owned String to avoid lifetime issues
+        match urlencoding::decode(&with_spaces) {
+            Ok(decoded) => Cow::Owned(decoded.into_owned()),
+            Err(_) => Cow::Owned(with_spaces),
+        }
+    } else {
+        // Only percent-encoding, no plus signs
+        match urlencoding::decode(s) {
+            Ok(decoded) => decoded,
+            Err(_) => Cow::Borrowed(s),
+        }
+    }
 }
 
 /// Convert Hyper request to SerializableRequest
@@ -249,30 +447,28 @@ async fn convert_hyper_request(
     path: String,
     url: String,
     headers: HeaderMap,
-    body_bytes: Vec<u8>,
+    body_bytes: Bytes,
 ) -> ApiResult<SerializableRequest> {
     let mut req = SerializableRequest::new(method, path);
 
     // Parse query parameters from URL before moving url into with_url()
+    // Uses optimized decode_query_component to minimize allocations
     if let Some(query_start) = url.find('?') {
         let query_string = &url[query_start + 1..];
         for pair in query_string.split('&') {
             if let Some((key, value)) = pair.split_once('=') {
-                // URL decode key and value (replace + with space first for query string compatibility)
-                let key_with_spaces = key.replace('+', " ");
-                let value_with_spaces = value.replace('+', " ");
-                let decoded_key = urlencoding::decode(&key_with_spaces).unwrap_or_else(|_| key_with_spaces.as_str().into());
-                let decoded_value = urlencoding::decode(&value_with_spaces).unwrap_or_else(|_| value_with_spaces.as_str().into());
+                // Decode key and value with minimal allocations (0-2 allocations per component)
+                let decoded_key = decode_query_component(key);
+                let decoded_value = decode_query_component(value);
                 req = req.with_query_param(
-                    decoded_key.to_string(),
-                    SerializableValue::String(decoded_value.to_string()),
+                    decoded_key.into_owned(),
+                    SerializableValue::String(decoded_value.into_owned()),
                 );
             } else if !pair.is_empty() {
                 // Handle parameters without values (e.g., ?flag)
-                let pair_with_spaces = pair.replace('+', " ");
-                let decoded_key = urlencoding::decode(&pair_with_spaces).unwrap_or_else(|_| pair_with_spaces.as_str().into());
+                let decoded_key = decode_query_component(pair);
                 req = req.with_query_param(
-                    decoded_key.to_string(),
+                    decoded_key.into_owned(),
                     SerializableValue::String(String::new()),
                 );
             }
@@ -294,10 +490,10 @@ async fn convert_hyper_request(
         let content_type = req.content_type.as_deref().unwrap_or("");
 
         if content_type.contains("application/json") {
-            // Parse JSON body
-            match serde_json::from_slice::<serde_json::Value>(&body_bytes) {
+            // Parse JSON body with sonic-rs (3-7x faster)
+            match sonic_rs::from_slice::<sonic_rs::Value>(&body_bytes) {
                 Ok(json) => {
-                    req = req.with_body(SerializableValue::from_json(&json));
+                    req = req.with_body(SerializableValue::from_sonic_value(&json));
                 }
                 Err(err) => {
                     return Err(ApiError::BadRequest(format!(
@@ -322,14 +518,14 @@ async fn convert_hyper_request(
                 .ok_or_else(|| ApiError::BadRequest("Missing multipart boundary".to_string()))?;
 
             // Parse multipart form data
-            let form_data = crate::request::parse_multipart(boundary, body_bytes)
+            let form_data = crate::request::parse_multipart(boundary, body_bytes.to_vec())
                 .await
                 .map_err(|e| ApiError::BadRequest(format!("Invalid multipart data: {}", e)))?;
 
             req.form_data = Some(form_data);
         } else {
             // Store as raw bytes
-            req = req.with_body(SerializableValue::Bytes(body_bytes));
+            req = req.with_body(SerializableValue::Bytes(body_bytes.to_vec()));
         }
     }
 
@@ -354,7 +550,7 @@ fn extract_boundary(content_type: &str) -> Option<String> {
 async fn collect_body(
     body: Incoming,
     max_size: usize,
-) -> Result<Vec<u8>, String> {
+) -> Result<Bytes, String> {
     use http_body_util::BodyExt;
 
     let collected = body.collect().await.map_err(|e| e.to_string())?;
@@ -368,7 +564,7 @@ async fn collect_body(
         ));
     }
 
-    Ok(bytes.to_vec())
+    Ok(bytes)
 }
 
 /// Process the request through the router
@@ -552,7 +748,7 @@ mod tests {
             "/api/users".to_string(),
             "http://localhost/api/users".to_string(),
             headers,
-            json_body.as_bytes().to_vec(),
+            Bytes::from(json_body.as_bytes().to_vec()),
         )
         .await
         .unwrap();
@@ -583,7 +779,7 @@ mod tests {
             "/api/users".to_string(),
             "http://localhost/api/users".to_string(),
             headers,
-            form_body.to_vec(),
+            Bytes::from(form_body.to_vec()),
         )
         .await
         .unwrap();
@@ -689,7 +885,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -722,7 +918,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -750,7 +946,7 @@ mod tests {
             "/api/search".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
@@ -777,11 +973,67 @@ mod tests {
             "/api/users".to_string(),
             url,
             headers,
-            Vec::new(),
+            Bytes::new(),
         )
         .await
         .unwrap();
 
         assert_eq!(req.query_params.len(), 0);
+    }
+
+    // Tests for decode_query_component optimization
+    #[test]
+    fn test_decode_query_component_no_encoding() {
+        // Fast path: no encoding, should return borrowed str
+        let result = decode_query_component("simple");
+        assert_eq!(result, "simple");
+        // Verify it's borrowed
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_plus_only() {
+        // Has + but no %, should replace + with space
+        let result = decode_query_component("hello+world");
+        assert_eq!(result, "hello world");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_percent_only() {
+        // Has % but no +, should decode percent encoding
+        let result = decode_query_component("hello%20world");
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_decode_query_component_both() {
+        // Has both + and %, should handle both
+        let result = decode_query_component("hello+world%21");
+        assert_eq!(result, "hello world!");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_special_chars() {
+        // Test various special characters
+        let result = decode_query_component("test%40example.com");
+        assert_eq!(result, "test@example.com");
+    }
+
+    #[test]
+    fn test_decode_query_component_empty() {
+        // Empty string should be borrowed
+        let result = decode_query_component("");
+        assert_eq!(result, "");
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn test_decode_query_component_invalid_encoding() {
+        // Invalid percent encoding should fall back gracefully
+        let result = decode_query_component("invalid%");
+        // Should still return something (borrowed original on error)
+        assert_eq!(result, "invalid%");
     }
 }

@@ -628,8 +628,7 @@ class TestReturningEdgeCases:
 
         Verifies that syntax errors in RETURNING are properly reported.
         """
-        with pytest.raises(Exception) as exc_info:
-            await execute(
+        exc_info = expect(lambda: await execute().to_raise(Exception)
                 """
                 INSERT INTO tasks (title)
                 VALUES ($1)

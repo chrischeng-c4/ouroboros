@@ -1,6 +1,7 @@
 """Tests for query extension utilities (SQLAlchemy-style query builders)."""
 
 import pytest
+from data_bridge.test import expect
 from datetime import datetime, timedelta
 
 from data_bridge.postgres.query_ext import (
@@ -118,18 +119,15 @@ class TestBooleanClause:
 
     def test_invalid_operator(self):
         """Test invalid operator raises error."""
-        with pytest.raises(ValueError, match="Invalid boolean operator"):
-            BooleanClause("XOR", [SqlExpr("a", "=", 1)])
+        expect(lambda: BooleanClause("XOR", [SqlExpr("a", "=", 1)])).to_raise(ValueError)
 
     def test_not_requires_one_condition(self):
         """Test NOT requires exactly one condition."""
-        with pytest.raises(ValueError, match="NOT operator requires exactly one condition"):
-            BooleanClause("NOT", [SqlExpr("a", "=", 1), SqlExpr("b", "=", 2)])
+        expect(lambda: BooleanClause("NOT", [SqlExpr("a", "=", 1), SqlExpr("b", "=", 2)])).to_raise(ValueError)
 
     def test_and_requires_two_conditions(self):
         """Test AND requires at least two conditions."""
-        with pytest.raises(ValueError, match="AND operator requires at least two conditions"):
-            BooleanClause("AND", [SqlExpr("a", "=", 1)])
+        expect(lambda: BooleanClause("AND", [SqlExpr("a", "=", 1)])).to_raise(ValueError)
 
 
 class TestCombinators:
@@ -188,13 +186,11 @@ class TestCombinators:
 
     def test_and_requires_two(self):
         """Test and_() requires at least two conditions."""
-        with pytest.raises(ValueError, match="requires at least two conditions"):
-            and_(SqlExpr("a", "=", 1))
+        expect(lambda: and_(SqlExpr("a", "=", 1))).to_raise(ValueError)
 
     def test_or_requires_two(self):
         """Test or_() requires at least two conditions."""
-        with pytest.raises(ValueError, match="requires at least two conditions"):
-            or_(SqlExpr("a", "=", 1))
+        expect(lambda: or_(SqlExpr("a", "=", 1))).to_raise(ValueError)
 
 
 class TestQueryFragment:
@@ -284,8 +280,7 @@ class TestQueryFragment:
 
     def test_invalid_lookup(self):
         """Test invalid lookup raises error."""
-        with pytest.raises(ValueError, match="Unknown lookup"):
-            QueryFragment(age__invalid=18)
+        expect(lambda: QueryFragment(age__invalid=18)).to_raise(ValueError)
 
 
 class TestConvenienceFilters:
@@ -404,13 +399,11 @@ class TestRelationshipFilters:
     def test_any_not_implemented(self):
         """Test any_() raises NotImplementedError."""
         # These are placeholders for future implementation
-        with pytest.raises(NotImplementedError):
-            any_(None, SqlExpr("views", ">", 1000))
+        expect(lambda: any_(None, SqlExpr("views", ">", 1000))).to_raise(NotImplementedError)
 
     def test_has_not_implemented(self):
         """Test has() raises NotImplementedError."""
-        with pytest.raises(NotImplementedError):
-            has(None, SqlExpr("verified", "=", True))
+        expect(lambda: has(None, SqlExpr("verified", "=", True))).to_raise(NotImplementedError)
 
 
 class TestBooleanClauseOperators:

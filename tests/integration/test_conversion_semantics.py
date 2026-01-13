@@ -6,6 +6,7 @@ to the current implementation, maintaining 100% backward compatibility.
 """
 
 import pytest
+from data_bridge.test import expect
 from datetime import datetime, timezone
 from decimal import Decimal
 from bson import ObjectId, Binary
@@ -181,8 +182,7 @@ async def test_find_one_error_messages_unchanged():
     Success criteria (FR-010): Error messages unchanged
     """
     # Test 1: Invalid query type
-    with pytest.raises(Exception) as exc_info:
-        await TestDoc.find_one("invalid_query")  # type: ignore
+    exc_info = expect(lambda: await TestDoc.find_one("invalid_query")  # type: ignore).to_raise(Exception)
 
     error_msg = str(exc_info.value)
     # Error should mention type issue
@@ -193,8 +193,7 @@ async def test_find_one_error_messages_unchanged():
     assert result is None
 
     # Test 3: Invalid ObjectId format
-    with pytest.raises(Exception) as exc_info:
-        await TestDoc.find_one(TestDoc.id == "not_an_objectid")
+    exc_info = expect(lambda: await TestDoc.find_one(TestDoc.id == "not_an_objectid")).to_raise(Exception)
 
     error_msg = str(exc_info.value)
     # Error should mention ObjectId

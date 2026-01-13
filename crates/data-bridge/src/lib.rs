@@ -57,6 +57,9 @@ mod api;
 #[cfg(feature = "tasks")]
 mod tasks;
 
+#[cfg(feature = "pyloop")]
+mod pyloop;
+
 /// data-bridge Python module
 #[pymodule]
 fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -120,6 +123,14 @@ fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         let tasks_module = PyModule::new(py, "tasks")?;
         tasks::register_module(&tasks_module)?;
         m.add_submodule(&tasks_module)?;
+    }
+
+    // Add PyLoop module if enabled
+    #[cfg(feature = "pyloop")]
+    {
+        let pyloop_module = PyModule::new(py, "_pyloop")?;
+        pyloop::register_module(&pyloop_module)?;
+        m.add_submodule(&pyloop_module)?;
     }
 
     Ok(())

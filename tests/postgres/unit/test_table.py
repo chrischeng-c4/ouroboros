@@ -315,8 +315,7 @@ class TestTableAttributeAccess:
         User = sample_table_class
         user = User(name="Alice", email="alice@example.com")
 
-        with pytest.raises(AttributeError):
-            _ = user.nonexistent_field
+        expect(lambda: user.nonexistent_field).to_raise(AttributeError)
 
     def test_setattr_updates_data(self, sample_table_class):
         """Test __setattr__ updates _data dict."""
