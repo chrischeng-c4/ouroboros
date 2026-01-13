@@ -960,43 +960,32 @@ impl PyLoop {
 
                     // Check if the result is a coroutine (async function)
                     if result.bind(py).hasattr("__await__")? {
-                        // It's a coroutine - need to run it to completion
-                        // Phase 1 workaround: Use asyncio.new_event_loop()
-                        #[allow(deprecated)] // PyO3 API transition - import_bound renamed to import
-                        let asyncio = py
-                            .import_bound("asyncio")
-                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to import asyncio: {}", e)))?;
+                        // It's a coroutine - poll it to completion using native Rust polling
+                        // Phase 2: Native coroutine execution (no Python asyncio needed)
+                        let coro_bound = result.bind(py);
 
-                        // Create a new event loop for this coroutine
-                        let event_loop = asyncio
-                            .call_method0("new_event_loop")
-                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to create event loop: {}", e)))?;
-
-                        // Temporarily set as the current event loop
-                        asyncio
-                            .call_method1("set_event_loop", (&event_loop,))
-                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to set event loop: {}", e)))?;
-
-                        // Run the coroutine to completion
-                        let final_result = event_loop
-                            .call_method1("run_until_complete", (result.bind(py),))
-                            .map_err(|e| {
-                                // Clean up event loop before returning error
-                                let _ = event_loop.call_method0("close");
-                                let _ = asyncio.call_method1("set_event_loop", (py.None(),));
-                                e
-                            })?;
-
-                        // Clean up: close the event loop and unset it
-                        event_loop
-                            .call_method0("close")
-                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to close event loop: {}", e)))?;
-                        asyncio
-                            .call_method1("set_event_loop", (py.None(),))
-                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to unset event loop: {}", e)))?;
-
-                        #[allow(deprecated)] // PyO3 API transition
-                        Ok(final_result.to_object(py))
+                        // Poll the coroutine to completion
+                        loop {
+                            match poll_coroutine(py, coro_bound) {
+                                Ok(PollResult::Ready(value)) => {
+                                    // Coroutine finished successfully
+                                    #[allow(deprecated)] // PyO3 API transition
+                                    return Ok(value.to_object(py));
+                                }
+                                Ok(PollResult::Pending(_awaitable)) => {
+                                    // Coroutine is waiting - yield control back to Tokio
+                                    // This allows other tasks to run while we wait
+                                    // Release GIL briefly to allow other Python threads to run
+                                    py.allow_threads(|| {
+                                        std::thread::sleep(std::time::Duration::from_micros(100));
+                                    });
+                                }
+                                Err(e) => {
+                                    // Coroutine raised an exception
+                                    return Err(e.into());
+                                }
+                            }
+                        }
                     } else {
                         // Sync function - return result directly
                         #[allow(deprecated)] // PyO3 API transition
