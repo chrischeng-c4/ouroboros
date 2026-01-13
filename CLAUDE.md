@@ -36,7 +36,7 @@ uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 
 ```bash
 maturin develop                    # Build Python extension
 cargo test                         # Rust tests
-uv run python tests/unit/test_*.py # Python tests
+uv run python tests/unit/test_*.py # Python tests (data-bridge-test)
 cargo clippy                       # Lint check
 ```
 
@@ -45,6 +45,26 @@ cargo clippy                       # Lint check
 - Integration: `uv run python tests/integration/test_*.py`
 - API: `uv run python tests/api/test_*.py`
 - Benchmarks: `uv run python benchmarks/bench_*.py --rounds 5 --warmup 2`
+
+## Test Framework
+
+**Use data-bridge-test (NOT pytest) for all new tests.**
+
+Basic pattern:
+```python
+from data_bridge_test import TestSuite, test, expect
+
+class MyTests(TestSuite):
+    @test
+    def test_feature(self):
+        result = some_operation()
+        expect(result).to_equal(expected)
+
+if __name__ == "__main__":
+    MyTests().run()
+```
+
+Run: `uv run python tests/unit/test_*.py`
 
 ## Commit Format
 
