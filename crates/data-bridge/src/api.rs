@@ -4,15 +4,17 @@
 //! 1. Extract: Python objects → SerializableRequest (GIL held, fast)
 //! 2. Process: Validation, routing, serialization (GIL released)
 //! 3. Materialize: SerializableResponse → Python objects (GIL held, fast)
+//!
+//! Phase 5 Migration: Integrated with PyLoop (Rust-native event loop)
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::cell::RefCell;
 
 use data_bridge_api::{
     Router,
+    PythonHandler,
     request::{HttpMethod, SerializableValue, SerializableRequest, Request},
     response::{SerializableResponse, Response},
     validation::{
@@ -23,36 +25,8 @@ use data_bridge_api::{
     error::ApiError,
 };
 
+use data_bridge_pyloop::PyLoop;
 use crate::error_handling::sanitize_error_message;
-
-// ============================================================================
-// Thread-Local Event Loop
-// ============================================================================
-
-thread_local! {
-    /// Thread-local Python event loop for executing async handlers
-    /// Avoids creating a new event loop for each request
-    static EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
-}
-
-/// Get or create the thread-local event loop
-fn get_or_create_event_loop(py: Python<'_>) -> PyResult<Py<PyAny>> {
-    EVENT_LOOP.with(|cell| {
-        let mut opt = cell.borrow_mut();
-        if let Some(ref loop_obj) = *opt {
-            // Return existing event loop
-            Ok(loop_obj.clone_ref(py))
-        } else {
-            // Create new event loop for this thread
-            let asyncio = py.import("asyncio")?;
-            let new_loop = asyncio.call_method0("new_event_loop")?;
-            asyncio.call_method1("set_event_loop", (&new_loop,))?;
-            let loop_py = new_loop.unbind();
-            *opt = Some(loop_py.clone_ref(py));
-            Ok(loop_py)
-        }
-    })
-}
 
 // ============================================================================
 // Path Syntax Conversion
@@ -275,14 +249,23 @@ struct AppState {
     route_counter: usize,
     /// Router Arc for serving (set when serve() is called)
     router_arc: Option<Arc<Router>>,
+    /// PyLoop instance for executing Python handlers
+    pyloop: Arc<PyLoop>,
 }
 
 #[pymethods]
 impl PyApiApp {
     #[new]
     #[pyo3(signature = (title = "API", version = "1.0.0"))]
-    fn new(title: &str, version: &str) -> Self {
-        Self {
+    fn new(title: &str, version: &str) -> PyResult<Self> {
+        // Initialize PyLoop (single Rust-based event loop)
+        let pyloop = Arc::new(PyLoop::new_from_rust().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to initialize PyLoop: {}", e)
+            )
+        })?);
+
+        Ok(Self {
             inner: Arc::new(RwLock::new(AppState {
                 title: title.to_string(),
                 version: version.to_string(),
@@ -290,8 +273,9 @@ impl PyApiApp {
                 handlers: HashMap::new(),
                 route_counter: 0,
                 router_arc: None,
+                pyloop,
             })),
-        }
+        })
     }
 
     /// Register a route handler
@@ -332,75 +316,18 @@ impl PyApiApp {
         state.route_counter += 1;
 
         // Store Python handler
-        state.handlers.insert(route_id.clone(), handler);
+        state.handlers.insert(route_id.clone(), handler.clone_ref(py));
 
-        // Create Rust handler that calls Python
-        let inner = Arc::clone(&self.inner);
-        let rid = route_id.clone();
+        // Create PythonHandler with PyLoop integration
+        let python_handler = Arc::new(PythonHandler::new(handler, Arc::clone(&state.pyloop)));
+
+        // Create Rust handler that uses PythonHandler
         let rust_handler = Arc::new(move |req: Request, validated: ValidatedRequest| {
-            let inner = Arc::clone(&inner);
-            let rid = rid.clone();
+            let handler = Arc::clone(&python_handler);
 
             Box::pin(async move {
-                // Phase 1: Call handler and check coroutine status (single GIL acquisition)
-                let (is_coroutine, handler_result) = Python::with_gil(|py| -> PyResult<(bool, Py<PyAny>)> {
-                    // Get handler from state
-                    let state = inner.read().map_err(|e| {
-                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("Lock error: {}", e))
-                    })?;
-                    let handler = state.handlers.get(&rid).ok_or_else(|| {
-                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Handler not found")
-                    })?;
-
-                    // Convert request to Python dict
-                    let py_args = request_to_py_dict(py, &req, &validated)?;
-
-                    // Call Python handler
-                    let handler_bound = handler.bind(py);
-                    let result_bound = handler_bound.call1((py_args,))?;
-
-                    // Check if it's a coroutine by checking for __await__ attribute
-                    let is_coro = result_bound.hasattr("__await__")?;
-
-                    // Return coroutine status and result (unbounded, can cross GIL release)
-                    Ok((is_coro, result_bound.unbind()))
-                }).map_err(|e| {
-                    ApiError::Handler(format!("Handler call error: {}", e))
-                })?;
-
-                // Phase 2: Execute coroutine if needed and convert response
-                let response = if is_coroutine {
-                    // Execute Python coroutine in spawn_blocking context with thread-local event loop
-                    let result_obj = tokio::task::spawn_blocking(move || -> PyResult<Py<PyAny>> {
-                        Python::with_gil(|py| {
-                            // Get or create thread-local event loop
-                            let event_loop = get_or_create_event_loop(py)?;
-
-                            // Run the coroutine to completion
-                            let result = event_loop.bind(py).call_method1("run_until_complete", (handler_result.bind(py),))?;
-                            Ok(result.unbind())
-                        })
-                    })
-                    .await
-                    .map_err(|e| ApiError::Internal(format!("Task join error: {}", e)))?
-                    .map_err(|e| ApiError::Handler(format!("Async handler error: {}", e)))?;
-
-                    // Convert result to Response
-                    Python::with_gil(|py| -> PyResult<Response> {
-                        py_result_to_response(py, &result_obj.bind(py))
-                    }).map_err(|e| {
-                        ApiError::Internal(format!("Response conversion error: {}", e))
-                    })?
-                } else {
-                    // Sync handler - result is ready, just convert
-                    Python::with_gil(|py| -> PyResult<Response> {
-                        py_result_to_response(py, &handler_result.bind(py))
-                    }).map_err(|e| {
-                        ApiError::Internal(format!("Response conversion error: {}", e))
-                    })?
-                };
-
-                Ok(response)
+                // Execute handler via PyLoop (Rust-native event loop)
+                handler.execute(req, validated).await
             }) as data_bridge_api::router::BoxFuture<'static, data_bridge_api::error::ApiResult<Response>>
         });
 
@@ -467,8 +394,8 @@ impl PyApiApp {
     fn serve(&self, py: Python<'_>, host: &str, port: u16) -> PyResult<()> {
         use data_bridge_api::{Server, ServerConfig};
 
-        // Thread-local event loops will be created on-demand in spawn_blocking threads
-        // No explicit initialization needed
+        // PyLoop (Rust-native event loop) already initialized in new()
+        // All Python handlers execute via PyLoop.spawn_python_handler()
 
         // Get or create the Arc<Router>
         let router_arc = {

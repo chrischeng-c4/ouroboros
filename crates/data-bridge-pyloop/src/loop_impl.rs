@@ -842,9 +842,13 @@ impl PyLoop {
         true // Processed at least one task
     }
 
-    /// Create a new PyLoop instance (for Rust tests)
-    #[cfg(test)]
-    pub fn new_for_test() -> Result<Self, crate::error::PyLoopError> {
+    /// Create a new PyLoop instance from Rust code
+    ///
+    /// This is the Rust-side constructor for creating PyLoop instances
+    /// outside of Python context (e.g., from data-bridge-api).
+    ///
+    /// For Python usage, use `PyLoop()` constructor instead.
+    pub fn new_from_rust() -> Result<Self, crate::error::PyLoopError> {
         let runtime = crate::get_runtime()?;
         let (task_sender, task_receiver) = unbounded_channel();
 
@@ -1041,7 +1045,7 @@ mod tests {
 
     #[test]
     fn test_pyloop_creation() {
-        let loop_inst = PyLoop::new_for_test();
+        let loop_inst = PyLoop::new_from_rust();
         assert!(loop_inst.is_ok(), "PyLoop should be created successfully");
 
         let loop_inst = loop_inst.unwrap();
@@ -1051,7 +1055,7 @@ mod tests {
 
     #[test]
     fn test_pyloop_close() {
-        let loop_inst = PyLoop::new_for_test().unwrap();
+        let loop_inst = PyLoop::new_from_rust().unwrap();
 
         let result = loop_inst.test_close();
         assert!(result.is_ok(), "Closing a stopped loop should succeed");
@@ -1060,7 +1064,7 @@ mod tests {
 
     #[test]
     fn test_cannot_close_running_loop() {
-        let loop_inst = PyLoop::new_for_test().unwrap();
+        let loop_inst = PyLoop::new_from_rust().unwrap();
         loop_inst.set_running(true);
 
         let result = loop_inst.test_close();

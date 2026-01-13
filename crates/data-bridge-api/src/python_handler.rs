@@ -225,44 +225,60 @@ fn convert_py_to_response(py: Python<'_>, result: PyObject) -> ApiResult<Respons
 
     // Try to interpret as dict first (most common case)
     if let Ok(dict) = result_ref.downcast::<PyDict>() {
-        // Extract status code (default: 200)
-        let status_code = if let Ok(status) = dict.get_item("status") {
-            if let Some(status_val) = status {
-                status_val
-                    .extract::<u16>()
-                    .unwrap_or(200)
+        // Check if it's a response dict (has "status" or "body" or "headers" keys)
+        let is_response_dict = dict.contains("status")
+            .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?
+            || dict.contains("body")
+            .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?
+            || dict.contains("headers")
+            .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?;
+
+        if is_response_dict {
+            // It's a response dict with explicit status/body/headers
+            // Extract status code (default: 200)
+            let status_code = if let Ok(status) = dict.get_item("status") {
+                if let Some(status_val) = status {
+                    status_val
+                        .extract::<u16>()
+                        .unwrap_or(200)
+                } else {
+                    200
+                }
             } else {
                 200
-            }
-        } else {
-            200
-        };
+            };
 
-        // Extract body
-        let body = if let Ok(Some(body_val)) = dict.get_item("body") {
-            py_to_serializable_value(py, body_val.into())
-                .map_err(|e| ApiError::Internal(format!("Failed to convert body: {}", e)))?
-        } else {
-            SerializableValue::Null
-        };
+            // Extract body
+            let body = if let Ok(Some(body_val)) = dict.get_item("body") {
+                py_to_serializable_value(py, body_val.into())
+                    .map_err(|e| ApiError::Internal(format!("Failed to convert body: {}", e)))?
+            } else {
+                SerializableValue::Null
+            };
 
-        // Create response
-        let mut response = Response::json(body).status(status_code);
+            // Create response
+            let mut response = Response::json(body).status(status_code);
 
-        // Extract headers (if present)
-        if let Ok(Some(headers)) = dict.get_item("headers") {
-            if let Ok(headers_dict) = headers.downcast::<PyDict>() {
-                for (key, value) in headers_dict.iter() {
-                    let key_str: String = key.extract()
-                        .map_err(|e| ApiError::Internal(format!("Invalid header name: {}", e)))?;
-                    let value_str: String = value.extract()
-                        .map_err(|e| ApiError::Internal(format!("Invalid header value: {}", e)))?;
-                    response = response.header(&key_str, &value_str);
+            // Extract headers (if present)
+            if let Ok(Some(headers)) = dict.get_item("headers") {
+                if let Ok(headers_dict) = headers.downcast::<PyDict>() {
+                    for (key, value) in headers_dict.iter() {
+                        let key_str: String = key.extract()
+                            .map_err(|e| ApiError::Internal(format!("Invalid header name: {}", e)))?;
+                        let value_str: String = value.extract()
+                            .map_err(|e| ApiError::Internal(format!("Invalid header value: {}", e)))?;
+                        response = response.header(&key_str, &value_str);
+                    }
                 }
             }
-        }
 
-        return Ok(response);
+            return Ok(response);
+        } else {
+            // Dict without response keys - treat the whole dict as JSON body
+            let body = py_to_serializable_value(py, result)
+                .map_err(|e| ApiError::Internal(format!("Failed to convert dict to body: {}", e)))?;
+            return Ok(Response::json(body));
+        }
     }
 
     // Try to interpret as tuple (status_code, body)

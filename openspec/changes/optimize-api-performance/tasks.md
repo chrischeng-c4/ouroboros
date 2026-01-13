@@ -510,33 +510,152 @@ uv run maturin develop --features api
    - Tokio runtime directly drives Python coroutines
    - More efficient task scheduling
 
-### Next Steps
+### Phase 2: Integration Testing
 
-**Phase 2: Performance Verification**
-- [ ] Run benchmark suite to measure actual performance impact
-- [ ] Compare against Phase 6 baseline (Global Event Loop)
-- [ ] Verify no regressions in integration tests
+**Status**: ✅ COMPLETED
 
-**Phase 3: Testing**
-- [ ] Run `uv run pytest tests/api/test_handler_integration.py -v`
-- [ ] Verify all 12 handler tests pass
-- [ ] Test async and sync handlers
+**Test Execution**:
+```bash
+python -m pytest tests/api/test_handler_integration.py -v
+```
 
-**Phase 4: Benchmarking**
-- [ ] Run `tests/api/benchmarks/bench_comparison_rust.py`
-- [ ] Measure ops/s for:
-  - Plaintext response
-  - JSON response
-  - Path parameters
-- [ ] Compare to FastAPI baseline
+**Results**: All 12/12 tests PASSED in 1.17s
+- ✅ JSON response handling
+- ✅ Path parameters (including special chars)
+- ✅ Query parameters (with defaults)
+- ✅ POST JSON body
+- ✅ Sync handler
+- ✅ Health endpoint
+- ✅ Typed path parameters
+- ✅ Required query parameters
+- ✅ Query parameter passthrough (all params + extra params)
 
-**Expected Results**:
-- Integration tests: 12/12 pass
-- Performance: 5-15% improvement over Phase 6
-- Target: 1.0x - 1.1x FastAPI parity or better
+**Conclusion**: No functional regressions - all handlers work correctly
 
-**Architecture Notes**:
-- pyo3-async-runtimes uses Tokio's `spawn_blocking` internally
-- Python coroutines converted to Rust Futures via `into_future()`
-- GIL acquired only when needed (Python operations)
-- Compatible with existing two-phase GIL pattern
+---
+
+### Phase 3: Performance Benchmarking
+
+**Status**: ✅ COMPLETED - **MAJOR PERFORMANCE REGRESSION DETECTED**
+
+**Benchmark Execution**:
+```bash
+python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2
+```
+
+**Results** (Phase 7 with pyo3-async-runtimes):
+```
+Plaintext Response:    486 ops/s  (1.00x FastAPI parity)
+JSON Response:         435 ops/s  (0.70x FastAPI)
+Path Parameters:       630 ops/s  (0.90x FastAPI)
+
+Average: 0.70x - 1.00x FastAPI
+```
+
+**Comparison to Previous Phases**:
+
+| Phase | Plaintext | JSON | Path Params | vs FastAPI |
+|-------|-----------|------|-------------|------------|
+| **Phase 4** (Thread-local) | 999 ops/s | 1,063 ops/s | 1,006 ops/s | 0.96x - 1.03x ✅ |
+| **Phase 6** (Global loop) | 877 ops/s | 920 ops/s | 951 ops/s | 0.93x - 1.04x |
+| **Phase 7** (pyo3-async-runtimes) | **486 ops/s** | **435 ops/s** | **630 ops/s** | **0.70x - 1.00x** ❌ |
+
+**Performance Regression from Phase 4**:
+- Plaintext: -51.4% (999 → 486 ops/s)
+- JSON Response: -59.1% (1,063 → 435 ops/s)
+- Path Parameters: -37.4% (1,006 → 630 ops/s)
+
+**Performance Regression from Phase 6**:
+- Plaintext: -44.6% (877 → 486 ops/s)
+- JSON Response: -52.7% (920 → 435 ops/s)
+- Path Parameters: -33.8% (951 → 630 ops/s)
+
+**Average Regression**: **-44% to -59%** slower than Phase 4
+
+---
+
+### Analysis
+
+**Why Performance Regressed Significantly**:
+
+1. **pyo3-async-runtimes Overhead**:
+   - `into_future()` conversion adds serialization overhead
+   - Future polling through Tokio runtime incurs scheduling cost
+   - May not optimize GIL acquisition as efficiently as thread-local approach
+
+2. **Lost Thread-Local Optimization**:
+   - Phase 3-4 thread-local event loop reused event loops per thread
+   - pyo3-async-runtimes likely creates new event loop per request
+   - No event loop persistence across requests
+
+3. **Additional Layers**:
+   - Thread-local: spawn_blocking → event loop (2 steps)
+   - pyo3-async-runtimes: GIL → into_future → Tokio scheduler → poll → GIL (4+ steps)
+
+**Comparison to FastAPI**:
+- Phase 4 achieved near parity (0.96x - 1.03x)
+- Phase 7 is significantly slower (0.70x - 1.00x)
+- Only plaintext response achieves parity
+
+---
+
+### Conclusion
+
+**Decision**: **REVERT** to Phase 3-4 thread-local event loop approach
+
+**Rationale**:
+1. ❌ Performance regression (-44% to -59%) is unacceptable
+2. ❌ Worse than Phase 6 global event loop approach (-10% to -18%)
+3. ✅ Phase 4 thread-local approach achieved near FastAPI parity
+4. ❌ pyo3-async-runtimes does not provide expected performance benefits
+
+**Lessons Learned**:
+- Official pyo3-async-runtimes integration != better performance
+- Custom thread-local event loop optimization was actually more efficient
+- Library abstractions can introduce significant overhead for hot paths
+- Direct spawn_blocking + thread-local storage is faster than Future conversion
+
+**Recommendation**:
+1. Restore Phase 3-4 thread-local event loop code
+2. Keep pyo3-async-runtimes as a dependency (may be useful for other scenarios)
+3. Document that custom implementation outperforms standard library approach
+4. Consider contributing thread-local optimization back to pyo3-async-runtimes
+
+**Final Status**: Phase 7 completed, results documented, **strongly recommend revert to Phase 4**
+
+---
+
+### Architecture Notes
+
+**Thread-Local Event Loop (Phase 3-4)** - Recommended:
+```rust
+thread_local! {
+    static EVENT_LOOP: RefCell<Option<Py<PyAny>>> = RefCell::new(None);
+}
+
+// Direct spawn_blocking with cached event loop
+spawn_blocking(move || {
+    Python::with_gil(|py| {
+        EVENT_LOOP.with(|cell| {
+            let event_loop = get_or_create_loop(py, cell);
+            event_loop.call_method1("run_until_complete", coro)
+        })
+    })
+}).await
+```
+
+**pyo3-async-runtimes (Phase 7)** - Not Recommended:
+```rust
+// Convert Python coroutine to Rust Future
+let fut = Python::with_gil(|py| {
+    pyo3_tokio::into_future(coro.into_bound(py))
+})?;
+
+// Await Rust Future (adds overhead)
+let result = fut.await?;
+```
+
+**Performance Impact**:
+- Thread-local: ~1,000 ops/s (FastAPI parity)
+- pyo3-async-runtimes: ~500 ops/s (50% slower)
+- Overhead: Future conversion + Tokio scheduler + polling
