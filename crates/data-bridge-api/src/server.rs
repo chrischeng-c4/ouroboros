@@ -12,14 +12,17 @@ use crate::error::{ApiError, ApiResult};
 use crate::request::{HttpMethod, Request, SerializableRequest, SerializableValue};
 use crate::response::{Response, ResponseBody};
 use crate::router::Router;
+use crate::telemetry::TelemetryConfig;
 use data_bridge_pyloop::PyLoop;
 use http::header::CONTENT_LENGTH;
-use http::{HeaderMap, StatusCode};
+use http::{HeaderMap, HeaderValue, StatusCode};
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Bytes, Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
+use opentelemetry::global;
+use opentelemetry::propagation::Injector;
 use std::borrow::Cow;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -28,6 +31,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::{error, info, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// HTTP server configuration
 #[derive(Debug, Clone)]
@@ -38,6 +42,8 @@ pub struct ServerConfig {
     pub max_body_size: usize,
     /// Enable request logging
     pub enable_logging: bool,
+    /// Optional OpenTelemetry telemetry configuration
+    pub telemetry: Option<TelemetryConfig>,
 }
 
 impl Default for ServerConfig {
@@ -46,6 +52,7 @@ impl Default for ServerConfig {
             bind_addr: "127.0.0.1:8000".to_string(),
             max_body_size: 10 * 1024 * 1024, // 10MB
             enable_logging: true,
+            telemetry: None,
         }
     }
 }
@@ -68,6 +75,12 @@ impl ServerConfig {
     /// Enable or disable request logging
     pub fn logging(mut self, enabled: bool) -> Self {
         self.enable_logging = enabled;
+        self
+    }
+
+    /// Set OpenTelemetry telemetry configuration
+    pub fn with_telemetry(mut self, config: TelemetryConfig) -> Self {
+        self.telemetry = Some(config);
         self
     }
 }
@@ -230,6 +243,32 @@ impl Server {
     }
 }
 
+/// Adapter to inject OpenTelemetry context into HTTP headers
+struct HeaderMapCarrier<'a>(&'a mut HeaderMap);
+
+impl<'a> Injector for HeaderMapCarrier<'a> {
+    fn set(&mut self, key: &str, value: String) {
+        // Convert key to owned HeaderName to satisfy 'static requirement
+        if let Ok(header_name) = key.parse::<http::HeaderName>() {
+            if let Ok(header_value) = HeaderValue::from_str(&value) {
+                self.0.insert(header_name, header_value);
+            }
+        }
+    }
+}
+
+/// Inject the current trace context into HTTP headers
+///
+/// This allows Python handlers to extract and continue the trace.
+/// Uses W3C TraceContext propagation format (traceparent, tracestate headers).
+fn inject_trace_context(headers: &mut HeaderMap) {
+    let context = tracing::Span::current().context();
+    let mut carrier = HeaderMapCarrier(headers);
+    global::get_text_map_propagator(|propagator| {
+        propagator.inject_context(&context, &mut carrier);
+    });
+}
+
 /// Handle a single HTTP request
 ///
 /// This function implements the two-phase GIL pattern:
@@ -247,6 +286,18 @@ async fn handle_request(
     let uri = parts.uri.clone();
     let path = uri.path().to_string();
 
+    // Create root span for distributed tracing
+    let span = tracing::info_span!(
+        "http.request",
+        http.method = %method,
+        http.target = %path,
+        http.scheme = %uri.scheme_str().unwrap_or("http"),
+        http.client_ip = %remote_addr.ip(),
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+    );
+    let _guard = span.enter();
+
     if config.enable_logging {
         info!("{} {} - from {}", method, path, remote_addr);
     }
@@ -256,6 +307,7 @@ async fn handle_request(
         Ok(m) => m,
         Err(_) => {
             warn!("Invalid HTTP method: {}", method);
+            span.record("otel.status_code", 405);
             return Ok(error_response(
                 ApiError::MethodNotAllowed(format!("Invalid method: {}", method)),
             ));
@@ -268,16 +320,21 @@ async fn handle_request(
         Ok(bytes) => bytes,
         Err(err) => {
             error!("Failed to read request body: {}", err);
+            span.record("otel.status_code", 400);
             return Ok(error_response(ApiError::BadRequest(err.to_string())));
         }
     };
+
+    // Inject trace context into headers for Python to inherit
+    let mut headers_with_context = parts.headers.clone();
+    inject_trace_context(&mut headers_with_context);
 
     // Convert Hyper request to SerializableRequest
     let serializable_req = match convert_hyper_request(
         http_method,
         path.clone(),
         uri.to_string(),
-        parts.headers,
+        headers_with_context,
         body_bytes,
     )
     .await
@@ -285,6 +342,7 @@ async fn handle_request(
         Ok(req) => req,
         Err(err) => {
             error!("Failed to convert request: {}", err);
+            span.record("otel.status_code", 400);
             return Ok(error_response(err));
         }
     };
@@ -292,8 +350,14 @@ async fn handle_request(
     // Phase 2: Process request (GIL-free in PyO3 context)
     let response = process_request(serializable_req, router).await;
 
+    // Record response status code in span
+    let status_code = response.get_status();
+    span.record("otel.status_code", status_code as i32);
+
     // Convert response to Hyper format
-    Ok(convert_response_to_hyper(response))
+    let hyper_response = convert_response_to_hyper(response);
+
+    Ok(hyper_response)
 }
 
 /// Decode a query parameter component (key or value) with minimal allocations

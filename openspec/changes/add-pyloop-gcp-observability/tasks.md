@@ -1,11 +1,11 @@
 # Implementation Tasks
 
 ## 1. Rust Core (Observability Gateway)
-- [ ] 1.1 Add dependencies to `crates/data-bridge-api/Cargo.toml`: `tracing-opentelemetry`, `opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`.
-- [ ] 1.2 Implement `init_telemetry()` function in `crates/data-bridge-api/src/telemetry.rs` (new file) to configure the global tracer provider with OTLP exporter.
-- [ ] 1.3 Add `TelemetryConfig` to `ServerConfig` in `crates/data-bridge-api/src/server.rs`.
-- [ ] 1.4 Instrument `server.rs`: Wrap `handle_request` in a root span using `tracing`.
-- [ ] 1.5 Implement context injection: Before converting to `SerializableRequest`, inject the current trace context into the HTTP headers so Python can inherit it.
+- [x] 1.1 Add dependencies to `crates/data-bridge-api/Cargo.toml`: `tracing-opentelemetry`, `opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk`.
+- [x] 1.2 Implement `init_telemetry()` function in `crates/data-bridge-api/src/telemetry.rs` (new file) to configure the global tracer provider with OTLP exporter.
+- [x] 1.3 Add `TelemetryConfig` to `ServerConfig` in `crates/data-bridge-api/src/server.rs`.
+- [x] 1.4 Instrument `server.rs`: Wrap `handle_request` in a root span using `tracing`.
+- [x] 1.5 Implement context injection: Before converting to `SerializableRequest`, inject the current trace context into the HTTP headers so Python can inherit it.
 
 ## 2. Python Core (Handler Instrumentation)
 - [ ] 2.1 Add `opentelemetry-api` and `opentelemetry-sdk` to `pyproject.toml`.

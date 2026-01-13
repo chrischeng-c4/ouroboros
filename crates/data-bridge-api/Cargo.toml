@@ -35,8 +35,13 @@ utoipa = "4"
 # Routing
 matchit = "0.7"  # Radix tree router
 
-# Logging
+# Logging & Observability
 tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.22"
+opentelemetry = "0.21"
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"] }
+opentelemetry-otlp = "0.14"
 
 # Validation
 regex = "1"
