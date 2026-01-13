@@ -66,6 +66,11 @@ multer = { workspace = true }
 urlencoding = { workspace = true }
 futures-util = { workspace = true }
 
+# WebSocket & SSE support
+tokio-tungstenite = { workspace = true }
+async-stream = { workspace = true }
+sha1 = "0.10"  # For WebSocket handshake
+
 # Python integration
 pyo3 = { workspace = true }
 

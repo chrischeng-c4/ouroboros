@@ -18,6 +18,8 @@ pub mod validation;
 pub mod openapi;
 pub mod server;
 pub mod python_handler;
+pub mod websocket;
+pub mod sse;
 
 // OpenTelemetry tracing - only available with "observability" feature
 #[cfg(feature = "observability")]
@@ -31,6 +33,7 @@ pub use response::Response;
 pub use error::{ApiError, ApiResult};
 pub use server::{Server, ServerConfig};
 pub use python_handler::PythonHandler;
+pub use sse::{SseEvent, SseStream, SseResponse};
 
 // Re-export telemetry types when feature is enabled
 #[cfg(feature = "observability")]

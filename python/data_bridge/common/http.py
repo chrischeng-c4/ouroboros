@@ -5,7 +5,6 @@ that are shared between the API server and HTTP client modules.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -24,20 +23,21 @@ class HttpMethod(str, Enum):
         return self.value
 
 
-@dataclass
 class HttpStatus:
     """HTTP status code wrapper with helper methods."""
-    code: int
 
     # Common status codes as class constants
-    OK: "HttpStatus" = None  # Will be set after class definition
-    CREATED: "HttpStatus" = None
-    NO_CONTENT: "HttpStatus" = None
-    BAD_REQUEST: "HttpStatus" = None
-    UNAUTHORIZED: "HttpStatus" = None
-    FORBIDDEN: "HttpStatus" = None
-    NOT_FOUND: "HttpStatus" = None
-    INTERNAL_SERVER_ERROR: "HttpStatus" = None
+    OK: "HttpStatus"
+    CREATED: "HttpStatus"
+    NO_CONTENT: "HttpStatus"
+    BAD_REQUEST: "HttpStatus"
+    UNAUTHORIZED: "HttpStatus"
+    FORBIDDEN: "HttpStatus"
+    NOT_FOUND: "HttpStatus"
+    INTERNAL_SERVER_ERROR: "HttpStatus"
+
+    def __init__(self, code: int):
+        self.code = code
 
     def is_success(self) -> bool:
         """Returns True if this is a success status (2xx)."""
@@ -67,7 +67,6 @@ HttpStatus.NOT_FOUND = HttpStatus(404)
 HttpStatus.INTERNAL_SERVER_ERROR = HttpStatus(500)
 
 
-@dataclass
 class BaseResponse(ABC):
     """Base class for HTTP response types.
 
@@ -86,8 +85,14 @@ class BaseResponse(ABC):
         >>> resp.is_success()
         True
     """
-    status_code: int
-    headers: Dict[str, str] = field(default_factory=dict)
+
+    def __init__(
+        self,
+        status_code: int,
+        headers: Optional[Dict[str, str]] = None,
+    ):
+        self.status_code = status_code
+        self.headers = headers if headers is not None else {}
 
     def is_success(self) -> bool:
         """Returns True if this is a success response (2xx)."""
@@ -153,7 +158,6 @@ class BaseResponse(ABC):
         ...
 
 
-@dataclass
 class BaseRequest(ABC):
     """Base class for HTTP request types.
 
@@ -166,9 +170,16 @@ class BaseRequest(ABC):
         ...     def body_bytes(self) -> Optional[bytes]:
         ...         return self._body if self._body else None
     """
-    method: str
-    url: str
-    headers: Dict[str, str] = field(default_factory=dict)
+
+    def __init__(
+        self,
+        method: str,
+        url: str,
+        headers: Optional[Dict[str, str]] = None,
+    ):
+        self.method = method
+        self.url = url
+        self.headers = headers if headers is not None else {}
 
     def header(self, name: str) -> Optional[str]:
         """Get a header value by name (case-insensitive).

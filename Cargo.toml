@@ -58,9 +58,11 @@ url = "2.5"
 bytes = "1.9"
 
 # HTTP Server (for test server and data-bridge-api)
-axum = "0.8"
+axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
+tokio-tungstenite = "0.26"
+async-stream = "0.3"
 
 # API framework
 utoipa = "4"
