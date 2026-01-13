@@ -25,9 +25,6 @@ classifiers = [
 dependencies = [
     "redis>=7.1.0",
     "uvloop>=0.21.0",
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp>=1.20.0",
 ]
 
 # Console scripts
@@ -37,6 +34,14 @@ dbtest = "data_bridge.test.cli:main"
 # Optional dependencies for different data sources
 [project.optional-dependencies]
 mongodb = []      # MongoDB support (included by default)
+
+# OpenTelemetry distributed tracing support
+observability = [
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp>=1.20.0",
+]
+
 dev = [
     "ruff>=0.1.0",
     "mypy>=1.8.0",
@@ -52,7 +57,9 @@ comparison = [
 module-name = "data_bridge"
 python-source = "python"
 manifest-path = "crates/data-bridge/Cargo.toml"
-features = ["mongodb", "postgres", "http", "test", "kv", "api", "pyloop"]  # Build with all features
+# Build with all features by default
+# To enable observability: maturin develop --features observability
+features = ["mongodb", "postgres", "http", "test", "kv", "api", "pyloop"]
 
 [tool.ruff]
 line-length = 100

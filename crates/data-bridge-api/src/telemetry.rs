@@ -1,3 +1,30 @@
+//! OpenTelemetry tracing integration for data-bridge-api
+//!
+//! This module is only compiled when the `observability` feature is enabled.
+//! It provides distributed tracing capabilities using OpenTelemetry with OTLP export.
+//!
+//! # Features
+//! - W3C TraceContext propagation (traceparent, tracestate headers)
+//! - OTLP/gRPC export to OpenTelemetry Collector
+//! - Configurable sampling rates
+//! - Structured JSON logging
+//! - GCP Cloud Trace integration
+//!
+//! # Example
+//! ```no_run
+//! use data_bridge_api::telemetry::{TelemetryConfig, init_telemetry};
+//!
+//! let config = TelemetryConfig {
+//!     service_name: "my-service".to_string(),
+//!     service_version: "1.0.0".to_string(),
+//!     otlp_endpoint: "http://localhost:4317".to_string(),
+//!     json_logging: true,
+//!     sampling_rate: 1.0,
+//! };
+//!
+//! init_telemetry(config).expect("Failed to initialize telemetry");
+//! ```
+
 use opentelemetry::global;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;

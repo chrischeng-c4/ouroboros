@@ -18,6 +18,9 @@ pub mod validation;
 pub mod openapi;
 pub mod server;
 pub mod python_handler;
+
+// OpenTelemetry tracing - only available with "observability" feature
+#[cfg(feature = "observability")]
 pub mod telemetry;
 
 // Re-exports
@@ -28,6 +31,9 @@ pub use response::Response;
 pub use error::{ApiError, ApiResult};
 pub use server::{Server, ServerConfig};
 pub use python_handler::PythonHandler;
+
+// Re-export telemetry types when feature is enabled
+#[cfg(feature = "observability")]
 pub use telemetry::{TelemetryConfig, init_telemetry, shutdown_telemetry};
 
 // Re-export shared HTTP types from data-bridge-common

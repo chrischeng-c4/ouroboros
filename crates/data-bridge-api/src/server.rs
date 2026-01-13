@@ -12,17 +12,22 @@ use crate::error::{ApiError, ApiResult};
 use crate::request::{HttpMethod, Request, SerializableRequest, SerializableValue};
 use crate::response::{Response, ResponseBody};
 use crate::router::Router;
+
+// OpenTelemetry imports - only with observability feature
+#[cfg(feature = "observability")]
 use crate::telemetry::TelemetryConfig;
+
 use data_bridge_pyloop::PyLoop;
 use http::header::CONTENT_LENGTH;
-use http::{HeaderMap, HeaderValue, StatusCode};
+use http::{HeaderMap, StatusCode};
+// HeaderValue only needed with observability feature
+#[cfg(feature = "observability")]
+use http::HeaderValue;
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Bytes, Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
-use opentelemetry::global;
-use opentelemetry::propagation::Injector;
 use std::borrow::Cow;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -31,6 +36,13 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal;
 use tracing::{error, info, warn};
+
+// OpenTelemetry-specific imports
+#[cfg(feature = "observability")]
+use opentelemetry::global;
+#[cfg(feature = "observability")]
+use opentelemetry::propagation::Injector;
+#[cfg(feature = "observability")]
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// HTTP server configuration
@@ -43,6 +55,8 @@ pub struct ServerConfig {
     /// Enable request logging
     pub enable_logging: bool,
     /// Optional OpenTelemetry telemetry configuration
+    /// Only available when "observability" feature is enabled
+    #[cfg(feature = "observability")]
     pub telemetry: Option<TelemetryConfig>,
 }
 
@@ -52,6 +66,7 @@ impl Default for ServerConfig {
             bind_addr: "127.0.0.1:8000".to_string(),
             max_body_size: 10 * 1024 * 1024, // 10MB
             enable_logging: true,
+            #[cfg(feature = "observability")]
             telemetry: None,
         }
     }
@@ -79,6 +94,8 @@ impl ServerConfig {
     }
 
     /// Set OpenTelemetry telemetry configuration
+    /// Only available when "observability" feature is enabled
+    #[cfg(feature = "observability")]
     pub fn with_telemetry(mut self, config: TelemetryConfig) -> Self {
         self.telemetry = Some(config);
         self
@@ -243,31 +260,52 @@ impl Server {
     }
 }
 
-/// Adapter to inject OpenTelemetry context into HTTP headers
-struct HeaderMapCarrier<'a>(&'a mut HeaderMap);
+// OpenTelemetry trace context injection - only with observability feature
+#[cfg(feature = "observability")]
+mod telemetry_support {
+    use super::*;
 
-impl<'a> Injector for HeaderMapCarrier<'a> {
-    fn set(&mut self, key: &str, value: String) {
-        // Convert key to owned HeaderName to satisfy 'static requirement
-        if let Ok(header_name) = key.parse::<http::HeaderName>() {
-            if let Ok(header_value) = HeaderValue::from_str(&value) {
-                self.0.insert(header_name, header_value);
+    /// Adapter to inject OpenTelemetry context into HTTP headers
+    pub(super) struct HeaderMapCarrier<'a>(pub &'a mut HeaderMap);
+
+    impl<'a> Injector for HeaderMapCarrier<'a> {
+        fn set(&mut self, key: &str, value: String) {
+            // Convert key to owned HeaderName to satisfy 'static requirement
+            if let Ok(header_name) = key.parse::<http::HeaderName>() {
+                if let Ok(header_value) = HeaderValue::from_str(&value) {
+                    self.0.insert(header_name, header_value);
+                }
             }
         }
     }
+
+    /// Inject the current trace context into HTTP headers
+    ///
+    /// This allows Python handlers to extract and continue the trace.
+    /// Uses W3C TraceContext propagation format (traceparent, tracestate headers).
+    pub(super) fn inject_trace_context(headers: &mut HeaderMap) {
+        let context = tracing::Span::current().context();
+        let mut carrier = HeaderMapCarrier(headers);
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&context, &mut carrier);
+        });
+    }
 }
 
-/// Inject the current trace context into HTTP headers
-///
-/// This allows Python handlers to extract and continue the trace.
-/// Uses W3C TraceContext propagation format (traceparent, tracestate headers).
-fn inject_trace_context(headers: &mut HeaderMap) {
-    let context = tracing::Span::current().context();
-    let mut carrier = HeaderMapCarrier(headers);
-    global::get_text_map_propagator(|propagator| {
-        propagator.inject_context(&context, &mut carrier);
-    });
+// No-op version when observability is disabled
+#[cfg(not(feature = "observability"))]
+mod telemetry_support {
+    use super::*;
+
+    /// No-op: Does nothing when observability feature is disabled
+    #[inline]
+    pub(super) fn inject_trace_context(_headers: &mut HeaderMap) {
+        // No-op: OpenTelemetry not available
+    }
 }
+
+// Import the appropriate version based on feature flag
+use telemetry_support::inject_trace_context;
 
 /// Handle a single HTTP request
 ///

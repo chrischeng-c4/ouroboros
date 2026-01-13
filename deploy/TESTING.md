@@ -2,6 +2,24 @@
 
 This guide explains how to verify OpenTelemetry distributed tracing locally before deploying to GCP.
 
+## Feature Flag Requirement
+
+The observability features are **optional** and must be explicitly enabled:
+
+```bash
+# Build Rust with observability
+cargo build -p data-bridge-api --features observability
+
+# Or use maturin for Python package
+maturin develop --features observability
+
+# Install Python dependencies
+pip install "data-bridge[observability]"
+# or: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+For more details on the observability feature, see [OBSERVABILITY.md](./OBSERVABILITY.md).
+
 ## Architecture
 
 ```
