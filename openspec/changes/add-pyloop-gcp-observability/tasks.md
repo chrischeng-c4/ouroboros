@@ -21,5 +21,5 @@
 - [x] 3.2 Create `deploy/gcp/k8s-manifests.yaml` showing Sidecar deployment pattern.
 
 ## 4. Verification
-- [ ] 4.1 Create a test script `verify_tracing.py` that starts the server and sends a request, checking logs for trace IDs.
-- [ ] 4.2 Run local OTel collector (using Docker) and verify spans are received.
+- [x] 4.1 Create a test script `verify_tracing.py` that starts the server and sends a request, checking logs for trace IDs.
+- [x] 4.2 Run local OTel collector (using Docker) and verify spans are received.
