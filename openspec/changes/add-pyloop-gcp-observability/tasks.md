@@ -17,8 +17,8 @@
 - [x] 2.4 Update `python/data_bridge/pyloop/__init__.py` to export the new middleware.
 
 ## 3. Infrastructure & Config
-- [ ] 3.1 Create `deploy/gcp/otel-collector-config.yaml` with GCP exporter configuration.
-- [ ] 3.2 Create `deploy/gcp/k8s-manifests.yaml` showing Sidecar deployment pattern.
+- [x] 3.1 Create `deploy/gcp/otel-collector-config.yaml` with GCP exporter configuration.
+- [x] 3.2 Create `deploy/gcp/k8s-manifests.yaml` showing Sidecar deployment pattern.
 
 ## 4. Verification
 - [ ] 4.1 Create a test script `verify_tracing.py` that starts the server and sends a request, checking logs for trace IDs.
