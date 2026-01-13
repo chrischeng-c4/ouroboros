@@ -23,9 +23,13 @@ Benefits:
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import typing as _typing
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Any, Dict
+
+# Configure logger
+logger = logging.getLogger("data_bridge.pyloop")
 
 if TYPE_CHECKING:
     # Type stubs for the extension module
@@ -49,7 +53,17 @@ else:
         ) from e
         _RustApp = None
 
-__all__ = ["PyLoop", "install", "EventLoopPolicy", "is_installed", "App"]
+__all__ = [
+    "PyLoop",
+    "install",
+    "EventLoopPolicy",
+    "is_installed",
+    "App",
+    "HTTPException",
+    "ValidationError",
+    "NotFoundError",
+    "ConflictError"
+]
 
 __version__ = "0.1.0"
 
@@ -174,6 +188,83 @@ def is_installed() -> bool:
     return isinstance(policy, EventLoopPolicy)
 
 
+class HTTPException(Exception):
+    """
+    HTTP exception with status code and detail.
+
+    Raise this in handlers to return specific HTTP status codes.
+
+    Example:
+        raise HTTPException(404, "Product not found")
+        raise HTTPException(400, "Invalid request", {"field": "price"})
+    """
+    def __init__(
+        self,
+        status_code: int,
+        detail: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
+        extra: Optional[Dict[str, Any]] = None
+    ):
+        self.status_code = status_code
+        self.detail = detail or self._default_detail(status_code)
+        self.headers = headers or {}
+        self.extra = extra or {}
+        super().__init__(self.detail)
+
+    @staticmethod
+    def _default_detail(status_code: int) -> str:
+        """Get default detail message for status code."""
+        messages = {
+            400: "Bad Request",
+            401: "Unauthorized",
+            403: "Forbidden",
+            404: "Not Found",
+            405: "Method Not Allowed",
+            409: "Conflict",
+            422: "Unprocessable Entity",
+            500: "Internal Server Error",
+            503: "Service Unavailable"
+        }
+        return messages.get(status_code, "Error")
+
+    def to_response(self) -> Dict[str, Any]:
+        """Convert exception to response dict."""
+        body = {
+            "error": self.detail,
+            "status_code": self.status_code
+        }
+        if self.extra:
+            body.update(self.extra)
+
+        response = {
+            "status": self.status_code,
+            "body": body
+        }
+
+        if self.headers:
+            response["headers"] = self.headers
+
+        return response
+
+
+class ValidationError(HTTPException):
+    """Validation error (422 Unprocessable Entity)."""
+    def __init__(self, detail: str, errors: Optional[Dict] = None):
+        super().__init__(422, detail, extra={"errors": errors} if errors else None)
+
+
+class NotFoundError(HTTPException):
+    """Not found error (404)."""
+    def __init__(self, detail: str = "Resource not found"):
+        super().__init__(404, detail)
+
+
+class ConflictError(HTTPException):
+    """Conflict error (409) - e.g., duplicate key."""
+    def __init__(self, detail: str = "Resource already exists"):
+        super().__init__(409, detail)
+
+
 class App:
     """
     Simple FastAPI-style app builder for PyLoop.
@@ -198,16 +289,118 @@ class App:
         >>> app.serve(host="127.0.0.1", port=8000)
     """
 
-    def __init__(self, title: str = "DataBridge API", version: str = "0.1.0"):
+    def __init__(self, title: str = "DataBridge API", version: str = "0.1.0", debug: bool = False):
         """Initialize the App.
 
         Args:
             title: API title for OpenAPI documentation
             version: API version for OpenAPI documentation
+            debug: Enable debug mode (exposes stack traces)
         """
         if _RustApp is None:
             raise RuntimeError("PyLoop Rust extension not available")
         self._app = _RustApp(title=title, version=version)
+        self.debug = debug
+
+    def _handle_error(self, error: Exception, request: Dict = None) -> Dict[str, Any]:
+        """
+        Convert Python exception to HTTP response.
+
+        Args:
+            error: The exception that was raised
+            request: The request dict (for logging context)
+
+        Returns:
+            Response dict with appropriate status code and error message
+        """
+        # HTTPException - already formatted
+        if isinstance(error, HTTPException):
+            if not isinstance(error, (ValidationError, NotFoundError)):
+                # Log non-trivial errors
+                logger.warning(
+                    f"HTTP {error.status_code}: {error.detail}",
+                    extra={"path": request.get("path") if request else None}
+                )
+            return error.to_response()
+
+        # MongoDB errors (from data-bridge)
+        error_str = str(error)
+
+        # Duplicate key error (MongoDB)
+        if "duplicate key" in error_str.lower() or "E11000" in error_str:
+            logger.warning(f"Duplicate key error: {error_str}")
+            return {
+                "status": 409,
+                "body": {
+                    "error": "Resource already exists",
+                    "type": "ConflictError"
+                }
+            }
+
+        # Validation errors (MongoDB/Pydantic)
+        if "validation" in error_str.lower() or "ValidationError" in type(error).__name__:
+            logger.warning(f"Validation error: {error_str}")
+            return {
+                "status": 422,
+                "body": {
+                    "error": "Validation failed",
+                    "detail": error_str if self.debug else "Invalid request data",
+                    "type": "ValidationError"
+                }
+            }
+
+        # ObjectId errors (invalid ID format)
+        if "ObjectId" in error_str or "invalid objectid" in error_str.lower():
+            return {
+                "status": 400,
+                "body": {
+                    "error": "Invalid ID format",
+                    "type": "BadRequest"
+                }
+            }
+
+        # Generic error - don't expose internals in production
+        logger.error(f"Unhandled error: {type(error).__name__}: {error_str}", exc_info=True)
+
+        if self.debug:
+            # Debug mode: include full error details
+            import traceback
+            return {
+                "status": 500,
+                "body": {
+                    "error": "Internal Server Error",
+                    "type": type(error).__name__,
+                    "detail": error_str,
+                    "traceback": traceback.format_exc()
+                }
+            }
+        else:
+            # Production: generic error message
+            return {
+                "status": 500,
+                "body": {
+                    "error": "Internal Server Error",
+                    "type": "InternalServerError"
+                }
+            }
+
+    def _wrap_handler_with_error_handling(self, handler):
+        """
+        Wrap a handler function with error handling.
+
+        Args:
+            handler: The async handler function
+
+        Returns:
+            Wrapped handler that catches and converts exceptions
+        """
+        async def wrapped_handler(request):
+            try:
+                return await handler(request)
+            except Exception as e:
+                return self._handle_error(e, request)
+
+        return wrapped_handler
 
     def get(self, path: str):
         """Register a GET route handler.
@@ -224,7 +417,9 @@ class App:
             ...     return {"status": "ok"}
         """
         def decorator(func):
-            self._app.register_route("GET", path, func)
+            # Wrap with error handling
+            wrapped = self._wrap_handler_with_error_handling(func)
+            self._app.register_route("GET", path, wrapped)
             return func
         return decorator
 
@@ -243,7 +438,9 @@ class App:
             ...     return {"id": "new_id", **body}
         """
         def decorator(func):
-            self._app.register_route("POST", path, func)
+            # Wrap with error handling
+            wrapped = self._wrap_handler_with_error_handling(func)
+            self._app.register_route("POST", path, wrapped)
             return func
         return decorator
 
@@ -262,7 +459,9 @@ class App:
             ...     return {"id": path_params["user_id"], **body}
         """
         def decorator(func):
-            self._app.register_route("PUT", path, func)
+            # Wrap with error handling
+            wrapped = self._wrap_handler_with_error_handling(func)
+            self._app.register_route("PUT", path, wrapped)
             return func
         return decorator
 
@@ -281,7 +480,9 @@ class App:
             ...     return {"id": path_params["user_id"], "updated": True}
         """
         def decorator(func):
-            self._app.register_route("PATCH", path, func)
+            # Wrap with error handling
+            wrapped = self._wrap_handler_with_error_handling(func)
+            self._app.register_route("PATCH", path, wrapped)
             return func
         return decorator
 
@@ -300,7 +501,9 @@ class App:
             ...     return {"deleted": True, "user_id": path_params["user_id"]}
         """
         def decorator(func):
-            self._app.register_route("DELETE", path, func)
+            # Wrap with error handling
+            wrapped = self._wrap_handler_with_error_handling(func)
+            self._app.register_route("DELETE", path, wrapped)
             return func
         return decorator
 
@@ -409,23 +612,14 @@ class App:
             try:
                 document = await document_cls.get(doc_id)
                 if document is None:
-                    return {
-                        "status": 404,
-                        "body": {"error": "Not found", "id": doc_id}
-                    }
+                    raise NotFoundError(f"{collection_name.capitalize()} not found")
 
-                # Serialize to dict
-                data = document.to_dict()
-
-                return {
-                    "status": 200,
-                    "body": data
-                }
+                return {"status": 200, "body": document.to_dict()}
+            except HTTPException:
+                raise  # Re-raise HTTPException as-is
             except Exception as e:
-                return {
-                    "status": 400,
-                    "body": {"error": str(e)}
-                }
+                # Let the error handler deal with it
+                raise
 
         # Generate CREATE endpoint: POST /resource
         async def create_handler(request):
@@ -433,30 +627,16 @@ class App:
             body = request.get("body", {})
 
             if not body:
-                return {
-                    "status": 400,
-                    "body": {"error": "Request body required"}
-                }
+                raise ValidationError("Request body required")
 
             try:
-                # Create document instance
                 document = document_cls(**body)
-
-                # Save to database
                 await document.save()
-
-                # Return created document
-                data = document.to_dict()
-
-                return {
-                    "status": 201,
-                    "body": data
-                }
+                return {"status": 201, "body": document.to_dict()}
+            except HTTPException:
+                raise
             except Exception as e:
-                return {
-                    "status": 400,
-                    "body": {"error": str(e)}
-                }
+                raise  # Will be caught by error handler
 
         # Generate UPDATE endpoint: PUT /resource/{id}
         async def update_handler(request):
@@ -465,40 +645,23 @@ class App:
             body = request.get("body", {})
 
             if not body:
-                return {
-                    "status": 400,
-                    "body": {"error": "Request body required"}
-                }
+                raise ValidationError("Request body required")
 
             try:
-                # Find existing document
                 document = await document_cls.get(doc_id)
                 if document is None:
-                    return {
-                        "status": 404,
-                        "body": {"error": "Not found", "id": doc_id}
-                    }
+                    raise NotFoundError(f"{collection_name.capitalize()} not found")
 
-                # Update fields
                 for key, value in body.items():
-                    if not key.startswith('_'):  # Skip internal fields
+                    if not key.startswith('_'):
                         setattr(document, key, value)
 
-                # Save changes
                 await document.save()
-
-                # Return updated document
-                data = document.to_dict()
-
-                return {
-                    "status": 200,
-                    "body": data
-                }
+                return {"status": 200, "body": document.to_dict()}
+            except HTTPException:
+                raise
             except Exception as e:
-                return {
-                    "status": 400,
-                    "body": {"error": str(e)}
-                }
+                raise
 
         # Generate DELETE endpoint: DELETE /resource/{id}
         async def delete_handler(request):
@@ -506,25 +669,16 @@ class App:
             doc_id = request["path_params"]["id"]
 
             try:
-                # Find and delete document
                 document = await document_cls.get(doc_id)
                 if document is None:
-                    return {
-                        "status": 404,
-                        "body": {"error": "Not found", "id": doc_id}
-                    }
+                    raise NotFoundError(f"{collection_name.capitalize()} not found")
 
                 await document.delete()
-
-                return {
-                    "status": 204,
-                    "body": None
-                }
+                return {"status": 204, "body": None}
+            except HTTPException:
+                raise
             except Exception as e:
-                return {
-                    "status": 400,
-                    "body": {"error": str(e)}
-                }
+                raise
 
         # Register endpoints based on flags
         if list:
