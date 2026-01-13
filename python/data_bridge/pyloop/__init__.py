@@ -67,7 +67,8 @@ __all__ = [
     "BaseMiddleware",
     "CORSMiddleware",
     "LoggingMiddleware",
-    "CompressionMiddleware"
+    "CompressionMiddleware",
+    "OpenTelemetryMiddleware",
 ]
 
 __version__ = "0.1.0"
@@ -580,6 +581,131 @@ class CompressionMiddleware(BaseMiddleware):
 
         except Exception as e:
             logger.warning(f"Compression failed: {e}")
+
+        return response
+
+
+class OpenTelemetryMiddleware(BaseMiddleware):
+    """
+    OpenTelemetry distributed tracing middleware.
+
+    Extracts trace context from Rust-injected headers and creates child spans
+    for Python handler execution.
+
+    This enables cross-language distributed tracing:
+    - Rust HTTP server creates root span
+    - Rust injects W3C TraceContext headers (traceparent, tracestate)
+    - Python middleware extracts context and creates child span
+    - Python handler executes within the child span
+
+    Example:
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import ConsoleSpanExporter, BatchSpanProcessor
+
+        # Configure OpenTelemetry (typically done at app startup)
+        provider = TracerProvider()
+        provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        trace.set_tracer_provider(provider)
+
+        # Add middleware to app
+        app.add_middleware(OpenTelemetryMiddleware())
+
+    Requirements:
+        - opentelemetry-api >= 1.20.0
+        - opentelemetry-sdk >= 1.20.0
+        - opentelemetry-exporter-otlp >= 1.20.0 (for production)
+    """
+
+    def __init__(self, tracer_name: str = "data-bridge-pyloop"):
+        """
+        Initialize OpenTelemetry middleware.
+
+        Args:
+            tracer_name: Name for the OpenTelemetry tracer (default: "data-bridge-pyloop")
+        """
+        try:
+            from opentelemetry import trace
+            from opentelemetry.propagate import extract
+            from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+
+            self.tracer = trace.get_tracer(tracer_name)
+            self.propagator = TraceContextTextMapPropagator()
+            self._otel_available = True
+        except ImportError:
+            logger.warning(
+                "OpenTelemetry not installed. Install with: "
+                "pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp"
+            )
+            self._otel_available = False
+
+    async def process_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Extract trace context from headers and start child span.
+
+        The Rust HTTP server injects W3C TraceContext headers (traceparent, tracestate)
+        into the request. We extract this context and create a child span for the
+        Python handler execution.
+        """
+        if not self._otel_available:
+            return None
+
+        from opentelemetry import context, trace
+        from opentelemetry.trace import SpanKind
+
+        # Extract trace context from headers
+        # The Rust server injects 'traceparent' and optionally 'tracestate' headers
+        headers = request.get("headers", {})
+
+        # OpenTelemetry expects lowercase header names
+        carrier = {k.lower(): v for k, v in headers.items()}
+
+        # Extract context using W3C TraceContext propagator
+        ctx = self.propagator.extract(carrier=carrier)
+
+        # Start a new span as a child of the extracted context
+        with self.tracer.start_as_current_span(
+            "pyloop.request",
+            context=ctx,
+            kind=SpanKind.INTERNAL,
+        ) as span:
+            # Set span attributes
+            span.set_attribute("http.method", request.get("method", "UNKNOWN"))
+            span.set_attribute("http.route", request.get("path", "/"))
+            span.set_attribute("http.url", request.get("url", ""))
+
+            # Add query parameters if present
+            query_params = request.get("query_params", {})
+            if query_params:
+                # Don't log sensitive data - just count
+                span.set_attribute("http.query_param_count", len(query_params))
+
+            # Store span in request for later access
+            request["_otel_span"] = span
+            request["_otel_context"] = context.get_current()
+
+        return None
+
+    async def process_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Record response status in span.
+
+        This is called after the handler executes, so we can record the
+        final HTTP status code in the span.
+        """
+        if not self._otel_available:
+            return response
+
+        span = request.get("_otel_span")
+        if span:
+            # Record HTTP status code
+            status_code = response.get("status", 200)
+            span.set_attribute("http.status_code", status_code)
+
+            # Mark span as error if status code >= 500
+            if status_code >= 500:
+                from opentelemetry.trace import StatusCode
+                span.set_status(StatusCode.ERROR, f"HTTP {status_code}")
 
         return response
 
