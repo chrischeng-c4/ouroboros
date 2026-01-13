@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import typing as _typing
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     # Type stubs for the extension module
@@ -302,6 +302,229 @@ class App:
         def decorator(func):
             self._app.register_route("DELETE", path, func)
             return func
+        return decorator
+
+    def crud(self, document_cls, prefix: Optional[str] = None, tags: Optional[list] = None):
+        """
+        Auto-generate CRUD endpoints for a Document model.
+
+        Generates 5 endpoints:
+        - GET {prefix}/ - List documents (with pagination)
+        - GET {prefix}/{id} - Get document by ID
+        - POST {prefix}/ - Create new document
+        - PUT {prefix}/{id} - Update document by ID
+        - DELETE {prefix}/{id} - Delete document by ID
+
+        Args:
+            document_cls: Document class to generate CRUD for
+            prefix: URL prefix (default: /collection_name)
+            tags: OpenAPI tags (default: [collection_name])
+
+        Returns:
+            Decorator function (for @app.crud(Model) syntax)
+
+        Example:
+            from data_bridge.mongodb import Document
+            from data_bridge.pyloop import App
+
+            class Product(Document):
+                name: str
+                price: float
+
+                class Settings:
+                    name = "products"
+
+            app = App()
+
+            @app.crud(Product)
+            class ProductCRUD:
+                pass  # Endpoints auto-generated
+
+            # This generates:
+            # GET /products?skip=0&limit=10 - List products
+            # GET /products/{id} - Get product
+            # POST /products - Create product
+            # PUT /products/{id} - Update product
+            # DELETE /products/{id} - Delete product
+        """
+        # Get collection name from Document class
+        if hasattr(document_cls, '__collection_name__'):
+            collection_name = document_cls.__collection_name__()
+        elif hasattr(document_cls, '_collection_name'):
+            collection_name = document_cls._collection_name
+        else:
+            collection_name = document_cls.__name__.lower()
+
+        # Default prefix to /collection_name
+        if prefix is None:
+            prefix = f"/{collection_name}"
+
+        # Default tags
+        if tags is None:
+            tags = [collection_name]
+
+        # Generate LIST endpoint: GET /resource?skip=0&limit=10
+        async def list_handler(request):
+            """List documents with pagination."""
+            query_params = request.get("query_params", {})
+
+            # Extract pagination params
+            skip = int(query_params.get("skip", 0))
+            limit = int(query_params.get("limit", 10))
+            limit = min(limit, 100)  # Cap at 100
+
+            # Execute query
+            documents = await document_cls.find().skip(skip).limit(limit).to_list()
+
+            # Serialize to dict
+            items = [doc.to_dict() for doc in documents]
+
+            return {
+                "status": 200,
+                "body": {
+                    "items": items,
+                    "skip": skip,
+                    "limit": limit,
+                    "total": len(items)
+                }
+            }
+
+        # Generate GET_BY_ID endpoint: GET /resource/{id}
+        async def get_handler(request):
+            """Get document by ID."""
+            doc_id = request["path_params"]["id"]
+
+            try:
+                document = await document_cls.get(doc_id)
+                if document is None:
+                    return {
+                        "status": 404,
+                        "body": {"error": "Not found", "id": doc_id}
+                    }
+
+                # Serialize to dict
+                data = document.to_dict()
+
+                return {
+                    "status": 200,
+                    "body": data
+                }
+            except Exception as e:
+                return {
+                    "status": 400,
+                    "body": {"error": str(e)}
+                }
+
+        # Generate CREATE endpoint: POST /resource
+        async def create_handler(request):
+            """Create new document."""
+            body = request.get("body", {})
+
+            if not body:
+                return {
+                    "status": 400,
+                    "body": {"error": "Request body required"}
+                }
+
+            try:
+                # Create document instance
+                document = document_cls(**body)
+
+                # Save to database
+                await document.save()
+
+                # Return created document
+                data = document.to_dict()
+
+                return {
+                    "status": 201,
+                    "body": data
+                }
+            except Exception as e:
+                return {
+                    "status": 400,
+                    "body": {"error": str(e)}
+                }
+
+        # Generate UPDATE endpoint: PUT /resource/{id}
+        async def update_handler(request):
+            """Update document by ID."""
+            doc_id = request["path_params"]["id"]
+            body = request.get("body", {})
+
+            if not body:
+                return {
+                    "status": 400,
+                    "body": {"error": "Request body required"}
+                }
+
+            try:
+                # Find existing document
+                document = await document_cls.get(doc_id)
+                if document is None:
+                    return {
+                        "status": 404,
+                        "body": {"error": "Not found", "id": doc_id}
+                    }
+
+                # Update fields
+                for key, value in body.items():
+                    if not key.startswith('_'):  # Skip internal fields
+                        setattr(document, key, value)
+
+                # Save changes
+                await document.save()
+
+                # Return updated document
+                data = document.to_dict()
+
+                return {
+                    "status": 200,
+                    "body": data
+                }
+            except Exception as e:
+                return {
+                    "status": 400,
+                    "body": {"error": str(e)}
+                }
+
+        # Generate DELETE endpoint: DELETE /resource/{id}
+        async def delete_handler(request):
+            """Delete document by ID."""
+            doc_id = request["path_params"]["id"]
+
+            try:
+                # Find and delete document
+                document = await document_cls.get(doc_id)
+                if document is None:
+                    return {
+                        "status": 404,
+                        "body": {"error": "Not found", "id": doc_id}
+                    }
+
+                await document.delete()
+
+                return {
+                    "status": 204,
+                    "body": None
+                }
+            except Exception as e:
+                return {
+                    "status": 400,
+                    "body": {"error": str(e)}
+                }
+
+        # Register all 5 endpoints
+        self.get(f"{prefix}")(list_handler)
+        self.get(f"{prefix}/{{id}}")(get_handler)
+        self.post(f"{prefix}")(create_handler)
+        self.put(f"{prefix}/{{id}}")(update_handler)
+        self.delete(f"{prefix}/{{id}}")(delete_handler)
+
+        # Return decorator (for @app.crud(Model) syntax)
+        def decorator(cls):
+            return cls
+
         return decorator
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000):
