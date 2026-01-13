@@ -25,6 +25,8 @@ from .health import HealthManager, HealthCheck, HealthStatus
 from .middleware import BaseMiddleware, MiddlewareStack, TimingMiddleware, LoggingMiddleware, CORSMiddleware, CORSConfig
 from .background import BackgroundTasks, get_background_tasks
 from .forms import Form, File, UploadFile, FormMarker, FileMarker
+from .websocket import WebSocket, WebSocketDisconnect, WebSocketState
+from .sse import ServerSentEvent, EventSourceResponse
 
 __all__ = [
     # Core
@@ -73,4 +75,11 @@ __all__ = [
     "UploadFile",
     "FormMarker",
     "FileMarker",
+    # WebSocket
+    "WebSocket",
+    "WebSocketDisconnect",
+    "WebSocketState",
+    # Server-Sent Events
+    "ServerSentEvent",
+    "EventSourceResponse",
 ]

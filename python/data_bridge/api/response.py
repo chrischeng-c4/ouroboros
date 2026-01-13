@@ -15,8 +15,8 @@ class Response(BaseResponse):
         self,
         content: Any = None,
         status_code: int = 200,
-        headers: Dict[str, str] = None,
-        media_type: str = None,
+        headers: Optional[Dict[str, str]] = None,
+        media_type: Optional[str] = None,
     ):
         # Initialize BaseResponse fields
         super().__init__(status_code=status_code, headers=headers or {})
@@ -41,10 +41,10 @@ class Response(BaseResponse):
         self,
         key: str,
         value: str,
-        max_age: int = None,
-        expires: int = None,
+        max_age: Optional[int] = None,
+        expires: Optional[int] = None,
         path: str = "/",
-        domain: str = None,
+        domain: Optional[str] = None,
         secure: bool = False,
         httponly: bool = True,
         samesite: str = "lax",
@@ -69,7 +69,7 @@ class Response(BaseResponse):
         self,
         key: str,
         path: str = "/",
-        domain: str = None,
+        domain: Optional[str] = None,
     ) -> "Response":
         """Delete a cookie."""
         return self.set_cookie(key, "", max_age=0, path=path, domain=domain)
@@ -82,7 +82,7 @@ class JSONResponse(Response):
         self,
         content: Any,
         status_code: int = 200,
-        headers: Dict[str, str] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
         super().__init__(
             content=content,
@@ -103,7 +103,7 @@ class HTMLResponse(Response):
         self,
         content: str,
         status_code: int = 200,
-        headers: Dict[str, str] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
         super().__init__(
             content=content,
@@ -120,7 +120,7 @@ class PlainTextResponse(Response):
         self,
         content: str,
         status_code: int = 200,
-        headers: Dict[str, str] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
         super().__init__(
             content=content,

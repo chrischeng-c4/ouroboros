@@ -11,7 +11,7 @@ class HTTPException(Exception):
         self,
         status_code: int,
         detail: Any = None,
-        headers: Dict[str, str] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
         self.status_code = status_code
         self.detail = detail

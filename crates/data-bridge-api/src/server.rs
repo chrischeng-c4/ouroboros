@@ -12,6 +12,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::request::{HttpMethod, Request, SerializableRequest, SerializableValue};
 use crate::response::{Response, ResponseBody};
 use crate::router::Router;
+use crate::websocket::is_websocket_upgrade;
 
 // OpenTelemetry imports - only with observability feature
 #[cfg(feature = "observability")]
@@ -367,7 +368,7 @@ async fn handle_request(
     let mut headers_with_context = parts.headers.clone();
     inject_trace_context(&mut headers_with_context);
 
-    // Convert Hyper request to SerializableRequest
+    // Convert Hyper request to SerializableRequest (for WebSocket detection)
     let serializable_req = match convert_hyper_request(
         http_method,
         path.clone(),
@@ -384,6 +385,17 @@ async fn handle_request(
             return Ok(error_response(err));
         }
     };
+
+    // Check for WebSocket upgrade BEFORE normal request processing
+    if is_websocket_upgrade(&serializable_req) {
+        info!("WebSocket upgrade request detected for path: {}", path);
+        // TODO: Full WebSocket upgrade implementation will be added in Python layer
+        // For now, return 501 Not Implemented as placeholder
+        span.record("otel.status_code", 501);
+        return Ok(error_response(ApiError::Internal(
+            "WebSocket support not yet implemented".to_string(),
+        )));
+    }
 
     // Phase 2: Process request (GIL-free in PyO3 context)
     let response = process_request(serializable_req, router).await;

@@ -167,6 +167,51 @@ impl Router {
         self.route(HttpMethod::Delete, path, handler, validator, metadata)
     }
 
+    /// Register a WebSocket route
+    ///
+    /// WebSocket routes are GET requests that include the WebSocket upgrade headers.
+    /// The actual upgrade happens in the server layer, but we register the route
+    /// here so the path can be matched and validated.
+    ///
+    /// # Arguments
+    /// * `path` - The WebSocket endpoint path (e.g., "/ws")
+    /// * `handler` - Handler function that will process WebSocket messages
+    /// * `validator` - Request validator for the initial HTTP upgrade request
+    /// * `metadata` - Handler metadata for documentation
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use data_bridge_api::{Router, Request, Response};
+    /// use data_bridge_api::validation::{RequestValidator, ValidatedRequest};
+    /// use data_bridge_api::handler::HandlerMeta;
+    /// use data_bridge_api::error::ApiResult;
+    /// use std::sync::Arc;
+    ///
+    /// let mut router = Router::new();
+    /// router.websocket_route(
+    ///     "/ws",
+    ///     Arc::new(|req: Request, validated: ValidatedRequest| {
+    ///         Box::pin(async move {
+    ///             // WebSocket handler logic here
+    ///             Ok(Response::ok("WebSocket connected"))
+    ///         })
+    ///     }),
+    ///     RequestValidator::new(),
+    ///     HandlerMeta::new("websocket_handler".to_string()),
+    /// ).unwrap();
+    /// ```
+    pub fn websocket_route(
+        &mut self,
+        path: &str,
+        handler: HandlerFn,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        // WebSocket upgrade uses GET method
+        self.route(HttpMethod::Get, path, handler, validator, metadata)
+    }
+
     // Python handler registration methods
 
     /// Register a Python handler for GET requests

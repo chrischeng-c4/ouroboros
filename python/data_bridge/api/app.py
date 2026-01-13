@@ -105,6 +105,7 @@ class App:
 
         self._routes: List[RouteInfo] = []
         self._handlers: Dict[str, Callable] = {}
+        self._websocket_handlers: Dict[str, Callable] = {}
         self._dependency_container = DependencyContainer()
         self._compiled = False
         self._global_deps: Dict[int, str] = {}  # Track factory id -> registered name
@@ -135,11 +136,11 @@ class App:
         self,
         path: str,
         *,
-        methods: List[str] = None,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        methods: Optional[List[str]] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
     ) -> Callable[[T], T]:
@@ -182,10 +183,10 @@ class App:
         self,
         path: str,
         *,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
     ) -> Callable[[T], T]:
@@ -205,10 +206,10 @@ class App:
         self,
         path: str,
         *,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 201,
     ) -> Callable[[T], T]:
@@ -228,10 +229,10 @@ class App:
         self,
         path: str,
         *,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
     ) -> Callable[[T], T]:
@@ -251,10 +252,10 @@ class App:
         self,
         path: str,
         *,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
     ) -> Callable[[T], T]:
@@ -274,10 +275,10 @@ class App:
         self,
         path: str,
         *,
-        name: str = None,
-        summary: str = None,
-        description: str = None,
-        tags: List[str] = None,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 204,
     ) -> Callable[[T], T]:
@@ -292,6 +293,43 @@ class App:
             deprecated=deprecated,
             status_code=status_code,
         )
+
+    def websocket(
+        self,
+        path: str,
+        *,
+        name: Optional[str] = None,
+        summary: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        deprecated: bool = False,
+    ) -> Callable[[T], T]:
+        """Register a WebSocket route handler.
+
+        Example:
+            @app.websocket("/ws/{room_id}")
+            async def websocket_handler(websocket: WebSocket, room_id: str):
+                await websocket.accept()
+                while True:
+                    data = await websocket.receive_text()
+                    await websocket.send_text(f"Echo: {data}")
+        """
+        tags = tags or []
+
+        def decorator(func: T) -> T:
+            nonlocal name, summary, description
+
+            name = name or func.__name__
+            summary = summary or func.__doc__
+            if summary:
+                summary = summary.split('\n')[0].strip()
+
+            # Store WebSocket handler
+            self._websocket_handlers[path] = func
+
+            return func
+
+        return decorator
 
     def _register_route(
         self,
