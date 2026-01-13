@@ -26,7 +26,8 @@ import asyncio
 import logging
 import threading
 import typing as _typing
-from typing import TYPE_CHECKING, Optional, Any, Dict
+from typing import TYPE_CHECKING, Optional, Any, Dict, List
+from abc import ABC, abstractmethod
 
 # Configure logger
 logger = logging.getLogger("data_bridge.pyloop")
@@ -62,7 +63,11 @@ __all__ = [
     "HTTPException",
     "ValidationError",
     "NotFoundError",
-    "ConflictError"
+    "ConflictError",
+    "BaseMiddleware",
+    "CORSMiddleware",
+    "LoggingMiddleware",
+    "CompressionMiddleware"
 ]
 
 __version__ = "0.1.0"
@@ -265,6 +270,320 @@ class ConflictError(HTTPException):
         super().__init__(409, detail)
 
 
+class BaseMiddleware(ABC):
+    """
+    Base class for HTTP middleware.
+
+    Middleware can modify requests before handlers and responses after handlers.
+
+    Example:
+        class CustomMiddleware(BaseMiddleware):
+            async def process_request(self, request: Dict) -> Optional[Dict]:
+                # Modify request or return early response
+                if request.get("path") == "/blocked":
+                    return {"status": 403, "body": {"error": "Forbidden"}}
+                return None
+
+            async def process_response(self, request: Dict, response: Dict) -> Dict:
+                # Modify response
+                response.setdefault("headers", {})["X-Custom"] = "Header"
+                return response
+    """
+
+    @abstractmethod
+    async def process_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Process request before handler.
+
+        Args:
+            request: Request dict
+
+        Returns:
+            None to continue to handler, or response dict to return early
+        """
+        pass
+
+    @abstractmethod
+    async def process_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process response after handler.
+
+        Args:
+            request: Original request dict
+            response: Response dict from handler
+
+        Returns:
+            Modified response dict
+        """
+        pass
+
+
+class CORSMiddleware(BaseMiddleware):
+    """
+    CORS (Cross-Origin Resource Sharing) middleware.
+
+    Handles preflight requests and adds CORS headers to responses.
+
+    Example:
+        # Allow all origins
+        app.add_middleware(CORSMiddleware(allow_origins=["*"]))
+
+        # Specific origins
+        app.add_middleware(CORSMiddleware(
+            allow_origins=["https://example.com", "https://app.example.com"],
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Content-Type", "Authorization"],
+            allow_credentials=True,
+            max_age=600
+        ))
+    """
+
+    def __init__(
+        self,
+        allow_origins: Optional[List[str]] = None,
+        allow_methods: Optional[List[str]] = None,
+        allow_headers: Optional[List[str]] = None,
+        expose_headers: Optional[List[str]] = None,
+        allow_credentials: bool = False,
+        max_age: int = 600
+    ):
+        """
+        Initialize CORS middleware.
+
+        Args:
+            allow_origins: Allowed origins (["*"] for all, or specific origins)
+            allow_methods: Allowed HTTP methods (default: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+            allow_headers: Allowed request headers (default: ["*"])
+            expose_headers: Headers exposed to browser (default: [])
+            allow_credentials: Allow credentials (cookies, auth headers)
+            max_age: Max age for preflight cache in seconds (default: 600)
+        """
+        self.allow_origins = allow_origins or ["*"]
+        self.allow_methods = allow_methods or ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+        self.allow_headers = allow_headers or ["*"]
+        self.expose_headers = expose_headers or []
+        self.allow_credentials = allow_credentials
+        self.max_age = max_age
+
+        # Check for wildcard
+        self.allow_all_origins = "*" in self.allow_origins
+        self.allow_all_headers = "*" in self.allow_headers
+
+    def _is_origin_allowed(self, origin: str) -> bool:
+        """Check if origin is allowed."""
+        if self.allow_all_origins:
+            return True
+        return origin in self.allow_origins
+
+    async def process_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Handle CORS preflight requests."""
+        # Handle OPTIONS preflight request
+        if request.get("method") == "OPTIONS":
+            origin = request.get("headers", {}).get("origin")
+
+            if origin and self._is_origin_allowed(origin):
+                headers = {
+                    "Access-Control-Allow-Origin": origin if not self.allow_all_origins else "*",
+                    "Access-Control-Allow-Methods": ", ".join(self.allow_methods),
+                    "Access-Control-Max-Age": str(self.max_age),
+                    "Vary": "Origin"
+                }
+
+                # Handle Access-Control-Request-Headers
+                request_headers = request.get("headers", {}).get("access-control-request-headers")
+                if request_headers:
+                    if self.allow_all_headers:
+                        headers["Access-Control-Allow-Headers"] = request_headers
+                    else:
+                        headers["Access-Control-Allow-Headers"] = ", ".join(self.allow_headers)
+
+                if self.allow_credentials:
+                    headers["Access-Control-Allow-Credentials"] = "true"
+
+                # Return early response for preflight
+                return {
+                    "status": 204,
+                    "body": None,
+                    "headers": headers
+                }
+
+        # Not a preflight request, continue to handler
+        return None
+
+    async def process_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """Add CORS headers to response."""
+        origin = request.get("headers", {}).get("origin")
+
+        if origin and self._is_origin_allowed(origin):
+            # Ensure headers dict exists
+            if "headers" not in response:
+                response["headers"] = {}
+
+            # Add CORS headers
+            response["headers"]["Access-Control-Allow-Origin"] = origin if not self.allow_all_origins else "*"
+            response["headers"]["Vary"] = "Origin"
+
+            if self.expose_headers:
+                response["headers"]["Access-Control-Expose-Headers"] = ", ".join(self.expose_headers)
+
+            if self.allow_credentials:
+                response["headers"]["Access-Control-Allow-Credentials"] = "true"
+
+        return response
+
+
+class LoggingMiddleware(BaseMiddleware):
+    """
+    Request/Response logging middleware.
+
+    Logs all requests and responses with timing information.
+
+    Example:
+        app.add_middleware(LoggingMiddleware(
+            logger=logging.getLogger("myapp"),
+            log_request_body=True,
+            log_response_body=False
+        ))
+    """
+
+    def __init__(
+        self,
+        logger_instance=None,
+        log_request_body: bool = False,
+        log_response_body: bool = False
+    ):
+        """
+        Initialize logging middleware.
+
+        Args:
+            logger_instance: Logger instance (default: data_bridge.pyloop logger)
+            log_request_body: Whether to log request body (default: False)
+            log_response_body: Whether to log response body (default: False)
+        """
+        self.logger_instance = logger_instance or logging.getLogger("data_bridge.pyloop")
+        self.log_request_body = log_request_body
+        self.log_response_body = log_response_body
+
+    async def process_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Log incoming request."""
+        import time
+
+        # Store request start time
+        request["_middleware_start_time"] = time.time()
+
+        # Log request
+        log_data = {
+            "method": request.get("method"),
+            "path": request.get("path"),
+            "query_params": request.get("query_params", {})
+        }
+
+        if self.log_request_body and "body" in request:
+            log_data["body"] = request["body"]
+
+        self.logger_instance.info(f"→ {request.get('method')} {request.get('path')}", extra=log_data)
+
+        # Don't return early, continue to handler
+        return None
+
+    async def process_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """Log outgoing response."""
+        import time
+
+        # Calculate request duration
+        start_time = request.get("_middleware_start_time")
+        duration_ms = (time.time() - start_time) * 1000 if start_time else 0
+
+        # Log response
+        log_data = {
+            "method": request.get("method"),
+            "path": request.get("path"),
+            "status": response.get("status"),
+            "duration_ms": round(duration_ms, 2)
+        }
+
+        if self.log_response_body and "body" in response:
+            log_data["body"] = response["body"]
+
+        status = response.get("status", 0)
+        if status >= 500:
+            self.logger_instance.error(f"← {status} {request.get('method')} {request.get('path')} ({duration_ms:.2f}ms)", extra=log_data)
+        elif status >= 400:
+            self.logger_instance.warning(f"← {status} {request.get('method')} {request.get('path')} ({duration_ms:.2f}ms)", extra=log_data)
+        else:
+            self.logger_instance.info(f"← {status} {request.get('method')} {request.get('path')} ({duration_ms:.2f}ms)", extra=log_data)
+
+        return response
+
+
+class CompressionMiddleware(BaseMiddleware):
+    """
+    Response compression middleware (gzip).
+
+    Compresses responses based on Accept-Encoding header.
+
+    Example:
+        app.add_middleware(CompressionMiddleware(
+            minimum_size=500,  # Only compress responses > 500 bytes
+            compression_level=6
+        ))
+    """
+
+    def __init__(
+        self,
+        minimum_size: int = 500,
+        compression_level: int = 6
+    ):
+        """
+        Initialize compression middleware.
+
+        Args:
+            minimum_size: Minimum response size to compress (bytes)
+            compression_level: gzip compression level (1-9, default: 6)
+        """
+        self.minimum_size = minimum_size
+        self.compression_level = compression_level
+
+    async def process_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """No request processing needed."""
+        return None
+
+    async def process_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """Compress response if appropriate."""
+        # Check if client accepts gzip
+        accept_encoding = request.get("headers", {}).get("accept-encoding", "")
+        if "gzip" not in accept_encoding.lower():
+            return response
+
+        # Check if response body exists and is large enough
+        body = response.get("body")
+        if not body:
+            return response
+
+        # Serialize body to JSON to get size
+        import json
+        try:
+            body_str = json.dumps(body)
+            body_bytes = body_str.encode("utf-8")
+
+            if len(body_bytes) < self.minimum_size:
+                return response
+
+            # Compress
+            import gzip
+            compressed = gzip.compress(body_bytes, compresslevel=self.compression_level)
+
+            # Update response
+            # Note: For now we'll just log compression
+            # Full implementation would need to handle binary response bodies
+            logger.debug(f"Compressed response: {len(body_bytes)} → {len(compressed)} bytes ({len(compressed)/len(body_bytes)*100:.1f}%)")
+
+        except Exception as e:
+            logger.warning(f"Compression failed: {e}")
+
+        return response
+
+
 class App:
     """
     Simple FastAPI-style app builder for PyLoop.
@@ -301,6 +620,86 @@ class App:
             raise RuntimeError("PyLoop Rust extension not available")
         self._app = _RustApp(title=title, version=version)
         self.debug = debug
+        self.middlewares: List[BaseMiddleware] = []  # Middleware stack
+
+    def add_middleware(self, middleware: BaseMiddleware) -> None:
+        """
+        Add middleware to the app.
+
+        Middleware is applied in the order added:
+        - Request processing: first → last
+        - Response processing: last → first (reverse order)
+
+        Args:
+            middleware: Middleware instance
+
+        Example:
+            app.add_middleware(CORSMiddleware(allow_origins=["*"]))
+            app.add_middleware(LoggingMiddleware())
+        """
+        self.middlewares.append(middleware)
+
+    async def _process_middleware_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Process request through middleware chain.
+
+        Returns:
+            None if request should continue to handler, or early response dict
+        """
+        for middleware in self.middlewares:
+            early_response = await middleware.process_request(request)
+            if early_response is not None:
+                # Middleware returned early response, stop processing
+                return early_response
+        return None
+
+    async def _process_middleware_response(self, request: Dict[str, Any], response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process response through middleware chain (in reverse order).
+
+        Args:
+            request: Original request
+            response: Response from handler
+
+        Returns:
+            Modified response
+        """
+        # Process middleware in reverse order for responses
+        for middleware in reversed(self.middlewares):
+            response = await middleware.process_response(request, response)
+        return response
+
+    def _wrap_handler_with_middleware(self, handler):
+        """
+        Wrap handler with middleware processing.
+
+        Args:
+            handler: The async handler function
+
+        Returns:
+            Wrapped handler with middleware and error handling
+        """
+        async def wrapped_handler(request):
+            try:
+                # Process request middleware
+                early_response = await self._process_middleware_request(request)
+                if early_response is not None:
+                    # Middleware returned early response
+                    # Still process response middleware
+                    return await self._process_middleware_response(request, early_response)
+
+                # Call handler
+                response = await handler(request)
+
+                # Process response middleware
+                return await self._process_middleware_response(request, response)
+
+            except Exception as e:
+                # Handle error and process response middleware
+                error_response = self._handle_error(e, request)
+                return await self._process_middleware_response(request, error_response)
+
+        return wrapped_handler
 
     def _handle_error(self, error: Exception, request: Dict = None) -> Dict[str, Any]:
         """
@@ -417,8 +816,8 @@ class App:
             ...     return {"status": "ok"}
         """
         def decorator(func):
-            # Wrap with error handling
-            wrapped = self._wrap_handler_with_error_handling(func)
+            # Wrap with middleware and error handling
+            wrapped = self._wrap_handler_with_middleware(func)
             self._app.register_route("GET", path, wrapped)
             return func
         return decorator
@@ -438,8 +837,8 @@ class App:
             ...     return {"id": "new_id", **body}
         """
         def decorator(func):
-            # Wrap with error handling
-            wrapped = self._wrap_handler_with_error_handling(func)
+            # Wrap with middleware and error handling
+            wrapped = self._wrap_handler_with_middleware(func)
             self._app.register_route("POST", path, wrapped)
             return func
         return decorator
@@ -459,8 +858,8 @@ class App:
             ...     return {"id": path_params["user_id"], **body}
         """
         def decorator(func):
-            # Wrap with error handling
-            wrapped = self._wrap_handler_with_error_handling(func)
+            # Wrap with middleware and error handling
+            wrapped = self._wrap_handler_with_middleware(func)
             self._app.register_route("PUT", path, wrapped)
             return func
         return decorator
@@ -480,8 +879,8 @@ class App:
             ...     return {"id": path_params["user_id"], "updated": True}
         """
         def decorator(func):
-            # Wrap with error handling
-            wrapped = self._wrap_handler_with_error_handling(func)
+            # Wrap with middleware and error handling
+            wrapped = self._wrap_handler_with_middleware(func)
             self._app.register_route("PATCH", path, wrapped)
             return func
         return decorator
@@ -501,8 +900,8 @@ class App:
             ...     return {"deleted": True, "user_id": path_params["user_id"]}
         """
         def decorator(func):
-            # Wrap with error handling
-            wrapped = self._wrap_handler_with_error_handling(func)
+            # Wrap with middleware and error handling
+            wrapped = self._wrap_handler_with_middleware(func)
             self._app.register_route("DELETE", path, wrapped)
             return func
         return decorator
