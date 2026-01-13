@@ -304,49 +304,57 @@ class App:
             return func
         return decorator
 
-    def crud(self, document_cls, prefix: Optional[str] = None, tags: Optional[list] = None):
+    def crud_routes(
+        self,
+        document_cls,
+        prefix: Optional[str] = None,
+        tags: Optional[list] = None,
+        # Operation control - can use boolean or string
+        operations: Optional[str] = None,
+        create: bool = True,
+        read: bool = True,
+        update: bool = True,
+        delete: bool = True,
+        list: bool = True,
+    ):
         """
         Auto-generate CRUD endpoints for a Document model.
-
-        Generates 5 endpoints:
-        - GET {prefix}/ - List documents (with pagination)
-        - GET {prefix}/{id} - Get document by ID
-        - POST {prefix}/ - Create new document
-        - PUT {prefix}/{id} - Update document by ID
-        - DELETE {prefix}/{id} - Delete document by ID
 
         Args:
             document_cls: Document class to generate CRUD for
             prefix: URL prefix (default: /collection_name)
             tags: OpenAPI tags (default: [collection_name])
-
-        Returns:
-            Decorator function (for @app.crud(Model) syntax)
+            operations: String specifying operations (e.g., "CRUDL", "CR", "RUD")
+                       C=Create, R=Read, U=Update, D=Delete, L=List
+                       If provided, overrides individual flags
+            create: Generate POST endpoint (default: True)
+            read: Generate GET /{id} endpoint (default: True)
+            update: Generate PUT /{id} endpoint (default: True)
+            delete: Generate DELETE /{id} endpoint (default: True)
+            list: Generate GET / endpoint with pagination (default: True)
 
         Example:
-            from data_bridge.mongodb import Document
-            from data_bridge.pyloop import App
+            # All operations (default)
+            app.crud_routes(Product)
 
-            class Product(Document):
-                name: str
-                price: float
+            # Only read operations
+            app.crud_routes(Product, operations="RL")
 
-                class Settings:
-                    name = "products"
+            # Explicit flags
+            app.crud_routes(Product, create=True, read=True, list=False)
 
-            app = App()
-
-            @app.crud(Product)
-            class ProductCRUD:
-                pass  # Endpoints auto-generated
-
-            # This generates:
-            # GET /products?skip=0&limit=10 - List products
-            # GET /products/{id} - Get product
-            # POST /products - Create product
-            # PUT /products/{id} - Update product
-            # DELETE /products/{id} - Delete product
+            # Custom prefix
+            app.crud_routes(Product, prefix="/api/products")
         """
+        # Parse operations string if provided
+        if operations is not None:
+            operations = operations.upper()
+            create = "C" in operations
+            read = "R" in operations
+            update = "U" in operations
+            delete = "D" in operations
+            list = "L" in operations
+
         # Get collection name from Document class
         if hasattr(document_cls, '__collection_name__'):
             collection_name = document_cls.__collection_name__()
@@ -514,17 +522,69 @@ class App:
                     "body": {"error": str(e)}
                 }
 
-        # Register all 5 endpoints
-        self.get(f"{prefix}")(list_handler)
-        self.get(f"{prefix}/{{id}}")(get_handler)
-        self.post(f"{prefix}")(create_handler)
-        self.put(f"{prefix}/{{id}}")(update_handler)
-        self.delete(f"{prefix}/{{id}}")(delete_handler)
+        # Register endpoints based on flags
+        if list:
+            self.get(f"{prefix}")(list_handler)
 
-        # Return decorator (for @app.crud(Model) syntax)
+        if read:
+            self.get(f"{prefix}/{{id}}")(get_handler)
+
+        if create:
+            self.post(f"{prefix}")(create_handler)
+
+        if update:
+            self.put(f"{prefix}/{{id}}")(update_handler)
+
+        if delete:
+            self.delete(f"{prefix}/{{id}}")(delete_handler)
+
+    def crud(self, document_cls, prefix: Optional[str] = None, tags: Optional[list] = None):
+        """
+        Legacy decorator-style CRUD generation (deprecated).
+
+        Use crud_routes() instead for direct method call:
+            app.crud_routes(Product)
+
+        This method is kept for backward compatibility.
+
+        Args:
+            document_cls: Document class to generate CRUD for
+            prefix: URL prefix (default: /collection_name)
+            tags: OpenAPI tags (default: [collection_name])
+
+        Returns:
+            Decorator function (for @app.crud(Model) syntax)
+
+        Example:
+            from data_bridge.mongodb import Document
+            from data_bridge.pyloop import App
+
+            class Product(Document):
+                name: str
+                price: float
+
+                class Settings:
+                    name = "products"
+
+            app = App()
+
+            @app.crud(Product)
+            class ProductCRUD:
+                pass  # Endpoints auto-generated
+
+            # This generates:
+            # GET /products?skip=0&limit=10 - List products
+            # GET /products/{id} - Get product
+            # POST /products - Create product
+            # PUT /products/{id} - Update product
+            # DELETE /products/{id} - Delete product
+        """
+        # Call the new crud_routes method
+        self.crud_routes(document_cls, prefix=prefix, tags=tags)
+
+        # Return decorator for @app.crud(Model) syntax
         def decorator(cls):
             return cls
-
         return decorator
 
     def serve(self, host: str = "127.0.0.1", port: int = 8000):

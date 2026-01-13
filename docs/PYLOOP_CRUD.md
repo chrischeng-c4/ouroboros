@@ -34,10 +34,13 @@ class Product(Document):
 # Create app
 app = App(title="Product API", version="1.0.0")
 
-# Auto-generate CRUD endpoints
-@app.crud(Product)
-class ProductCRUD:
-    pass  # That's it!
+# Auto-generate CRUD endpoints (direct call - RECOMMENDED)
+app.crud_routes(Product)
+
+# OR use decorator syntax (legacy, still supported)
+# @app.crud(Product)
+# class ProductCRUD:
+#     pass
 
 # Initialize database and run
 async def main():
@@ -50,7 +53,7 @@ asyncio.run(main())
 app.serve(host="127.0.0.1", port=8000)
 ```
 
-This single decorator generates 5 endpoints:
+This generates 5 endpoints:
 
 1. `GET /products?skip=0&limit=10` - List products with pagination
 2. `GET /products/{id}` - Get product by ID
@@ -60,9 +63,58 @@ This single decorator generates 5 endpoints:
 
 ## API Reference
 
-### `app.crud(document_cls, prefix=None, tags=None)`
+### `app.crud_routes(document_cls, prefix=None, tags=None, operations=None, create=True, read=True, update=True, delete=True, list=True)` (RECOMMENDED)
 
-Auto-generate CRUD endpoints for a Document model.
+Auto-generate CRUD endpoints for a Document model with granular control.
+
+**Parameters:**
+
+- `document_cls` (Document): The Document class to generate CRUD endpoints for
+- `prefix` (str, optional): URL prefix for the endpoints. Defaults to `/{collection_name}`
+- `tags` (list, optional): OpenAPI tags for the endpoints. Defaults to `[collection_name]`
+- `operations` (str, optional): String specifying operations (e.g., "CRUDL", "CR", "RL")
+  - `C` = Create (POST)
+  - `R` = Read (GET /{id})
+  - `U` = Update (PUT /{id})
+  - `D` = Delete (DELETE /{id})
+  - `L` = List (GET / with pagination)
+  - If provided, overrides individual boolean flags
+- `create` (bool): Generate POST endpoint (default: True)
+- `read` (bool): Generate GET /{id} endpoint (default: True)
+- `update` (bool): Generate PUT /{id} endpoint (default: True)
+- `delete` (bool): Generate DELETE /{id} endpoint (default: True)
+- `list` (bool): Generate GET / endpoint with pagination (default: True)
+
+**Examples:**
+
+```python
+# All operations (default)
+app.crud_routes(Product)
+
+# Read-only API (string shorthand)
+app.crud_routes(Product, operations="RL")  # Only Read + List
+
+# Create and read only (string shorthand)
+app.crud_routes(Product, operations="CR")
+
+# Explicit control with boolean flags
+app.crud_routes(Product, create=True, read=True, update=False, delete=False)
+
+# Custom prefix
+app.crud_routes(Product, prefix="/api/v1/products")
+
+# Multiple options combined
+app.crud_routes(
+    Product,
+    prefix="/api/products",
+    tags=["inventory", "products"],
+    operations="RU"  # Only Read + Update
+)
+```
+
+### `app.crud(document_cls, prefix=None, tags=None)` (LEGACY)
+
+Legacy decorator-style CRUD generation. Use `crud_routes()` instead for direct method call.
 
 **Parameters:**
 
@@ -81,6 +133,8 @@ Auto-generate CRUD endpoints for a Document model.
 class ProductCRUD:
     pass
 ```
+
+**Note:** This decorator syntax is kept for backward compatibility. New code should use `crud_routes()` for a cleaner API.
 
 ## Generated Endpoints
 
@@ -241,14 +295,30 @@ curl -X DELETE http://127.0.0.1:8000/products/507f1f77bcf86cd799439011
 
 ## Advanced Usage
 
+### Selective Operations
+
+Generate only specific endpoints using the `operations` string or boolean flags:
+
+```python
+# Read-only API (only GET endpoints)
+app.crud_routes(Product, operations="RL")  # Read + List
+
+# No delete operation (security)
+app.crud_routes(Product, operations="CRUL")  # All except Delete
+
+# Create and read only
+app.crud_routes(Product, operations="CR")
+
+# Using boolean flags for explicit control
+app.crud_routes(Product, create=True, read=True, update=False, delete=False, list=True)
+```
+
 ### Custom Prefix
 
 Override the default collection name prefix:
 
 ```python
-@app.crud(Product, prefix="/api/v1/inventory/products")
-class ProductCRUD:
-    pass
+app.crud_routes(Product, prefix="/api/v1/inventory/products")
 ```
 
 This generates endpoints like:
@@ -261,9 +331,7 @@ This generates endpoints like:
 Specify OpenAPI tags for documentation:
 
 ```python
-@app.crud(Product, tags=["inventory", "e-commerce", "products"])
-class ProductCRUD:
-    pass
+app.crud_routes(Product, tags=["inventory", "e-commerce", "products"])
 ```
 
 ### Multiple Models
@@ -287,29 +355,26 @@ class Category(Document):
 
 app = App(title="E-Commerce API", version="1.0.0")
 
-@app.crud(Product)
-class ProductCRUD:
-    pass
+# Full CRUD for products
+app.crud_routes(Product)
 
-@app.crud(Category, prefix="/api/categories")
-class CategoryCRUD:
-    pass
+# Read-only for categories
+app.crud_routes(Category, prefix="/api/categories", operations="RL")
 ```
 
 This generates:
-- Product endpoints: `/products`, `/products/{id}`
-- Category endpoints: `/api/categories`, `/api/categories/{id}`
+- Product endpoints: `/products` (all 5 operations)
+- Category endpoints: `/api/categories` (read and list only)
 
 ### Adding Custom Endpoints
 
 You can still add custom endpoints alongside auto-generated CRUD:
 
 ```python
-@app.crud(Product)
-class ProductCRUD:
-    pass
+# Generate CRUD endpoints
+app.crud_routes(Product)
 
-# Custom endpoint
+# Custom search endpoint
 @app.get("/products/search")
 async def search_products(request):
     query = request.get("query_params", {}).get("q", "")

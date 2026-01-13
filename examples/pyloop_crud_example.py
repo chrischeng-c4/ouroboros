@@ -1,7 +1,7 @@
 """
 Example of auto-generated CRUD endpoints with PyLoop.
 
-This demonstrates Phase 3: Declarative DSL that automatically generates
+This demonstrates Phase 3: Direct method call API for generating
 5 REST endpoints from a Document model.
 
 Run with: python examples/pyloop_crud_example.py
@@ -45,18 +45,17 @@ class Product(Document):
 # Create app
 app = App(title="Product API (Auto-CRUD)", version="1.0.0")
 
-# Auto-generate 5 CRUD endpoints with a single decorator!
-@app.crud(Product)
-class ProductCRUD:
-    """
-    This decorator automatically generates:
-    - GET /products?skip=0&limit=10 - List products
-    - GET /products/{id} - Get product by ID
-    - POST /products - Create product
-    - PUT /products/{id} - Update product
-    - DELETE /products/{id} - Delete product
-    """
-    pass
+# Method 1: All operations (default) - Direct call, no decorator!
+app.crud_routes(Product)
+
+# Method 2: Only enable read operations (string shorthand)
+# app.crud_routes(Product, operations="RL")  # Read + List only
+
+# Method 3: Explicit flags (boolean parameters)
+# app.crud_routes(Product, create=True, read=True, update=False, delete=False, list=True)
+
+# Method 4: Custom prefix
+# app.crud_routes(Product, prefix="/api/v1/products")
 
 # You can still add custom endpoints
 @app.get("/")
@@ -95,9 +94,9 @@ if __name__ == "__main__":
     asyncio.run(setup_db())
 
     print("=" * 60)
-    print("Phase 3: Auto-Generated CRUD Endpoints Demo")
+    print("Phase 3: Auto-Generated CRUD Endpoints Demo (Direct Call)")
     print("=" * 60)
-    print("\nEndpoints generated from Product model:")
+    print("\nEndpoints generated with: app.crud_routes(Product)")
     print("  GET    /products?skip=0&limit=10  - List products")
     print("  GET    /products/{id}             - Get product")
     print("  POST   /products                  - Create product")
