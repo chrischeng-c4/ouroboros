@@ -18,6 +18,7 @@ pub mod error;
 pub mod validation;
 pub mod openapi;
 pub mod server;
+pub mod python_handler;
 
 // Re-exports
 pub use app::App;
@@ -27,6 +28,7 @@ pub use request::Request;
 pub use response::Response;
 pub use error::{ApiError, ApiResult};
 pub use server::{Server, ServerConfig};
+pub use python_handler::PythonHandler;
 
 // Re-export shared HTTP types from data-bridge-common
 pub use data_bridge_common::http::{HttpMethod, HttpStatus, HttpResponseLike, HttpRequestLike};

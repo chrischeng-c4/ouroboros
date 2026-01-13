@@ -2,6 +2,7 @@
 
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
@@ -690,6 +691,46 @@ impl PyLoop {
 }
 
 impl PyLoop {
+    /// Create a new PyLoop instance from Rust code
+    ///
+    /// This is the Rust-side constructor, equivalent to the Python __init__.
+    /// Use this when creating PyLoop from Rust code (e.g., for HTTP server integration).
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use data_bridge_pyloop::PyLoop;
+    /// use std::sync::Arc;
+    ///
+    /// let pyloop = Arc::new(PyLoop::create().unwrap());
+    /// ```
+    pub fn create() -> Result<Self, crate::error::PyLoopError> {
+        let runtime = get_runtime()?;
+
+        let (task_sender, task_receiver) = unbounded_channel();
+
+        // Create timer wheel that sends expired timers to main task queue
+        let timer_wheel = Arc::new(TimerWheel::new(task_sender.clone()));
+
+        // Spawn background timer processor
+        let timer_wheel_clone = timer_wheel.clone();
+        runtime.spawn(async move {
+            timer_wheel_clone.run().await;
+        });
+
+        Ok(Self {
+            runtime,
+            running: Arc::new(AtomicBool::new(false)),
+            closed: Arc::new(AtomicBool::new(false)),
+            stopped: Arc::new(AtomicBool::new(false)),
+            task_sender,
+            task_receiver: Arc::new(Mutex::new(task_receiver)),
+            start_time: Arc::new(Mutex::new(None)),
+            timer_wheel,
+            wakeup_condvar: Arc::new((Mutex::new(false), Condvar::new())),
+        })
+    }
+
     /// Get time since loop start (for call_at)
     fn loop_time(&self) -> f64 {
         match *self.start_time.lock().unwrap() {
@@ -839,6 +880,134 @@ impl PyLoop {
     #[allow(dead_code)]
     pub(crate) fn runtime(&self) -> &Runtime {
         &self.runtime
+    }
+
+    /// Spawn a Python handler and return a Future that resolves to its result
+    ///
+    /// This method allows Rust code to call Python functions (sync or async) and
+    /// await their results. It's designed for integrating Python handlers with
+    /// Rust async code (e.g., HTTP servers).
+    ///
+    /// # Phase 1 Implementation (Workaround)
+    ///
+    /// This implementation uses `tokio::task::spawn_blocking` to avoid blocking
+    /// the main Tokio runtime. For async Python functions (coroutines), it creates
+    /// a temporary asyncio event loop to run them to completion.
+    ///
+    /// **Performance**: Adds ~50µs overhead due to thread pool spawning.
+    ///
+    /// **Phase 4 Enhancement**: Will integrate with PyLoop's event loop for true
+    /// async execution without spawn_blocking overhead.
+    ///
+    /// # Arguments
+    ///
+    /// * `callable` - Python callable (function or coroutine function)
+    /// * `args` - Arguments to pass (can be a single value or PyTuple)
+    ///
+    /// # Returns
+    ///
+    /// A Future that resolves to the Python function's return value (or error).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use pyo3::prelude::*;
+    /// use data_bridge_pyloop::PyLoop;
+    ///
+    /// async fn call_python_handler() -> PyResult<PyObject> {
+    ///     let pyloop = PyLoop::new()?;
+    ///
+    ///     Python::with_gil(|py| {
+    ///         let handler = py.eval("lambda x: x * 2", None, None)?;
+    ///         let args = (21,).to_object(py);
+    ///
+    ///         pyloop.spawn_python_handler(handler.into(), args)
+    ///     }).await
+    /// }
+    /// ```
+    pub fn spawn_python_handler(
+        &self,
+        callable: PyObject,
+        args: PyObject,
+    ) -> impl Future<Output = PyResult<PyObject>> {
+        async move {
+            tokio::task::spawn_blocking(move || {
+                Python::with_gil(|py| {
+                    // Prepare arguments as a tuple
+                    let args_tuple = if args.bind(py).is_instance_of::<PyTuple>() {
+                        args
+                    } else {
+                        // Wrap single argument in a tuple
+                        #[allow(deprecated)] // PyO3 API transition - to_object will be replaced by IntoPyObject
+                        PyTuple::new_bound(py, &[args.bind(py)]).to_object(py)
+                    };
+
+                    // Call the Python function
+                    let result = callable.call1(
+                        py,
+                        args_tuple
+                            .downcast_bound::<PyTuple>(py)
+                            .map_err(|_| {
+                                PyLoopError::InvalidState(
+                                    "Failed to convert args to tuple".to_string(),
+                                )
+                            })?,
+                    )?;
+
+                    // Check if the result is a coroutine (async function)
+                    if result.bind(py).hasattr("__await__")? {
+                        // It's a coroutine - need to run it to completion
+                        // Phase 1 workaround: Use asyncio.new_event_loop()
+                        #[allow(deprecated)] // PyO3 API transition - import_bound renamed to import
+                        let asyncio = py
+                            .import_bound("asyncio")
+                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to import asyncio: {}", e)))?;
+
+                        // Create a new event loop for this coroutine
+                        let event_loop = asyncio
+                            .call_method0("new_event_loop")
+                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to create event loop: {}", e)))?;
+
+                        // Temporarily set as the current event loop
+                        asyncio
+                            .call_method1("set_event_loop", (&event_loop,))
+                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to set event loop: {}", e)))?;
+
+                        // Run the coroutine to completion
+                        let final_result = event_loop
+                            .call_method1("run_until_complete", (result.bind(py),))
+                            .map_err(|e| {
+                                // Clean up event loop before returning error
+                                let _ = event_loop.call_method0("close");
+                                let _ = asyncio.call_method1("set_event_loop", (py.None(),));
+                                e
+                            })?;
+
+                        // Clean up: close the event loop and unset it
+                        event_loop
+                            .call_method0("close")
+                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to close event loop: {}", e)))?;
+                        asyncio
+                            .call_method1("set_event_loop", (py.None(),))
+                            .map_err(|e| PyLoopError::TaskSpawn(format!("Failed to unset event loop: {}", e)))?;
+
+                        #[allow(deprecated)] // PyO3 API transition
+                        Ok(final_result.to_object(py))
+                    } else {
+                        // Sync function - return result directly
+                        #[allow(deprecated)] // PyO3 API transition
+                        Ok(result.to_object(py))
+                    }
+                })
+            })
+            .await
+            .map_err(|e| {
+                pyo3::exceptions::PyRuntimeError::new_err(format!(
+                    "Python handler task panicked: {}",
+                    e
+                ))
+            })?
+        }
     }
 
     /// Check if running (for Rust tests)

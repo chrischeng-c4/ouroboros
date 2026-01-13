@@ -47,8 +47,12 @@ multer = { workspace = true }
 urlencoding = { workspace = true }
 futures-util = { workspace = true }
 
+# Python integration
+pyo3 = { workspace = true }
+
 # Internal
 data-bridge-common = { path = "../data-bridge-common" }
+data-bridge-pyloop = { path = "../data-bridge-pyloop" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

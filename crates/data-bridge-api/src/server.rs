@@ -12,6 +12,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::request::{HttpMethod, Request, SerializableRequest, SerializableValue};
 use crate::response::{Response, ResponseBody};
 use crate::router::Router;
+use data_bridge_pyloop::PyLoop;
 use http::header::CONTENT_LENGTH;
 use http::{HeaderMap, StatusCode};
 use hyper::body::Incoming;
@@ -75,6 +76,12 @@ impl ServerConfig {
 pub struct Server {
     router: Arc<Router>,
     config: ServerConfig,
+    /// Optional PyLoop instance for Python handler execution
+    ///
+    /// When present, the server can dispatch Python async/sync handlers
+    /// via PyLoop's event loop integration. If None, only pure Rust
+    /// handlers can be executed.
+    pyloop: Option<Arc<PyLoop>>,
 }
 
 impl Server {
@@ -83,6 +90,7 @@ impl Server {
         Self {
             router: Arc::new(router),
             config,
+            pyloop: None,
         }
     }
 
@@ -91,12 +99,47 @@ impl Server {
         Self {
             router,
             config,
+            pyloop: None,
         }
     }
 
     /// Create a new server with default configuration
     pub fn with_router(router: Router) -> Self {
         Self::new(router, ServerConfig::default())
+    }
+
+    /// Set the PyLoop instance for Python handler execution
+    ///
+    /// This enables the server to dispatch Python async/sync handlers.
+    /// The PyLoop instance is wrapped in Arc for shared ownership across
+    /// request handlers.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use data_bridge_api::{Router, server::{Server, ServerConfig}};
+    /// use data_bridge_pyloop::PyLoop;
+    /// use pyo3::Python;
+    /// use std::sync::Arc;
+    ///
+    /// # fn main() -> pyo3::PyResult<()> {
+    /// Python::with_gil(|py| {
+    ///     let router = Router::new();
+    ///     let pyloop = PyLoop::new()?;
+    ///     let server = Server::with_router(router)
+    ///         .with_pyloop(Arc::new(pyloop));
+    ///     Ok(())
+    /// })
+    /// # }
+    /// ```
+    pub fn with_pyloop(mut self, pyloop: Arc<PyLoop>) -> Self {
+        self.pyloop = Some(pyloop);
+        self
+    }
+
+    /// Get the PyLoop instance if configured
+    pub fn pyloop(&self) -> Option<&Arc<PyLoop>> {
+        self.pyloop.as_ref()
     }
 
     /// Run the server until a shutdown signal is received

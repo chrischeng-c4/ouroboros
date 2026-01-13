@@ -166,6 +166,107 @@ impl Router {
     ) -> ApiResult<()> {
         self.route(HttpMethod::Delete, path, handler, validator, metadata)
     }
+
+    // Python handler registration methods
+
+    /// Register a Python handler for GET requests
+    ///
+    /// This is a convenience method that wraps a PythonHandler and registers it
+    /// with the appropriate method.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use data_bridge_api::{Router, PythonHandler};
+    /// use data_bridge_api::validation::RequestValidator;
+    /// use data_bridge_api::handler::HandlerMeta;
+    /// use data_bridge_pyloop::PyLoop;
+    /// use pyo3::prelude::*;
+    /// use std::sync::Arc;
+    ///
+    /// # fn main() -> PyResult<()> {
+    /// Python::with_gil(|py| {
+    ///     let mut router = Router::new();
+    ///     let pyloop = Arc::new(PyLoop::new()?);
+    ///
+    ///     let handler_fn = py.eval("lambda req: {'status': 'ok'}", None, None)?;
+    ///     let python_handler = PythonHandler::new(handler_fn.into(), pyloop);
+    ///
+    ///     router.get_python(
+    ///         "/api/status",
+    ///         python_handler,
+    ///         RequestValidator::new(),
+    ///         HandlerMeta::new("get_status".to_string()),
+    ///     )?;
+    ///     Ok(())
+    /// })
+    /// # }
+    /// ```
+    pub fn get_python(
+        &mut self,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.get(path, handler.into_handler_fn(), validator, metadata)
+    }
+
+    /// Register a Python handler for POST requests
+    pub fn post_python(
+        &mut self,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.post(path, handler.into_handler_fn(), validator, metadata)
+    }
+
+    /// Register a Python handler for PUT requests
+    pub fn put_python(
+        &mut self,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.put(path, handler.into_handler_fn(), validator, metadata)
+    }
+
+    /// Register a Python handler for PATCH requests
+    pub fn patch_python(
+        &mut self,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.patch(path, handler.into_handler_fn(), validator, metadata)
+    }
+
+    /// Register a Python handler for DELETE requests
+    pub fn delete_python(
+        &mut self,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.delete(path, handler.into_handler_fn(), validator, metadata)
+    }
+
+    /// Register a Python handler for any HTTP method
+    pub fn route_python(
+        &mut self,
+        method: HttpMethod,
+        path: &str,
+        handler: crate::python_handler::PythonHandler,
+        validator: RequestValidator,
+        metadata: HandlerMeta,
+    ) -> ApiResult<()> {
+        self.route(method, path, handler.into_handler_fn(), validator, metadata)
+    }
 }
 
 impl Default for Router {
