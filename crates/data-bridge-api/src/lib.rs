@@ -6,7 +6,6 @@
 //! - Python defines contracts via type hints
 //! - Two-phase GIL pattern for maximum concurrency
 
-pub mod app;
 pub mod router;
 pub mod handler;
 pub mod request;
@@ -21,7 +20,6 @@ pub mod server;
 pub mod python_handler;
 
 // Re-exports
-pub use app::App;
 pub use router::Router;
 pub use handler::{Handler, HandlerMeta};
 pub use request::Request;

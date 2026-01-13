@@ -39,14 +39,17 @@ else:
     try:
         import data_bridge.data_bridge as _db_native  # type: ignore[import-not-found]
         _pyloop = _db_native._pyloop  # type: ignore[attr-defined]
+        _api = _db_native.api  # type: ignore[attr-defined]
         PyLoop = _pyloop.PyLoop
+        _RustApp = _api.ApiApp  # Use ApiApp from the api module
     except (ImportError, AttributeError) as e:
         raise ImportError(
             "Failed to import PyLoop from data_bridge native module. "
             "Please run 'maturin develop' to build the extension."
         ) from e
+        _RustApp = None
 
-__all__ = ["PyLoop", "install", "EventLoopPolicy"]
+__all__ = ["PyLoop", "install", "EventLoopPolicy", "is_installed", "App"]
 
 __version__ = "0.1.0"
 
@@ -169,3 +172,152 @@ def is_installed() -> bool:
     """
     policy = asyncio.get_event_loop_policy()
     return isinstance(policy, EventLoopPolicy)
+
+
+class App:
+    """
+    Simple FastAPI-style app builder for PyLoop.
+
+    Provides a decorator-based API for registering Python handlers that execute
+    on the Rust-backed HTTP server with async/sync support.
+
+    Example:
+        >>> from data_bridge.pyloop import App
+        >>>
+        >>> app = App(title="My API", version="1.0.0")
+        >>>
+        >>> @app.get("/users/{user_id}")
+        >>> async def get_user(path_params):
+        ...     return {"user_id": path_params["user_id"]}
+        >>>
+        >>> @app.post("/users")
+        >>> async def create_user(body):
+        ...     return {"id": "new_id", **body}
+        >>>
+        >>> # Run the server
+        >>> app.serve(host="127.0.0.1", port=8000)
+    """
+
+    def __init__(self, title: str = "DataBridge API", version: str = "0.1.0"):
+        """Initialize the App.
+
+        Args:
+            title: API title for OpenAPI documentation
+            version: API version for OpenAPI documentation
+        """
+        if _RustApp is None:
+            raise RuntimeError("PyLoop Rust extension not available")
+        self._app = _RustApp(title=title, version=version)
+
+    def get(self, path: str):
+        """Register a GET route handler.
+
+        Args:
+            path: URL path pattern (e.g., "/users/{user_id}")
+
+        Returns:
+            Decorator function for handler registration
+
+        Example:
+            >>> @app.get("/status")
+            >>> async def get_status(path_params, query_params, headers, body):
+            ...     return {"status": "ok"}
+        """
+        def decorator(func):
+            self._app.register_route("GET", path, func)
+            return func
+        return decorator
+
+    def post(self, path: str):
+        """Register a POST route handler.
+
+        Args:
+            path: URL path pattern (e.g., "/users")
+
+        Returns:
+            Decorator function for handler registration
+
+        Example:
+            >>> @app.post("/users")
+            >>> async def create_user(path_params, query_params, headers, body):
+            ...     return {"id": "new_id", **body}
+        """
+        def decorator(func):
+            self._app.register_route("POST", path, func)
+            return func
+        return decorator
+
+    def put(self, path: str):
+        """Register a PUT route handler.
+
+        Args:
+            path: URL path pattern (e.g., "/users/{user_id}")
+
+        Returns:
+            Decorator function for handler registration
+
+        Example:
+            >>> @app.put("/users/{user_id}")
+            >>> async def update_user(path_params, query_params, headers, body):
+            ...     return {"id": path_params["user_id"], **body}
+        """
+        def decorator(func):
+            self._app.register_route("PUT", path, func)
+            return func
+        return decorator
+
+    def patch(self, path: str):
+        """Register a PATCH route handler.
+
+        Args:
+            path: URL path pattern (e.g., "/users/{user_id}")
+
+        Returns:
+            Decorator function for handler registration
+
+        Example:
+            >>> @app.patch("/users/{user_id}")
+            >>> async def partial_update_user(path_params, query_params, headers, body):
+            ...     return {"id": path_params["user_id"], "updated": True}
+        """
+        def decorator(func):
+            self._app.register_route("PATCH", path, func)
+            return func
+        return decorator
+
+    def delete(self, path: str):
+        """Register a DELETE route handler.
+
+        Args:
+            path: URL path pattern (e.g., "/users/{user_id}")
+
+        Returns:
+            Decorator function for handler registration
+
+        Example:
+            >>> @app.delete("/users/{user_id}")
+            >>> async def delete_user(path_params, query_params, headers, body):
+            ...     return {"deleted": True, "user_id": path_params["user_id"]}
+        """
+        def decorator(func):
+            self._app.register_route("DELETE", path, func)
+            return func
+        return decorator
+
+    def serve(self, host: str = "127.0.0.1", port: int = 8000):
+        """
+        Start the HTTP server (blocking).
+
+        This method will block until the server receives a shutdown signal (Ctrl+C).
+        The server runs with the GIL released for maximum performance.
+
+        Args:
+            host: Bind address (default: 127.0.0.1)
+            port: Bind port (default: 8000)
+
+        Example:
+            >>> app.serve(host="0.0.0.0", port=3000)
+        """
+        print(f"Starting server on http://{host}:{port}")
+        print("Press Ctrl+C to stop")
+        self._app.serve(host, port)

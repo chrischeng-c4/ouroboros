@@ -37,10 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("3. Registering Python handlers...");
 
     // Example 1: Simple sync handler
-    Python::with_gil(|py| -> Result<(), Box<dyn std::error::Error>> {
+    Python::with_gil(|py| -> PyResult<()> {
         #[allow(deprecated)]
         let sync_handler = py.eval_bound(
-            c"
+            r#"
 def sync_handler(request):
     return {
         'status': 200,
@@ -51,7 +51,7 @@ def sync_handler(request):
         }
     }
 sync_handler
-",
+"#,
             None,
             None,
         )?;
@@ -62,14 +62,15 @@ sync_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("sync_handler".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered sync handler: GET /api/sync");
         Ok(())
     })?;
 
     // Example 2: Async handler
     Python::with_gil(|py| -> PyResult<()> {
-        let async_handler = py.eval(
+        #[allow(deprecated)]
+        let async_handler = py.eval_bound(
             r#"
 import asyncio
 
@@ -77,10 +78,10 @@ async def async_handler(request):
     # Simulate async work
     await asyncio.sleep(0.001)
     return {
-        "status": 200,
-        "body": {
-            "message": "Hello from async Python handler!",
-            "query_params": request["query_params"]
+        'status': 200,
+        'body': {
+            'message': 'Hello from async Python handler!',
+            'query_params': request['query_params']
         }
     }
 async_handler
@@ -95,22 +96,23 @@ async_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("async_handler".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered async handler: GET /api/async");
         Ok(())
     })?;
 
     // Example 3: Handler with path parameters
     Python::with_gil(|py| -> PyResult<()> {
-        let path_param_handler = py.eval(
+        #[allow(deprecated)]
+        let path_param_handler = py.eval_bound(
             r#"
 def path_param_handler(request):
-    user_id = request["path_params"].get("user_id", "unknown")
+    user_id = request['path_params'].get('user_id', 'unknown')
     return {
-        "status": 200,
-        "body": {
-            "user_id": user_id,
-            "message": f"User {user_id} requested"
+        'status': 200,
+        'body': {
+            'user_id': user_id,
+            'message': f'User {user_id} requested'
         }
     }
 path_param_handler
@@ -125,25 +127,26 @@ path_param_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("get_user".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered path param handler: GET /api/users/{{user_id}}");
         Ok(())
     })?;
 
     // Example 4: POST handler with JSON body
     Python::with_gil(|py| -> PyResult<()> {
-        let post_handler = py.eval(
+        #[allow(deprecated)]
+        let post_handler = py.eval_bound(
             r#"
 def post_handler(request):
-    body = request.get("body", {})
+    body = request.get('body', {})
     return {
-        "status": 201,
-        "body": {
-            "message": "Resource created",
-            "received": body
+        'status': 201,
+        'body': {
+            'message': 'Resource created',
+            'received': body
         },
-        "headers": {
-            "X-Custom-Header": "Created"
+        'headers': {
+            'X-Custom-Header': 'Created'
         }
     }
 post_handler
@@ -158,17 +161,18 @@ post_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("create_resource".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered POST handler: POST /api/resources");
         Ok(())
     })?;
 
     // Example 5: Handler returning tuple (status_code, body)
     Python::with_gil(|py| -> PyResult<()> {
-        let tuple_handler = py.eval(
+        #[allow(deprecated)]
+        let tuple_handler = py.eval_bound(
             r#"
 def tuple_handler(request):
-    return (404, {"error": "Not Found", "path": request["path"]})
+    return (404, {'error': 'Not Found', 'path': request['path']})
 tuple_handler
 "#,
             None,
@@ -181,17 +185,18 @@ tuple_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("not_found_example".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered tuple response handler: GET /api/notfound");
         Ok(())
     })?;
 
     // Example 6: Handler returning direct value (assumes 200 OK)
     Python::with_gil(|py| -> PyResult<()> {
-        let direct_handler = py.eval(
+        #[allow(deprecated)]
+        let direct_handler = py.eval_bound(
             r#"
 def direct_handler(request):
-    return {"status": "ok", "timestamp": "2024-01-01T00:00:00Z"}
+    return {'status': 'ok', 'timestamp': '2024-01-01T00:00:00Z'}
 direct_handler
 "#,
             None,
@@ -204,7 +209,7 @@ direct_handler
             handler,
             RequestValidator::new(),
             HandlerMeta::new("status".to_string()),
-        )?;
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         println!("   ✓ Registered direct value handler: GET /api/status\n");
         Ok(())
     })?;
