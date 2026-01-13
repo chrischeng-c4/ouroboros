@@ -225,12 +225,9 @@ fn convert_py_to_response(py: Python<'_>, result: PyObject) -> ApiResult<Respons
 
     // Try to interpret as dict first (most common case)
     if let Ok(dict) = result_ref.downcast::<PyDict>() {
-        // Check if it's a response dict (has "status" or "body" or "headers" keys)
-        let is_response_dict = dict.contains("status")
-            .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?
-            || dict.contains("body")
-            .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?
-            || dict.contains("headers")
+        // Check if it's a response dict (has "body" key - this is the marker)
+        // Only "body" key indicates a response dict format
+        let is_response_dict = dict.contains("body")
             .map_err(|e| ApiError::Internal(format!("Dict check error: {}", e)))?;
 
         if is_response_dict {
