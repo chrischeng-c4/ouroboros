@@ -46,16 +46,9 @@ jobs:
           name: wheels-linux-x86_64
           path: dist
 
-  # Build wheels for macOS
+  # Build wheels for macOS ARM64 (Apple Silicon)
   macos:
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      matrix:
-        platform:
-          - runner: macos-13
-            target: x86_64
-          - runner: macos-14
-            target: aarch64
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -66,14 +59,14 @@ jobs:
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.platform.target }}
+          target: aarch64
           args: --release --out dist --features mongodb,postgres,http,test,kv,api,pyloop
           sccache: 'true'
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-${{ matrix.platform.target }}
+          name: wheels-macos-aarch64
           path: dist
 
   # Build wheels for Windows
