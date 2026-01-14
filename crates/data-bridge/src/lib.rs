@@ -37,6 +37,9 @@ pub mod validation;
 pub mod config;
 pub mod error_handling;
 
+// Core types (ObjectId, etc.)
+pub mod types;
+
 // BSON conversion with GIL-free processing (Feature 201)
 pub mod conversion;
 
@@ -69,6 +72,9 @@ mod pyloop;
 fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
+    // Add core types (ObjectId) at top level
+    types::register_module(m)?;
 
     // Add security configuration functions
     config::register_functions(m)?;

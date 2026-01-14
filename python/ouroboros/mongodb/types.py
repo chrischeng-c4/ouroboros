@@ -18,7 +18,7 @@ Example:
 from __future__ import annotations
 
 from typing import Any, Annotated, Optional, Type, TypeVar, get_args, get_origin
-from bson import ObjectId
+from ..ouroboros import ObjectId
 
 # For Pydantic v2 compatibility
 try:
@@ -88,7 +88,7 @@ class PydanticObjectId(str):
         """
         if value is None:
             # Generate new ObjectId
-            oid = ObjectId()
+            oid = ObjectId.new()
             return str.__new__(cls, str(oid))
         elif isinstance(value, ObjectId):
             return str.__new__(cls, str(value))
@@ -115,7 +115,7 @@ class PydanticObjectId(str):
         return hash(str(self))
 
     def to_object_id(self) -> ObjectId:
-        """Convert to bson.ObjectId."""
+        """Convert to ouroboros.ObjectId."""
         return ObjectId(str(self))
 
     @classmethod
