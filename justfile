@@ -129,7 +129,7 @@ bench:
 bench-postgres:
     #!/usr/bin/env bash
     POSTGRES_URI="${POSTGRES_URI:-postgresql://rstn:rstn@localhost:5432/data_bridge_benchmark}" \
-    uv run python benchmarks/bench_postgres_comparison.py
+    uv run python python/benchmarks/bench_postgres_comparison.py
 
 # Set up PostgreSQL test database
 test-postgres-setup:
@@ -145,7 +145,7 @@ test-postgres:
     echo "Running PostgreSQL integration tests..."
     just test-postgres-setup
     POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
-    uv run pytest tests/postgres/integration/ -v -m integration
+    uv run pytest python/tests/postgres/integration/ -v -m integration
 
 # Run PostgreSQL migration example
 test-postgres-migrations:
@@ -153,7 +153,7 @@ test-postgres-migrations:
     echo "Running PostgreSQL migration example..."
     just test-postgres-setup
     POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
-    uv run python examples/postgres_migrations_example.py
+    uv run python python/examples/postgres_migrations_example.py
 
 # Run with verbose output
 test-verbose:
@@ -327,5 +327,5 @@ info:
     @find crates -name "Cargo.toml" -exec echo "  {}" \;
     @echo ""
     @echo "Test Stats:"
-    @echo "  Test files: $(find tests -name "test_*.py" -o -name "bench_*.py" | wc -l | tr -d ' ') files"
+    @echo "  Test files: $(find python/tests -name "test_*.py" -o -name "bench_*.py" | wc -l | tr -d ' ') files"
     @echo "  Rust tests: $(grep -r "#\[test\]" crates | wc -l | tr -d ' ') tests"

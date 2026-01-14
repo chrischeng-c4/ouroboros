@@ -84,7 +84,7 @@ class CLIConfig:
     """Configuration for CLI execution."""
 
     def __init__(self):
-        self.root_path: str = "tests/"
+        self.root_path: str = "python/tests/"
         self.patterns: List[str] = ["test_*.py", "bench_*.py"]
         self.exclusions: List[str] = ["__pycache__", ".git", ".venv", "node_modules"]
         self.max_depth: int = 10
@@ -650,7 +650,7 @@ Examples:
     )
 
     # Global options (for main command without subcommand)
-    parser.add_argument("--root", default="tests/", help="Root directory to search (default: tests/)")
+    parser.add_argument("--root", default="python/tests/", help="Root directory to search (default: python/tests/)")
     parser.add_argument("--pattern", help="File pattern to match (e.g., test_*crud*.py)")
     parser.add_argument("--tags", nargs="+", help="Filter tests by tags")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
@@ -717,6 +717,11 @@ def main(args: Optional[List[str]] = None) -> int:
     Returns:
         Exit code (0 = success, 1 = failures, 2 = errors)
     """
+    # Add python/ directory to path for test imports (tests.* modules)
+    python_dir = Path(__file__).parent.parent.parent  # Navigate to python/
+    if str(python_dir) not in sys.path:
+        sys.path.insert(0, str(python_dir))
+
     config = parse_args(args)
 
     # Print banner

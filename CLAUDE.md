@@ -14,13 +14,13 @@ cargo clippy                         # Lint check
 cargo audit                          # Security audit
 
 # Python tests (use data-bridge-test, NOT pytest)
-uv run python tests/unit/test_*.py                   # Unit tests (no MongoDB)
-uv run python tests/integration/test_*.py            # Integration tests (MongoDB required)
-uv run python tests/api/test_*.py                    # API tests
+uv run python python/tests/unit/test_*.py                   # Unit tests (no MongoDB)
+uv run python python/tests/integration/test_*.py            # Integration tests (MongoDB required)
+uv run python python/tests/api/test_*.py                    # API tests
 
 # Performance benchmarks
-uv run python benchmarks/bench_comparison.py --rounds 5 --warmup 2
-uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2
+uv run python python/benchmarks/bench_comparison.py --rounds 5 --warmup 2
+uv run python python/tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 2
 ```
 
 ## Quick Reference
@@ -36,15 +36,15 @@ uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 
 ```bash
 maturin develop                    # Build Python extension
 cargo test                         # Rust tests
-uv run python tests/unit/test_*.py # Python tests (data-bridge-test)
+uv run python python/tests/unit/test_*.py # Python tests (data-bridge-test)
 cargo clippy                       # Lint check
 ```
 
 **Test Modes:**
-- Unit: `uv run python tests/unit/test_*.py`
-- Integration: `uv run python tests/integration/test_*.py`
-- API: `uv run python tests/api/test_*.py`
-- Benchmarks: `uv run python benchmarks/bench_*.py --rounds 5 --warmup 2`
+- Unit: `uv run python python/tests/unit/test_*.py`
+- Integration: `uv run python python/tests/integration/test_*.py`
+- API: `uv run python python/tests/api/test_*.py`
+- Benchmarks: `uv run python python/benchmarks/bench_*.py --rounds 5 --warmup 2`
 
 ## Test Framework
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     MyTests().run()
 ```
 
-Run: `uv run python tests/unit/test_*.py`
+Run: `uv run python python/tests/unit/test_*.py`
 
 ## Commit Format
 
