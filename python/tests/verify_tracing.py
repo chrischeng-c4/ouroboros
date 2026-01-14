@@ -73,7 +73,7 @@ def setup_telemetry():
 
 def run_server():
     """Run PyLoop HTTP server with OpenTelemetry middleware."""
-    from data_bridge.pyloop import App, OpenTelemetryMiddleware
+    from ouroboros.pyloop import App, OpenTelemetryMiddleware
 
     # Setup telemetry in server process
     if not setup_telemetry():

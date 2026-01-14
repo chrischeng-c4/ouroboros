@@ -1,6 +1,6 @@
 """Serialization benchmarks for API servers."""
 
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 from . import benchmark_setup
 from .conftest import PAYLOAD_SIZES
 

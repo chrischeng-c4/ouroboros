@@ -6,7 +6,7 @@ Tests M2M operations with real PostgreSQL database.
 import pytest
 
 try:
-    from data_bridge.data_bridge import postgres as _engine
+    from ouroboros._rust import postgres as _engine
 except ImportError:
     _engine = None
 
@@ -15,7 +15,7 @@ except ImportError:
 async def m2m_tables(request):
     """Create posts and tags tables with a join table for M2M testing."""
     # Import execute from connection module
-    from data_bridge.postgres import execute, insert_one
+    from ouroboros.postgres import execute, insert_one
 
     # Create posts table
     await execute("""
@@ -396,7 +396,7 @@ class TestM2MCreateJoinTable:
         if _engine is None:
             pytest.skip("Rust engine not available")
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         # Create source and target tables first
         await execute("""

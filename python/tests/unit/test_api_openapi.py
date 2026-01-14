@@ -4,8 +4,8 @@ import pytest
 from typing import Annotated, List, Optional
 from dataclasses import dataclass
 
-from data_bridge.api import App, Path, Query, Body, Header
-from data_bridge.api.openapi import (
+from ouroboros.api import App, Path, Query, Body, Header
+from ouroboros.api.openapi import (
     generate_openapi,
     python_type_to_schema,
     get_swagger_ui_html,
@@ -14,7 +14,7 @@ from data_bridge.api.openapi import (
     extract_operation_params,
     build_operation,
 )
-from data_bridge.api.app import RouteInfo
+from ouroboros.api.app import RouteInfo
 
 
 class TestOpenAPIGeneration:

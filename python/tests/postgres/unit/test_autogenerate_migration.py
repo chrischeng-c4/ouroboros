@@ -13,8 +13,8 @@ Tests cover:
 """
 
 import pytest
-from data_bridge.postgres import autogenerate_migration
-from data_bridge.test import expect
+from ouroboros.postgres import autogenerate_migration
+from ouroboros.test import expect
 
 
 class TestAutogenerateMigration:

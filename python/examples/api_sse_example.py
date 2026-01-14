@@ -11,7 +11,7 @@ This example demonstrates:
 import asyncio
 import time
 from datetime import datetime
-from data_bridge.api import App, ServerSentEvent, EventSourceResponse
+from ouroboros.api import App, ServerSentEvent, EventSourceResponse
 
 
 app = App(title="SSE Example", version="1.0.0")
@@ -208,7 +208,7 @@ async def root():
     </body>
     </html>
     """
-    from data_bridge.api import HTMLResponse
+    from ouroboros.api import HTMLResponse
     return HTMLResponse(html)
 
 

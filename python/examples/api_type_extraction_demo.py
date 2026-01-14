@@ -11,12 +11,12 @@ from datetime import datetime
 from uuid import UUID
 from enum import Enum
 
-from data_bridge.api.type_extraction import (
+from ouroboros.api.type_extraction import (
     extract_type_schema,
     extract_handler_meta,
     schema_to_rust_type_descriptor,
 )
-from data_bridge.api.types import Path, Query, Body, Header
+from ouroboros.api.types import Path, Query, Body, Header
 
 
 # ============================================================================

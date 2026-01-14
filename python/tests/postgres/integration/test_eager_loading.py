@@ -10,13 +10,13 @@ Tests verify that:
 """
 
 import pytest
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     init, close, execute,
     fetch_one_with_relations,
     fetch_one_eager,
     fetch_many_with_relations,
 )
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 @pytest.mark.integration

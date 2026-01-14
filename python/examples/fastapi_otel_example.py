@@ -86,7 +86,7 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 # data-bridge imports
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     Table, Column, relationship,
     init, close, Session,
     is_tracing_enabled,
@@ -316,7 +316,7 @@ FastAPIInstrumentor.instrument_app(app)
 
 async def _create_tables_if_needed():
     """Create tables if they don't exist (for demo purposes)."""
-    from data_bridge.postgres import execute
+    from ouroboros.postgres import execute
 
     # Create users table
     await execute("""

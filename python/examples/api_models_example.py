@@ -6,7 +6,7 @@ similar to Pydantic but with potential Rust-backed validation.
 """
 
 from typing import Optional, List
-from data_bridge.api import BaseModel, Field
+from ouroboros.api import BaseModel, Field
 
 
 # Define models

@@ -12,7 +12,7 @@ import asyncio
 import subprocess
 import time
 import socket
-from data_bridge.kv import KvClient
+from ouroboros.kv import KvClient
 
 
 # KV server configuration for tests

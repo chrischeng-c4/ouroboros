@@ -11,9 +11,9 @@ import pytest
 
 # Skip if api feature is not available
 try:
-    import data_bridge.data_bridge
-    ApiApp = data_bridge.data_bridge.api.ApiApp
-    Response = data_bridge.data_bridge.api.Response
+    import ouroboros._rust
+    ApiApp = ouroboros.ouroboros.api.ApiApp
+    Response = ouroboros.ouroboros.api.Response
 except (ImportError, AttributeError):
     pytest.skip("API feature not available", allow_module_level=True)
 

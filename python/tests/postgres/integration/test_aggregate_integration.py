@@ -4,8 +4,8 @@ Integration tests for aggregate query functionality.
 Tests query_aggregate with a real PostgreSQL database.
 """
 import pytest
-from data_bridge.test import expect
-from data_bridge.postgres import execute, insert_one, query_aggregate
+from ouroboros.test import expect
+from ouroboros.postgres import execute, insert_one, query_aggregate
 
 
 @pytest.fixture

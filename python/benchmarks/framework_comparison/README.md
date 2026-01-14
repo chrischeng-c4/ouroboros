@@ -1,6 +1,6 @@
 # Framework Comparison Benchmarks
 
-This directory contains comprehensive benchmarks comparing **pytest** and **data-bridge-test** performance.
+This directory contains comprehensive benchmarks comparing **pytest** and **ouroboros-test** performance.
 
 ## Overview
 
@@ -14,7 +14,7 @@ The benchmarks measure performance across multiple dimensions:
 
 ## Files
 
-- **`pytest_vs_data_bridge_test.py`** - Main benchmark script
+- **`pytest_vs_ouroboros_test.py`** - Main benchmark script
 - **`sample_tests.py`** - Sample test suite compatible with both frameworks
 - **`BENCHMARK_REPORT.md`** - Generated comparison report (after running)
 
@@ -23,7 +23,7 @@ The benchmarks measure performance across multiple dimensions:
 ### Required
 - Python 3.12+
 - pytest
-- data-bridge (with data-bridge-test)
+- ouroboros (with ouroboros-test)
 
 ### Optional
 - pytest-benchmark - For pytest-specific metrics
@@ -40,18 +40,18 @@ uv pip install pytest psutil
 
 ### Quick Run
 ```bash
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ### From Project Root
 ```bash
-cd /path/to/data-bridge
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+cd /path/to/ouroboros
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ### With uv
 ```bash
-uv run python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+uv run python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ## Configuration
@@ -72,12 +72,12 @@ Real-time progress and summary table printed to console:
 
 ```
 ================================================================================
-pytest vs data-bridge-test Performance Comparison
+pytest vs ouroboros-test Performance Comparison
 ================================================================================
 
 SUMMARY
 --------------------------------------------------------------------------------
-Metric                    pytest (ms)     data-bridge (ms) Speedup
+Metric                    pytest (ms)     ouroboros (ms) Speedup
 --------------------------------------------------------------------------------
 Test Discovery                  45.23            18.45     2.45x
 Test Execution                  78.91            25.34     3.11x
@@ -123,7 +123,7 @@ Based on the Rust-powered architecture, we expect:
 - Rich assertion introspection
 - Flexible fixture system
 
-**data-bridge-test advantages:**
+**ouroboros-test advantages:**
 - Rust engine with minimal Python overhead
 - Native async/await support
 - Zero-copy data handling
@@ -132,7 +132,7 @@ Based on the Rust-powered architecture, we expect:
 ## Troubleshooting
 
 ### Import Errors
-If you get import errors, ensure you've built data-bridge:
+If you get import errors, ensure you've built ouroboros:
 ```bash
 maturin develop --release
 ```
@@ -166,10 +166,10 @@ def benchmark_pytest_new_feature() -> Dict[str, float]:
     pass
 ```
 
-2. Add data-bridge-test benchmark function:
+2. Add ouroboros-test benchmark function:
 ```python
 async def benchmark_dbt_new_feature() -> Dict[str, float]:
-    # Implement data-bridge-test benchmark
+    # Implement ouroboros-test benchmark
     pass
 ```
 
@@ -183,7 +183,7 @@ To run in CI/CD:
 - name: Run framework comparison
   run: |
     maturin develop --release
-    python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+    python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
 - name: Upload benchmark report
   uses: actions/upload-artifact@v3
@@ -203,7 +203,7 @@ cp BENCHMARK_REPORT.md BENCHMARK_BASELINE.md
 
 2. After changes, compare:
 ```bash
-python pytest_vs_data_bridge_test.py
+python pytest_vs_ouroboros_test.py
 # Manually compare with BENCHMARK_BASELINE.md
 ```
 
@@ -211,4 +211,4 @@ python pytest_vs_data_bridge_test.py
 
 ## License
 
-Same as data-bridge project.
+Same as ouroboros project.

@@ -9,8 +9,8 @@ Demonstrates:
 - Not found errors
 """
 
-from data_bridge.mongodb import Document
-from data_bridge.pyloop import App, HTTPException, ValidationError, NotFoundError
+from ouroboros.mongodb import Document
+from ouroboros.pyloop import App, HTTPException, ValidationError, NotFoundError
 
 class Product(Document):
     name: str

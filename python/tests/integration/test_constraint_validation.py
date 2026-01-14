@@ -5,10 +5,10 @@ works end-to-end through the Python → Rust boundary.
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from typing import Annotated
-from data_bridge import Document, init, MinLen, MaxLen, Min, Max, Email, Url
-from data_bridge.mongodb.types import PydanticObjectId
+from ouroboros import Document, init, MinLen, MaxLen, Min, Max, Email, Url
+from ouroboros.mongodb.types import PydanticObjectId
 
 
 # Test models with constraints

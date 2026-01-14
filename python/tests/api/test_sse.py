@@ -4,7 +4,7 @@ Tests for Server-Sent Events (SSE) support.
 
 import asyncio
 import pytest
-from data_bridge.api import ServerSentEvent, EventSourceResponse
+from ouroboros.api import ServerSentEvent, EventSourceResponse
 
 
 class TestServerSentEvent:

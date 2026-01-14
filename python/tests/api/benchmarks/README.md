@@ -1,6 +1,6 @@
 # API Server Benchmarks
 
-Comprehensive benchmarks comparing **data-bridge-api** vs **FastAPI + Uvicorn**.
+Comprehensive benchmarks comparing **ouroboros-api** vs **FastAPI + Uvicorn**.
 
 ## Overview
 
@@ -14,7 +14,7 @@ This benchmark suite validates performance claims against the industry baseline 
 ## Prerequisites
 
 - Python 3.12+
-- data-bridge-api installed (`maturin develop`)
+- ouroboros-api installed (`maturin develop`)
 - FastAPI installed (`pip install fastapi`)
 - Uvicorn installed (`pip install uvicorn`)
 - pytest installed (`pip install pytest`)
@@ -23,7 +23,7 @@ This benchmark suite validates performance claims against the industry baseline 
 
 ### Option 1: Rust Framework (Recommended)
 
-Run benchmarks using the native data-bridge-test framework:
+Run benchmarks using the native ouroboros-test framework:
 
 ```bash
 # Run all benchmarks with default settings (3 rounds)
@@ -41,7 +41,7 @@ uv run python tests/api/benchmarks/bench_comparison_rust.py --rounds 5 --warmup 
 
 **Advantages:**
 - Uses pure Rust benchmark framework (no pytest-benchmark dependency)
-- Consistent with other data-bridge benchmarks
+- Consistent with other ouroboros benchmarks
 - Better GIL release verification
 - Standalone script (no pytest overhead)
 
@@ -123,7 +123,7 @@ Based on `openspec/changes/add-api-benchmarks/specs/api-server/spec.md`:
 Results are displayed in a comparison table:
 
 ```
-Scenario             data-bridge      FastAPI          Speedup
+Scenario             ouroboros      FastAPI          Speedup
 ----------------------------------------------------------------------
 Plaintext            45000/s          30000/s          1.50x
 Path Params          42000/s          28000/s          1.50x
@@ -138,7 +138,7 @@ Serialize 1MB        2000/s           1000/s           2.00x
 
 ### Server Management
 
-- Each framework runs on a dedicated port (data-bridge: 8001, FastAPI: 8002)
+- Each framework runs on a dedicated port (ouroboros: 8001, FastAPI: 8002)
 - Servers are started once per test session (session-scoped fixtures)
 - Servers are automatically stopped after tests complete
 
@@ -149,14 +149,14 @@ Serialize 1MB        2000/s           1000/s           2.00x
 
 ### Benchmark Groups
 
-Benchmarks use the `data-bridge.test.BenchmarkGroup` API:
+Benchmarks use the `ouroboros.test.BenchmarkGroup` API:
 
 ```python
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 
 group = BenchmarkGroup("Test Name")
 
-@group.add("data-bridge")
+@group.add("ouroboros")
 def test_databridge():
     # Test implementation
     pass
@@ -188,7 +188,7 @@ kill -9 <PID>
 
 ### Import errors
 
-Ensure data-bridge is installed in development mode:
+Ensure ouroboros is installed in development mode:
 
 ```bash
 maturin develop

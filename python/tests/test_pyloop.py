@@ -8,13 +8,13 @@ class TestPyLoopImport:
 
     def test_can_import_pyloop(self):
         """Test that PyLoop can be imported."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         assert PyLoop is not None
 
     def test_can_import_event_loop_policy(self):
         """Test that EventLoopPolicy can be imported."""
-        from data_bridge.pyloop import EventLoopPolicy
+        from ouroboros.pyloop import EventLoopPolicy
 
         assert EventLoopPolicy is not None
 
@@ -24,7 +24,7 @@ class TestPyLoopBasics:
 
     def test_can_create_pyloop(self):
         """Test that PyLoop can be instantiated."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
         assert loop is not None
@@ -32,21 +32,21 @@ class TestPyLoopBasics:
 
     def test_new_loop_not_running(self):
         """Test that a new loop is not running."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
         assert not loop.is_running()
 
     def test_new_loop_not_closed(self):
         """Test that a new loop is not closed."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
         assert not loop.is_closed()
 
     def test_can_close_loop(self):
         """Test that loop can be closed."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
         loop.close()
@@ -64,14 +64,14 @@ class TestEventLoopPolicy:
 
     def test_can_create_policy(self):
         """Test that EventLoopPolicy can be created."""
-        from data_bridge.pyloop import EventLoopPolicy
+        from ouroboros.pyloop import EventLoopPolicy
 
         policy = EventLoopPolicy()
         assert policy is not None
 
     def test_policy_get_event_loop(self):
         """Test that policy can get event loop."""
-        from data_bridge.pyloop import EventLoopPolicy
+        from ouroboros.pyloop import EventLoopPolicy
 
         policy = EventLoopPolicy()
         loop = policy.get_event_loop()
@@ -79,7 +79,7 @@ class TestEventLoopPolicy:
 
     def test_policy_new_event_loop(self):
         """Test that policy can create new event loop."""
-        from data_bridge.pyloop import EventLoopPolicy
+        from ouroboros.pyloop import EventLoopPolicy
 
         policy = EventLoopPolicy()
         loop = policy.new_event_loop()
@@ -87,7 +87,7 @@ class TestEventLoopPolicy:
 
     def test_policy_set_event_loop(self):
         """Test that policy can set event loop."""
-        from data_bridge.pyloop import EventLoopPolicy, PyLoop
+        from ouroboros.pyloop import EventLoopPolicy, PyLoop
 
         policy = EventLoopPolicy()
         loop = PyLoop()
@@ -104,7 +104,7 @@ class TestInstallation:
 
     def test_is_installed_initially_false(self):
         """Test that pyloop is not installed by default."""
-        from data_bridge.pyloop import is_installed
+        from ouroboros.pyloop import is_installed
 
         # Should be False initially (unless user has already installed it)
         # Note: This might be True if tests are run after manual installation
@@ -112,7 +112,7 @@ class TestInstallation:
 
     def test_install_function_exists(self):
         """Test that install function exists."""
-        from data_bridge.pyloop import install
+        from ouroboros.pyloop import install
 
         assert callable(install)
 

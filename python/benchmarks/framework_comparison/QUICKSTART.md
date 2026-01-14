@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get started with the pytest vs data-bridge-test benchmark in 5 minutes.
+Get started with the pytest vs ouroboros-test benchmark in 5 minutes.
 
 ## Prerequisites
 
@@ -18,11 +18,11 @@ pip install pytest psutil
 uv pip install pytest psutil
 ```
 
-## Step 2: Build data-bridge
+## Step 2: Build ouroboros
 
 ```bash
 # From project root
-cd /path/to/data-bridge
+cd /path/to/ouroboros
 
 # Build in release mode (important for accurate benchmarks!)
 maturin develop --release
@@ -44,13 +44,13 @@ Checking dependencies...
 ----------------------------------------------------------------------
 ✓ pytest 7.4.0 installed
 ✓ psutil 5.9.5 installed (memory tracking enabled)
-✓ data-bridge-test available
+✓ ouroboros-test available
 ✓ Sample tests found: benchmarks/framework_comparison/sample_tests.py
 
 Testing execution...
 ----------------------------------------------------------------------
 ✓ pytest execution successful (13 tests passed)
-✓ data-bridge-test execution successful (3 tests passed)
+✓ ouroboros-test execution successful (3 tests passed)
 
 Testing infrastructure...
 ----------------------------------------------------------------------
@@ -60,18 +60,18 @@ Testing infrastructure...
 ✓ All required checks passed!
 
 You can now run the full benchmark:
-  python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+  python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ## Step 4: Run Benchmark
 
 ```bash
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 This will:
 1. Run pytest benchmarks (discovery, execution, parametrization, fixtures)
-2. Run data-bridge-test benchmarks (same categories)
+2. Run ouroboros-test benchmarks (same categories)
 3. Calculate statistics and speedup
 4. Print console report
 5. Save detailed markdown report
@@ -84,12 +84,12 @@ This will:
 
 ```
 ================================================================================
-pytest vs data-bridge-test Performance Comparison
+pytest vs ouroboros-test Performance Comparison
 ================================================================================
 
 SUMMARY
 --------------------------------------------------------------------------------
-Metric                    pytest (ms)     data-bridge (ms) Speedup
+Metric                    pytest (ms)     ouroboros (ms) Speedup
 --------------------------------------------------------------------------------
 Test Discovery                  42.15            15.32     2.75x
 Test Execution                  75.34            23.45     3.21x
@@ -131,7 +131,7 @@ code benchmarks/framework_comparison/BENCHMARK_REPORT.md
 pip install pytest
 ```
 
-### ✗ data-bridge-test not available
+### ✗ ouroboros-test not available
 ```bash
 maturin develop --release
 ```
@@ -156,13 +156,13 @@ pip install psutil
 | Command | Purpose |
 |---------|---------|
 | `python validate.py` | Check setup before benchmarking |
-| `python pytest_vs_data_bridge_test.py` | Run full benchmark suite |
+| `python pytest_vs_ouroboros_test.py` | Run full benchmark suite |
 | `cat BENCHMARK_REPORT.md` | View detailed results |
 | `maturin develop --release` | Rebuild after code changes |
 
 ## Performance Targets
 
-Expected speedup ranges (data-bridge-test vs pytest):
+Expected speedup ranges (ouroboros-test vs pytest):
 
 - Test Discovery: **2-3x faster**
 - Test Execution: **2-5x faster**

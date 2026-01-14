@@ -3,7 +3,7 @@
 import tempfile
 from pathlib import Path
 
-from data_bridge.test import TestSuite, test, expect
+from ouroboros.test import TestSuite, test, expect
 
 
 # Import the validation tool
@@ -181,7 +181,7 @@ class TestValidationReport(TestSuite):
 
 # Run tests if executed directly
 if __name__ == '__main__':
-    from data_bridge.test import run_suite
+    from ouroboros.test import run_suite
     report1 = run_suite(TestTestStats, verbose=True)
     report2 = run_suite(TestValidationResult, verbose=True)
     report3 = run_suite(TestValidationReport, verbose=True)

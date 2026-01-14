@@ -6,8 +6,8 @@ after the HTTP response is sent, similar to FastAPI's BackgroundTasks.
 """
 
 from typing import Annotated
-from data_bridge.api import App, Body, Depends, BackgroundTasks, get_background_tasks
-from data_bridge.api import BaseModel
+from ouroboros.api import App, Body, Depends, BackgroundTasks, get_background_tasks
+from ouroboros.api import BaseModel
 import asyncio
 
 

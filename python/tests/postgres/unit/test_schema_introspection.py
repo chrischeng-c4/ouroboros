@@ -5,7 +5,7 @@ Tests schema introspection functions without requiring a real database.
 """
 import pytest
 from unittest.mock import AsyncMock
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 class TestSchemaIntrospection:
@@ -14,7 +14,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_list_tables(self, mock_connection_engine):
         """Test list_tables returns table names."""
-        from data_bridge.postgres.connection import list_tables
+        from ouroboros.postgres.connection import list_tables
 
         # Mock the Rust function
         mock_connection_engine.list_tables = AsyncMock(
@@ -29,7 +29,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_list_tables_default_schema(self, mock_connection_engine):
         """Test list_tables with default schema."""
-        from data_bridge.postgres.connection import list_tables
+        from ouroboros.postgres.connection import list_tables
 
         mock_connection_engine.list_tables = AsyncMock(return_value=["users"])
 
@@ -41,7 +41,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_table_exists_true(self, mock_connection_engine):
         """Test table_exists returns True for existing table."""
-        from data_bridge.postgres.connection import table_exists
+        from ouroboros.postgres.connection import table_exists
 
         mock_connection_engine.table_exists = AsyncMock(return_value=True)
 
@@ -53,7 +53,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_table_exists_false(self, mock_connection_engine):
         """Test table_exists returns False for non-existent table."""
-        from data_bridge.postgres.connection import table_exists
+        from ouroboros.postgres.connection import table_exists
 
         mock_connection_engine.table_exists = AsyncMock(return_value=False)
 
@@ -67,7 +67,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_get_columns(self, mock_connection_engine):
         """Test get_columns returns column information."""
-        from data_bridge.postgres.connection import get_columns
+        from ouroboros.postgres.connection import get_columns
 
         mock_columns = [
             {
@@ -110,7 +110,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_get_indexes(self, mock_connection_engine):
         """Test get_indexes returns index information."""
-        from data_bridge.postgres.connection import get_indexes
+        from ouroboros.postgres.connection import get_indexes
 
         mock_indexes = [
             {
@@ -140,7 +140,7 @@ class TestSchemaIntrospection:
     @pytest.mark.asyncio
     async def test_inspect_table(self, mock_connection_engine):
         """Test inspect_table returns complete table information."""
-        from data_bridge.postgres.connection import inspect_table
+        from ouroboros.postgres.connection import inspect_table
 
         mock_table_info = {
             "name": "users",
@@ -182,8 +182,8 @@ class TestSchemaIntrospection:
         """Test schema functions raise RuntimeError when engine not available."""
         from unittest.mock import patch
 
-        with patch("data_bridge.postgres.connection._engine", None):
-            from data_bridge.postgres.connection import (
+        with patch("ouroboros.postgres.connection._engine", None):
+            from ouroboros.postgres.connection import (
                 list_tables,
                 table_exists,
                 get_columns,

@@ -6,8 +6,8 @@ LazyLoadingProxy, DeferredColumn, RelationshipLoader, and custom exceptions.
 """
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
-from data_bridge.test import expect
-from data_bridge.postgres.loading import (
+from ouroboros.test import expect
+from ouroboros.postgres.loading import (
     LoadingStrategy,
     LoadingConfig,
     lazy,
@@ -519,7 +519,7 @@ class TestDeferredColumn:
     @pytest.mark.asyncio
     async def test_deferred_column_load_executes_query(self):
         """Test load() executes SQL query and loads value."""
-        from data_bridge.postgres import connection
+        from ouroboros.postgres import connection
 
         instance = Mock()
         instance._table_name = "posts"
@@ -545,7 +545,7 @@ class TestDeferredColumn:
     @pytest.mark.asyncio
     async def test_deferred_column_load_handles_empty_result(self):
         """Test load() handles empty query result."""
-        from data_bridge.postgres import connection
+        from ouroboros.postgres import connection
 
         instance = Mock()
         instance._table_name = "posts"
@@ -565,7 +565,7 @@ class TestDeferredColumn:
     @pytest.mark.asyncio
     async def test_deferred_column_await_syntax(self):
         """Test __await__ enables await syntax."""
-        from data_bridge.postgres import connection
+        from ouroboros.postgres import connection
 
         instance = Mock()
         instance._table_name = "posts"
@@ -621,7 +621,7 @@ class TestRelationshipLoader:
         instance.user = mock_proxy
 
         # Create mock class with ForeignKeyProxy descriptor
-        from data_bridge.postgres.columns import ForeignKeyProxy
+        from ouroboros.postgres.columns import ForeignKeyProxy
         mock_fk_proxy = Mock(spec=ForeignKeyProxy)
         mock_class = type('MockPost', (), {'user': mock_fk_proxy})
 
@@ -644,7 +644,7 @@ class TestRelationshipLoader:
         instance.posts = mock_query
 
         # Create mock class with BackReference descriptor
-        from data_bridge.postgres.columns import BackReference
+        from ouroboros.postgres.columns import BackReference
         mock_back_ref = Mock(spec=BackReference)
         mock_class = type('MockUser', (), {'posts': mock_back_ref})
 
@@ -688,12 +688,12 @@ class TestRelationshipLoader:
     async def test_load_selectin_back_reference(self):
         """Test load_selectin batch loads BackReference relationships."""
         # Import execute function
-        from data_bridge.postgres import connection
+        from ouroboros.postgres import connection
 
         loader = RelationshipLoader()
 
         # Create mock BackReference
-        from data_bridge.postgres.columns import BackReference
+        from ouroboros.postgres.columns import BackReference
         mock_back_ref = Mock(spec=BackReference)
         mock_back_ref.source_table = "posts"
         mock_back_ref.source_column = "user_id"
@@ -738,11 +738,11 @@ class TestRelationshipLoader:
     @pytest.mark.asyncio
     async def test_load_selectin_skips_instances_without_pk(self):
         """Test load_selectin skips instances without primary key."""
-        from data_bridge.postgres import connection
+        from ouroboros.postgres import connection
 
         loader = RelationshipLoader()
 
-        from data_bridge.postgres.columns import BackReference
+        from ouroboros.postgres.columns import BackReference
         mock_back_ref = Mock(spec=BackReference)
         mock_back_ref.source_table = "posts"
         mock_back_ref.source_column = "user_id"

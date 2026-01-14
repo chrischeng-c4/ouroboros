@@ -6,7 +6,7 @@ This demonstrates Phase 2.4 implementation of create_task method.
 """
 
 import time
-from data_bridge.pyloop import PyLoop
+from ouroboros.pyloop import PyLoop
 
 
 def demo_basic_task():

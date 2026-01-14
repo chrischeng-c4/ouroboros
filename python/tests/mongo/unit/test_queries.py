@@ -11,9 +11,9 @@ Migrated from test_comprehensive.py and split for maintainability.
 """
 from typing import Optional
 
-from data_bridge import Document
-from data_bridge.mongodb.query import QueryBuilder
-from data_bridge.test import test, expect
+from ouroboros import Document
+from ouroboros.mongodb.query import QueryBuilder
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -335,7 +335,7 @@ class TestQueryExecution(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestQueryBuilderFilters,

@@ -5,7 +5,7 @@ Tests query_with_cte with real PostgreSQL database.
 """
 import pytest
 from datetime import datetime, timezone
-from data_bridge.postgres import execute, insert_one, query_with_cte
+from ouroboros.postgres import execute, insert_one, query_with_cte
 
 
 @pytest.fixture

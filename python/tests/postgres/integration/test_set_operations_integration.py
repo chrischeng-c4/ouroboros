@@ -4,7 +4,7 @@ Integration tests for SQL set operations (UNION/INTERSECT/EXCEPT).
 Tests set operation functionality with real PostgreSQL database using raw SQL.
 """
 import pytest
-from data_bridge.postgres import execute, insert_one
+from ouroboros.postgres import execute, insert_one
 
 
 @pytest.fixture

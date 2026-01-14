@@ -106,11 +106,11 @@ pip install -e .
 
 ### Basic Usage
 ```python
-import data_bridge.pyloop
+import ouroboros.pyloop
 import asyncio
 
 # Install PyLoop as default event loop
-data_bridge.pyloop.install()
+ouroboros.pyloop.install()
 
 # Now all asyncio code uses PyLoop
 async def main():
@@ -122,9 +122,9 @@ asyncio.run(main())
 
 ### Check Installation
 ```python
-import data_bridge.pyloop
+import ouroboros.pyloop
 
-if data_bridge.pyloop.is_installed():
+if ouroboros.pyloop.is_installed():
     print("PyLoop is active")
 else:
     print("Using standard asyncio")
@@ -273,14 +273,14 @@ python benchmarks/pyloop/bench_scaling.py
 - `QUICK_REFERENCE.md` - This file
 
 ### Source Code
-- `crates/data-bridge-pyloop/src/loop_impl.rs` - PyLoop implementation
-- `crates/data-bridge-pyloop/src/handle.rs` - Handle/TimerHandle
-- `crates/data-bridge-pyloop/src/task.rs` - Task implementation
-- `python/data_bridge/pyloop/__init__.py` - Python API
+- `crates/ouroboros-pyloop/src/loop_impl.rs` - PyLoop implementation
+- `crates/ouroboros-pyloop/src/handle.rs` - Handle/TimerHandle
+- `crates/ouroboros-pyloop/src/task.rs` - Task implementation
+- `python/ouroboros/pyloop/__init__.py` - Python API
 
 ### Project Documentation
 - `PYLOOP_PHASE1_SUMMARY.md` - Implementation summary
-- `openspec/changes/implement-data-bridge-pyloop/design.md` - Design document
+- `openspec/changes/implement-ouroboros-pyloop/design.md` - Design document
 
 ---
 

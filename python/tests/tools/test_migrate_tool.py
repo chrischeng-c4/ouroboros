@@ -4,7 +4,7 @@ import ast
 import tempfile
 from pathlib import Path
 
-from data_bridge.test import TestSuite, test, expect
+from ouroboros.test import TestSuite, test, expect
 
 
 # Import the migration tool
@@ -28,9 +28,9 @@ class TestPytestToDataBridgeTransformer(TestSuite):
         expect(transformer.modified).to_equal(True)
         expect(transformer.has_pytest_import).to_equal(True)
 
-        # Should contain data_bridge.test import
+        # Should contain ouroboros.test import
         code = ast.unparse(new_tree)
-        expect("from data_bridge.test import" in code).to_equal(True)
+        expect("from ouroboros.test import" in code).to_equal(True)
         expect("TestSuite" in code).to_equal(True)
         expect("expect" in code).to_equal(True)
 
@@ -214,7 +214,7 @@ class TestExample:
                 content = f.read()
 
             # Verify transformations
-            expect("from data_bridge.test import" in content).to_equal(True)
+            expect("from ouroboros.test import" in content).to_equal(True)
             expect("class TestExample(TestSuite)" in content).to_equal(True)
             expect("@test" in content).to_equal(True)
             expect("expect" in content).to_equal(True)
@@ -257,7 +257,7 @@ def test_example():
 
 # Run tests if executed directly
 if __name__ == '__main__':
-    from data_bridge.test import run_suite
+    from ouroboros.test import run_suite
     report = run_suite(TestPytestToDataBridgeTransformer, verbose=True)
     report2 = run_suite(TestFileTransformation, verbose=True)
 

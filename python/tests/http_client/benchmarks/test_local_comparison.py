@@ -6,8 +6,8 @@ Declarative benchmark using the new simplified API.
 """
 
 import httpx
-from data_bridge.http import HttpClient
-from data_bridge.test import HttpBenchmark
+from ouroboros.http import HttpClient
+from ouroboros.test import HttpBenchmark
 
 
 # Declarative routes (server responds with these JSON payloads)

@@ -5,7 +5,7 @@ Tests query_aggregate with distinct and distinct_on parameters using a real Post
 """
 import pytest
 from datetime import date
-from data_bridge.postgres import execute, insert_one, query_aggregate
+from ouroboros.postgres import execute, insert_one, query_aggregate
 
 
 @pytest.fixture

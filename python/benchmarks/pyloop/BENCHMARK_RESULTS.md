@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Comprehensive performance benchmarks comparing **data-bridge-pyloop** (Rust/Tokio-backed event loop) against Python's standard **asyncio** event loop implementation.
+Comprehensive performance benchmarks comparing **ouroboros-pyloop** (Rust/Tokio-backed event loop) against Python's standard **asyncio** event loop implementation.
 
 **Date**: 2026-01-12
 **Implementation**: Phase 1-2.5 (Basic event loop with call_soon, call_later, create_task)
@@ -490,10 +490,10 @@ Speedup:            9.95x
 
 ## References
 
-- **PyLoop Implementation**: `crates/data-bridge-pyloop/src/loop_impl.rs`
+- **PyLoop Implementation**: `crates/ouroboros-pyloop/src/loop_impl.rs`
 - **Benchmark Code**: `benchmarks/pyloop/bench_event_loop.py`
 - **Phase Summary**: `PYLOOP_PHASE1_SUMMARY.md`
-- **Design Document**: `openspec/changes/implement-data-bridge-pyloop/design.md`
+- **Design Document**: `openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Tokio Documentation**: https://tokio.rs/
 - **Python asyncio**: https://docs.python.org/3/library/asyncio.html
 - **uvloop**: https://github.com/MagicStack/uvloop

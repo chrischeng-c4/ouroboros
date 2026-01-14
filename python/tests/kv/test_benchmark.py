@@ -14,7 +14,7 @@ import pytest
 import asyncio
 import time
 from typing import List, Tuple
-from data_bridge.kv import KvClient, KvPool, PoolConfig
+from ouroboros.kv import KvClient, KvPool, PoolConfig
 
 # Import redis-py for comparison
 try:

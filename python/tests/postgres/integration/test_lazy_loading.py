@@ -20,9 +20,9 @@ Setup database:
     bash scripts/setup_test_db.sh
 """
 import pytest
-from data_bridge.test import expect
-from data_bridge.postgres import Table, Column, relationship, init
-from data_bridge.postgres.session import Session
+from ouroboros.test import expect
+from ouroboros.postgres import Table, Column, relationship, init
+from ouroboros.postgres.session import Session
 
 
 # Test models
@@ -243,7 +243,7 @@ async def test_lazy_load_descriptor_class_access(sample_data):
     descriptor = Post.author
 
     # Should be a RelationshipDescriptor
-    from data_bridge.postgres.relationships import RelationshipDescriptor
+    from ouroboros.postgres.relationships import RelationshipDescriptor
     assert isinstance(descriptor, RelationshipDescriptor)
 
 
@@ -256,7 +256,7 @@ async def test_lazy_load_descriptor_instance_access(sample_data):
     loader = post.author
 
     # Should be a RelationshipLoader
-    from data_bridge.postgres.relationships import RelationshipLoader
+    from ouroboros.postgres.relationships import RelationshipLoader
     assert isinstance(loader, RelationshipLoader)
 
 
@@ -298,7 +298,7 @@ async def test_selectinload_prevents_n_plus_1(sample_data):
         await Post(id=i, title=f"Post {i}", author_id=i).save()
 
     # Load posts with selectinload
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     posts = await Post.find().options(selectinload("author")).to_list()
 
@@ -321,7 +321,7 @@ async def test_selectinload_with_null_fk(sample_data):
     await Post(id=1, title="Post 1", author_id=1).save()
     await Post(id=2, title="Post 2", author_id=None).save()  # NULL FK
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     posts = await Post.find().options(selectinload("author")).to_list()
 
@@ -346,7 +346,7 @@ async def test_selectinload_multiple_posts_same_author(sample_data):
     await Post(id=2, title="Post 2", author_id=1).save()
     await Post(id=3, title="Post 3", author_id=1).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     posts = await Post.find().options(selectinload("author")).to_list()
 
@@ -371,7 +371,7 @@ async def test_noload_option(sample_data):
     await User(id=1, name="Alice").save()
     await Post(id=1, title="Post 1", author_id=1).save()
 
-    from data_bridge.postgres import noload
+    from ouroboros.postgres import noload
 
     posts = await Post.find().options(noload("author")).to_list()
 
@@ -393,7 +393,7 @@ async def test_multiple_options(sample_data):
 
     # This test is just to verify syntax works
     # In real scenario, you'd load multiple relationships
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     posts = await Post.find().options(
         selectinload("author"),
@@ -414,7 +414,7 @@ async def test_selectinload_with_empty_result(sample_data):
     """Selectinload works with empty query results."""
     await Post.delete_many({})
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     # Query with no results
     posts = await Post.find(Post.id == 999).options(selectinload("author")).to_list()
@@ -428,7 +428,7 @@ async def test_selectinload_invalid_relationship(sample_data):
     await Post.delete_many({})
     await Post(id=1, title="Post 1", author_id=1).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     # Error should be raised when applying option during to_list()
     expect(lambda: posts = await Post.find().options(selectinload("invalid_relationship")).to_list()).to_raise(ValueError)
@@ -444,7 +444,7 @@ async def test_selectinload_with_all_null_fks(sample_data):
     await Post(id=1, title="Post 1", author_id=None).save()
     await Post(id=2, title="Post 2", author_id=None).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     posts = await Post.find().options(selectinload("author")).to_list()
 
@@ -461,7 +461,7 @@ async def test_joinedload_not_implemented(sample_data):
     await Post.delete_many({})
     await Post(id=1, title="Post 1", author_id=1).save()
 
-    from data_bridge.postgres import joinedload
+    from ouroboros.postgres import joinedload
 
     # Should raise NotImplementedError when trying to apply during to_list()
     expect(lambda: posts = await Post.find().options(joinedload("author")).to_list()).to_raise(NotImplementedError)
@@ -478,7 +478,7 @@ async def test_selectinload_chaining_with_filters(sample_data):
     await Post(id=1, title="Post 1", author_id=1).save()
     await Post(id=2, title="Post 2", author_id=2).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     # Filter posts and eagerly load authors
     posts = await Post.find(Post.id == 1).options(selectinload("author")).to_list()
@@ -500,7 +500,7 @@ async def test_selectinload_with_order_by(sample_data):
     await Post(id=1, title="Post A", author_id=1).save()
     await Post(id=2, title="Post B", author_id=2).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     # Order posts and eagerly load authors
     posts = await Post.find().order_by("-id").options(selectinload("author")).to_list()
@@ -526,7 +526,7 @@ async def test_selectinload_with_limit(sample_data):
         await User(id=i, name=f"User {i}").save()
         await Post(id=i, title=f"Post {i}", author_id=i).save()
 
-    from data_bridge.postgres import selectinload
+    from ouroboros.postgres import selectinload
 
     # Limit to 3 posts
     posts = await Post.find().limit(3).options(selectinload("author")).to_list()

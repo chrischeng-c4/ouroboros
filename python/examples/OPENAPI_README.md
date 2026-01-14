@@ -1,11 +1,11 @@
 # OpenAPI Documentation Guide
 
-This guide shows how to use the OpenAPI documentation features in data-bridge API.
+This guide shows how to use the OpenAPI documentation features in ouroboros API.
 
 ## Quick Start
 
 ```python
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App(
     title="My API",
@@ -51,7 +51,7 @@ The OpenAPI spec is automatically generated from your type hints:
 ```python
 from typing import Annotated, List, Optional
 from dataclasses import dataclass
-from data_bridge.api import Path, Query, Body
+from ouroboros.api import Path, Query, Body
 
 @dataclass
 class User:
@@ -251,7 +251,7 @@ app = App(
 ### Add Servers
 
 ```python
-from data_bridge.api.openapi import generate_openapi
+from ouroboros.api.openapi import generate_openapi
 
 spec = generate_openapi(
     title="My API",

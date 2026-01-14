@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 from typing import List
-from data_bridge.api.background import BackgroundTasks, get_background_tasks
+from ouroboros.api.background import BackgroundTasks, get_background_tasks
 
 
 class TestBackgroundTasksBasics:

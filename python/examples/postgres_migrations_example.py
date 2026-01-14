@@ -11,7 +11,7 @@ Make sure PostgreSQL is running and accessible before running this example.
 """
 
 import asyncio
-from data_bridge import postgres
+from ouroboros import postgres
 
 
 async def main():

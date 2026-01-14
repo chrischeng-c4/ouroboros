@@ -14,8 +14,8 @@ from typing import Annotated
 
 from pydantic import Field
 
-from data_bridge import Document, text_search, escape_regex
-from data_bridge.test import test, expect
+from ouroboros import Document, text_search, escape_regex
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -317,7 +317,7 @@ class TestTransactionStubs(CommonTestSuite):
     @test(tags=["unit", "transactions"])
     async def test_start_session_raises_not_implemented(self):
         """Test that start_session raises TransactionNotSupportedError."""
-        from data_bridge import start_session, TransactionNotSupportedError
+        from ouroboros import start_session, TransactionNotSupportedError
 
         error_caught = False
         try:
@@ -330,7 +330,7 @@ class TestTransactionStubs(CommonTestSuite):
     @test(tags=["unit", "transactions"])
     async def test_session_raises_not_implemented(self):
         """Test that Session constructor raises."""
-        from data_bridge import Session, TransactionNotSupportedError
+        from ouroboros import Session, TransactionNotSupportedError
 
         error_caught = False
         try:
@@ -343,7 +343,7 @@ class TestTransactionStubs(CommonTestSuite):
     @test(tags=["unit", "transactions"])
     async def test_transaction_not_supported_error_message(self):
         """Test TransactionNotSupportedError has helpful message."""
-        from data_bridge import TransactionNotSupportedError
+        from ouroboros import TransactionNotSupportedError
 
         error = TransactionNotSupportedError()
         error_msg = str(error)
@@ -353,7 +353,7 @@ class TestTransactionStubs(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestEscapeRegex,

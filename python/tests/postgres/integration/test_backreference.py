@@ -11,13 +11,13 @@ These tests verify:
 """
 
 import pytest
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     execute,
     insert_one,
     BackReference,
     BackReferenceQuery,
 )
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 @pytest.mark.asyncio

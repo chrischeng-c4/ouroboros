@@ -7,7 +7,7 @@ test it using standard HTTP clients.
 
 import asyncio
 import httpx
-from data_bridge.test import TestServer
+from ouroboros.test import TestServer
 
 
 async def main():

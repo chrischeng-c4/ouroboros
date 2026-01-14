@@ -7,8 +7,8 @@ default_factory, and related descriptors without requiring a database.
 import pytest
 from typing import Any
 from unittest.mock import Mock, AsyncMock, patch
-from data_bridge.test import expect
-from data_bridge.postgres.computed import (
+from ouroboros.test import expect
+from ouroboros.postgres.computed import (
     hybrid_property,
     hybrid_method,
     column_property,
@@ -19,7 +19,7 @@ from data_bridge.postgres.computed import (
     HybridMethodDescriptor,
     ColumnPropertyDescriptor,
 )
-from data_bridge.postgres import Table
+from ouroboros.postgres import Table
 
 
 # Test fixtures

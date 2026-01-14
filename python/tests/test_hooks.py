@@ -3,7 +3,7 @@ Test lifecycle hooks system (setup_class, teardown_class, setup_method, teardown
 """
 import asyncio
 import pytest
-from data_bridge.test import TestSuite, test, expect
+from ouroboros.test import TestSuite, test, expect
 
 
 class TestHooksExecution(TestSuite):

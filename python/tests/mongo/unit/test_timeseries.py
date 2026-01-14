@@ -4,14 +4,14 @@ Tests for MongoDB time-series collection support.
 Time-series collections require MongoDB 5.0+ and are optimized for storing
 sequences of measurements over time.
 
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from data_bridge import Document
-from data_bridge.mongodb.timeseries import TimeSeriesConfig, Granularity
-from data_bridge.test import test, expect
+from ouroboros import Document
+from ouroboros.mongodb.timeseries import TimeSeriesConfig, Granularity
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -201,7 +201,7 @@ class TestTimeSeriesDocument(MongoTestSuite):
 
         await EventLog.ensure_timeseries_collection()
 
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("event_logs_test", {})
 
         now = datetime.now(timezone.utc)
@@ -295,7 +295,7 @@ class TestGranularity(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestTimeSeriesConfig,

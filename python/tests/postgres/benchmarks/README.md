@@ -1,10 +1,10 @@
 # PostgreSQL Benchmarks
 
-Comprehensive performance benchmarks comparing data-bridge-postgres against other popular Python PostgreSQL libraries.
+Comprehensive performance benchmarks comparing ouroboros-postgres against other popular Python PostgreSQL libraries.
 
 ## Libraries Compared
 
-1. **data-bridge-postgres** - Our Rust-backed ORM with zero Python byte handling
+1. **ouroboros-postgres** - Our Rust-backed ORM with zero Python byte handling
 2. **asyncpg** - High-performance async PostgreSQL driver
 3. **psycopg2** - Traditional synchronous PostgreSQL driver
 4. **SQLAlchemy** - Popular ORM with async support
@@ -32,7 +32,7 @@ Comprehensive performance benchmarks comparing data-bridge-postgres against othe
 
 3. **Database**: Create benchmark database
    ```bash
-   createdb data_bridge_benchmark
+   createdb ouroboros_benchmark
    ```
 
 ## Running Benchmarks
@@ -41,7 +41,7 @@ Comprehensive performance benchmarks comparing data-bridge-postgres against othe
 
 ```bash
 # Run all PostgreSQL benchmarks
-POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark" \
+POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark" \
 dbtest tests/postgres/benchmarks/
 
 # Run specific benchmark file
@@ -56,7 +56,7 @@ dbtest tests/postgres/benchmarks/
 
 ```bash
 # Run comprehensive comparison
-POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark" \
+POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark" \
 uv run python benchmarks/bench_postgres_comparison.py
 
 # With default connection (postgres/postgres@localhost:5432)
@@ -67,7 +67,7 @@ uv run python benchmarks/bench_postgres_comparison.py
 
 ```bash
 # Run all benchmarks
-POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark" \
+POSTGRES_URI="postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark" \
 pytest tests/postgres/benchmarks/ -v
 
 # Run specific benchmark
@@ -81,7 +81,7 @@ pytest tests/postgres/benchmarks/ --benchmark-only
 
 - `POSTGRES_URI`: PostgreSQL connection URI
   - Format: `postgresql://user:password@host:port/database`
-  - Default: `postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark`
+  - Default: `postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark`
 
 ## Performance Targets
 
@@ -109,18 +109,18 @@ Based on MongoDB performance gains (1.4-5.4x vs Beanie), we target:
 ============================================================
 PostgreSQL Performance Benchmarks
 ============================================================
-Connection: postgresql://postgres@localhost:5432/data_bridge_benchmark
-Database: data_bridge_benchmark
+Connection: postgresql://postgres@localhost:5432/ouroboros_benchmark
+Database: ouroboros_benchmark
 ============================================================
 
 Benchmarking: Insert One (100 iterations)
-  data_bridge    :     0.85 ms
+  ouroboros    :     0.85 ms
   asyncpg        :     1.12 ms
   psycopg2       :     1.45 ms
   sqlalchemy     :     2.31 ms
 
 Benchmarking: Bulk Insert 1000 rows
-  data_bridge    :    15.32 ms
+  ouroboros    :    15.32 ms
   asyncpg        :    18.45 ms
   psycopg2       :    24.56 ms
   sqlalchemy     :    45.67 ms
@@ -132,13 +132,13 @@ Benchmark Complete
 SUMMARY:
 
 insert_one:
-  data_bridge    :     0.85 ms  (2.72x)
+  ouroboros    :     0.85 ms  (2.72x)
   asyncpg        :     1.12 ms  (2.06x)
   psycopg2       :     1.45 ms  (1.59x)
   sqlalchemy     :     2.31 ms  (1.00x)
 
 bulk_insert_1000:
-  data_bridge    :    15.32 ms  (2.98x)
+  ouroboros    :    15.32 ms  (2.98x)
   asyncpg        :    18.45 ms  (2.48x)
   psycopg2       :    24.56 ms  (1.86x)
   sqlalchemy     :    45.67 ms  (1.00x)
@@ -153,7 +153,7 @@ bulk_insert_1000:
 pg_isready
 
 # Check connection
-psql -U postgres -d data_bridge_benchmark -c "SELECT version();"
+psql -U postgres -d ouroboros_benchmark -c "SELECT version();"
 ```
 
 ### Missing Dependencies
@@ -170,7 +170,7 @@ uv pip install asyncpg psycopg2-binary "sqlalchemy[asyncio]" asyncpg
 createuser -s postgres
 
 # Grant permissions
-psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE data_bridge_benchmark TO postgres;"
+psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE ouroboros_benchmark TO postgres;"
 ```
 
 ## Contributing
@@ -178,8 +178,8 @@ psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE data_bridge_benchmark TO p
 When adding new benchmarks:
 
 1. Follow the existing pattern in `bench_*.py` files
-2. Use `BenchmarkGroup` and `register_group` from `data_bridge.test`
+2. Use `BenchmarkGroup` and `register_group` from `ouroboros.test`
 3. Add setup functions for data initialization
-4. Include all 4 frameworks (data-bridge, asyncpg, psycopg2, SQLAlchemy)
+4. Include all 4 frameworks (ouroboros, asyncpg, psycopg2, SQLAlchemy)
 5. Document expected performance targets
 6. Add corresponding test cases if needed

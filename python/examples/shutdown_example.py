@@ -7,7 +7,7 @@ This example shows how to:
 3. Clean up resources properly
 """
 import asyncio
-from data_bridge.api import App, setup_signal_handlers
+from ouroboros.api import App, setup_signal_handlers
 
 
 # Create app with custom shutdown timeout
@@ -75,7 +75,7 @@ async def health():
     """Health check endpoint."""
     if app.is_shutting_down:
         # Return 503 Service Unavailable during shutdown
-        from data_bridge.api import HTTPException
+        from ouroboros.api import HTTPException
         raise HTTPException(503, "Service is shutting down")
 
     return {
@@ -89,7 +89,7 @@ async def health():
 async def get_data():
     """Example endpoint that uses the database."""
     if not db.connected:
-        from data_bridge.api import HTTPException
+        from ouroboros.api import HTTPException
         raise HTTPException(503, "Database not connected")
 
     return {"data": "some data from database"}

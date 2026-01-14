@@ -10,7 +10,7 @@ import motor.motor_asyncio
 from pymongo import MongoClient
 
 # ODMs
-from data_bridge import init, close
+from ouroboros import init, close
 from beanie import init_beanie
 
 from tests.mongo.benchmarks.models import DBUser, BeanieUser, BEANIE_MODELS

@@ -1,8 +1,8 @@
 """Simple pytest test file for testing migration."""
-from data_bridge.test import TestSuite, test, fixture, expect, parametrize
+from ouroboros.test import TestSuite, test, fixture, expect, parametrize
 
 class TestSimple(TestSuite):
-from data_bridge.test import expect
+from ouroboros.test import expect
     """Simple test class."""
     @test
     def test_basic_assertion(self):

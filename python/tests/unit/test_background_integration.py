@@ -2,11 +2,11 @@
 
 import pytest
 from typing import Annotated
-from data_bridge.api import (
+from ouroboros.api import (
     App, Depends, BackgroundTasks, get_background_tasks,
     Body, Query
 )
-from data_bridge.api.models import BaseModel
+from ouroboros.api.models import BaseModel
 
 
 class TestBackgroundTasksIntegration:

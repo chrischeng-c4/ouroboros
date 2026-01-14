@@ -15,8 +15,8 @@ Tests cover:
 """
 
 import pytest
-from data_bridge.postgres import execute, insert_one, insert_many
-from data_bridge.test import expect
+from ouroboros.postgres import execute, insert_one, insert_many
+from ouroboros.test import expect
 
 
 @pytest.fixture

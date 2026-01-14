@@ -8,10 +8,10 @@ Tests for:
 - run_migrations() function
 - MigrationHistory tracking
 
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
-from data_bridge import Document
-from data_bridge.mongodb.migrations import (
+from ouroboros import Document
+from ouroboros.mongodb.migrations import (
     Migration,
     iterative_migration,
     free_fall_migration,
@@ -20,7 +20,7 @@ from data_bridge.mongodb.migrations import (
     get_applied_migrations,
     get_migration_status,
 )
-from data_bridge.test import test, expect
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -114,13 +114,13 @@ class TestMigrationForward(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -166,13 +166,13 @@ class TestIterativeMigration(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -229,13 +229,13 @@ class TestFreeFallMigration(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -264,13 +264,13 @@ class TestRunMigrations(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -347,13 +347,13 @@ class TestMigrationHistory(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -402,13 +402,13 @@ class TestMigrationErrors(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_migration_users", {})
         await _engine.delete_many("_migrations", {})
 
@@ -443,7 +443,7 @@ class TestMigrationErrors(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestMigrationBase,

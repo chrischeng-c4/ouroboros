@@ -4,7 +4,7 @@ Tests for middleware system.
 import pytest
 import asyncio
 import logging
-from data_bridge.api import (
+from ouroboros.api import (
     BaseMiddleware,
     MiddlewareStack,
     TimingMiddleware,

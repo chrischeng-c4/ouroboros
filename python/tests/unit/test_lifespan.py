@@ -2,7 +2,7 @@
 import asyncio
 import pytest
 from contextlib import asynccontextmanager
-from data_bridge.api import App, AppState
+from ouroboros.api import App, AppState
 
 
 class TestLifespanContextManager:

@@ -5,7 +5,7 @@ This example demonstrates how to use Form and File dependencies
 to handle multipart/form-data requests, similar to FastAPI.
 """
 
-from data_bridge.api import App, Form, File, UploadFile, JSONResponse
+from ouroboros.api import App, Form, File, UploadFile, JSONResponse
 
 
 # Initialize the app

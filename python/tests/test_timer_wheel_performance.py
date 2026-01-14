@@ -1,7 +1,7 @@
 """Performance tests for timer wheel optimization (Phase 3)."""
 
 import time
-from data_bridge.pyloop import PyLoop
+from ouroboros.pyloop import PyLoop
 
 
 def test_timer_wheel_basic():

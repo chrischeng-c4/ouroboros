@@ -1,7 +1,7 @@
 """Integration tests for PyLoop middleware with actual app."""
 
 import pytest
-from data_bridge.pyloop import (
+from ouroboros.pyloop import (
     App,
     BaseMiddleware,
     CORSMiddleware,

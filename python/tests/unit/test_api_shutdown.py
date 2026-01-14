@@ -1,7 +1,7 @@
 """Tests for App shutdown and startup hooks."""
 import asyncio
 import pytest
-from data_bridge.api import App, setup_signal_handlers
+from ouroboros.api import App, setup_signal_handlers
 
 
 class TestStartupShutdownHooks:

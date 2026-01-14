@@ -5,7 +5,7 @@ Tests async session management, factories, scoped sessions,
 and async helpers without requiring a database connection.
 """
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch, Mock
 from dataclasses import dataclass
@@ -63,7 +63,7 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_context_manager_enter_exit(self):
         """Test async context manager enter/exit."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
         async with AsyncSession() as session:
             assert session is not None
@@ -75,7 +75,7 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_context_manager_commit_on_success(self):
         """Test context manager commits on success with autocommit."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
         session = AsyncSession(autocommit=True)
         user = MockUser(name="Alice")
@@ -92,9 +92,9 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_context_manager_rollback_on_exception(self):
         """Test context manager rolls back on exception."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
-        with patch('data_bridge.postgres.execute', new_callable=AsyncMock) as mock_execute:
+        with patch('ouroboros.postgres.execute', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = []
 
             try:
@@ -111,7 +111,7 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_add_method(self):
         """Test add() method."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
         session = AsyncSession()
         user = MockUser(name="Alice")
@@ -126,9 +126,9 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_execute_method(self):
         """Test execute() raw SQL method."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
-        with patch('data_bridge.postgres.execute', new_callable=AsyncMock) as mock_execute:
+        with patch('ouroboros.postgres.execute', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = [
                 {"id": 1, "name": "Alice"},
                 {"id": 2, "name": "Bob"}
@@ -146,9 +146,9 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_execute_with_autoflush(self):
         """Test execute() auto-flushes pending changes."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
-        with patch('data_bridge.postgres.execute', new_callable=AsyncMock) as mock_execute:
+        with patch('ouroboros.postgres.execute', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = []
 
             session = AsyncSession(autoflush=True)
@@ -165,9 +165,9 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_scalar_method(self):
         """Test scalar() returns first column of first row."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
-        with patch('data_bridge.postgres.execute', new_callable=AsyncMock) as mock_execute:
+        with patch('ouroboros.postgres.execute', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = [{"count": 42}]
 
             session = AsyncSession()
@@ -180,9 +180,9 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_scalar_empty_result(self):
         """Test scalar() with empty result returns None."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
-        with patch('data_bridge.postgres.execute', new_callable=AsyncMock) as mock_execute:
+        with patch('ouroboros.postgres.execute', new_callable=AsyncMock) as mock_execute:
             mock_execute.return_value = []
 
             session = AsyncSession()
@@ -195,7 +195,7 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_closed_session_raises(self):
         """Test operations on closed session raise error."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
         session = AsyncSession()
         await session.close()
@@ -205,7 +205,7 @@ class TestAsyncSession:
     @pytest.mark.asyncio
     async def test_bind_engine(self):
         """Test bind_engine() method."""
-        from data_bridge.postgres.async_utils import AsyncSession, AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncSession, AsyncEngine
 
         session = AsyncSession()
         engine = AsyncEngine(database="test")
@@ -226,7 +226,7 @@ class TestAsyncSessionFactory:
 
     def test_factory_creation(self):
         """Test creating factory with options."""
-        from data_bridge.postgres.async_utils import AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncSessionFactory
 
         factory = AsyncSessionFactory(
             autoflush=False,
@@ -240,7 +240,7 @@ class TestAsyncSessionFactory:
 
     def test_factory_creates_session(self):
         """Test factory creates AsyncSession instances."""
-        from data_bridge.postgres.async_utils import AsyncSessionFactory, AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSessionFactory, AsyncSession
 
         factory = AsyncSessionFactory()
         session = factory()
@@ -249,7 +249,7 @@ class TestAsyncSessionFactory:
 
     def test_factory_passes_options(self):
         """Test factory passes options to created sessions."""
-        from data_bridge.postgres.async_utils import AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncSessionFactory
 
         factory = AsyncSessionFactory(
             autoflush=False,
@@ -265,7 +265,7 @@ class TestAsyncSessionFactory:
 
     def test_factory_with_engine(self):
         """Test factory binds engine to sessions."""
-        from data_bridge.postgres.async_utils import AsyncSessionFactory, AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncSessionFactory, AsyncEngine
 
         engine = AsyncEngine(database="test")
         factory = AsyncSessionFactory(engine=engine)
@@ -277,7 +277,7 @@ class TestAsyncSessionFactory:
     @pytest.mark.asyncio
     async def test_factory_begin(self):
         """Test factory begin() starts transaction."""
-        from data_bridge.postgres.async_utils import AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncSessionFactory
 
         factory = AsyncSessionFactory()
         session = await factory.begin()
@@ -298,7 +298,7 @@ class TestRunSync:
     @pytest.mark.asyncio
     async def test_run_sync_basic(self):
         """Test run_sync() runs sync function."""
-        from data_bridge.postgres.async_utils import run_sync
+        from ouroboros.postgres.async_utils import run_sync
 
         def sync_func(x: int, y: int) -> int:
             return x + y
@@ -309,7 +309,7 @@ class TestRunSync:
     @pytest.mark.asyncio
     async def test_run_sync_with_kwargs(self):
         """Test run_sync() passes kwargs correctly."""
-        from data_bridge.postgres.async_utils import run_sync
+        from ouroboros.postgres.async_utils import run_sync
 
         def sync_func(x: int, y: int, multiplier: int = 1) -> int:
             return (x + y) * multiplier
@@ -320,7 +320,7 @@ class TestRunSync:
     @pytest.mark.asyncio
     async def test_run_sync_returns_correct_type(self):
         """Test run_sync() returns correct result type."""
-        from data_bridge.postgres.async_utils import run_sync
+        from ouroboros.postgres.async_utils import run_sync
 
         def sync_func() -> str:
             return "hello"
@@ -336,7 +336,7 @@ class TestAsyncWrap:
     @pytest.mark.asyncio
     async def test_async_wrap_basic(self):
         """Test async_wrap() wraps sync function."""
-        from data_bridge.postgres.async_utils import async_wrap
+        from ouroboros.postgres.async_utils import async_wrap
 
         @async_wrap
         def sync_func(x: int) -> int:
@@ -348,7 +348,7 @@ class TestAsyncWrap:
     @pytest.mark.asyncio
     async def test_async_wrap_preserves_metadata(self):
         """Test async_wrap() preserves function metadata."""
-        from data_bridge.postgres.async_utils import async_wrap
+        from ouroboros.postgres.async_utils import async_wrap
 
         @async_wrap
         def sync_func(x: int) -> int:
@@ -361,7 +361,7 @@ class TestAsyncWrap:
     @pytest.mark.asyncio
     async def test_async_wrap_with_args_kwargs(self):
         """Test async_wrap() handles args and kwargs."""
-        from data_bridge.postgres.async_utils import async_wrap
+        from ouroboros.postgres.async_utils import async_wrap
 
         @async_wrap
         def sync_func(a: int, b: int, c: int = 0) -> int:
@@ -381,7 +381,7 @@ class TestAsyncScoped:
     @pytest.mark.asyncio
     async def test_creates_session_per_task(self):
         """Test AsyncScoped creates session per task."""
-        from data_bridge.postgres.async_utils import AsyncScoped, AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncScoped, AsyncSessionFactory
 
         factory = AsyncSessionFactory()
         scoped = AsyncScoped(factory)
@@ -397,7 +397,7 @@ class TestAsyncScoped:
     @pytest.mark.asyncio
     async def test_different_tasks_get_different_sessions(self):
         """Test different tasks get different sessions."""
-        from data_bridge.postgres.async_utils import AsyncScoped, AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncScoped, AsyncSessionFactory
 
         factory = AsyncSessionFactory()
         scoped = AsyncScoped(factory)
@@ -418,7 +418,7 @@ class TestAsyncScoped:
     @pytest.mark.asyncio
     async def test_remove_clears_session(self):
         """Test remove() clears session for current task."""
-        from data_bridge.postgres.async_utils import AsyncScoped, AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncScoped, AsyncSessionFactory
 
         factory = AsyncSessionFactory()
         scoped = AsyncScoped(factory)
@@ -438,7 +438,7 @@ class TestAsyncScoped:
     @pytest.mark.asyncio
     async def test_remove_all_closes_all_sessions(self):
         """Test remove_all() closes all scoped sessions."""
-        from data_bridge.postgres.async_utils import AsyncScoped, AsyncSessionFactory
+        from ouroboros.postgres.async_utils import AsyncScoped, AsyncSessionFactory
 
         factory = AsyncSessionFactory()
         scoped = AsyncScoped(factory)
@@ -466,7 +466,7 @@ class TestGetAsyncSession:
     @pytest.mark.asyncio
     async def test_get_async_session_none_when_not_set(self):
         """Test get_async_session() returns None when not set."""
-        from data_bridge.postgres.async_utils import get_async_session
+        from ouroboros.postgres.async_utils import get_async_session
 
         session = get_async_session()
         assert session is None
@@ -474,7 +474,7 @@ class TestGetAsyncSession:
     @pytest.mark.asyncio
     async def test_get_async_session_returns_current(self):
         """Test get_async_session() returns current session."""
-        from data_bridge.postgres.async_utils import AsyncSession, get_async_session
+        from ouroboros.postgres.async_utils import AsyncSession, get_async_session
 
         async with AsyncSession() as session:
             current = get_async_session()
@@ -491,7 +491,7 @@ class TestAsyncLoad:
     @pytest.mark.asyncio
     async def test_async_load_missing_relationship(self):
         """Test async_load() raises AttributeError for missing relationship."""
-        from data_bridge.postgres.async_utils import async_load, AsyncSession
+        from ouroboros.postgres.async_utils import async_load, AsyncSession
 
         session = AsyncSession()
         user = MockUser(id=1, name="Alice")
@@ -504,7 +504,7 @@ class TestAsyncLoad:
     @pytest.mark.asyncio
     async def test_async_load_no_session(self):
         """Test async_load() raises RuntimeError without session."""
-        from data_bridge.postgres.async_utils import async_load
+        from ouroboros.postgres.async_utils import async_load
 
         # Need to add relationship attribute for this test
         user = MockUser(id=1, name="Alice")
@@ -519,7 +519,7 @@ class TestAsyncRefresh:
     @pytest.mark.asyncio
     async def test_async_refresh_no_session(self):
         """Test async_refresh() raises RuntimeError without session."""
-        from data_bridge.postgres.async_utils import async_refresh
+        from ouroboros.postgres.async_utils import async_refresh
 
         user = MockUser(id=1, name="Alice")
 
@@ -528,7 +528,7 @@ class TestAsyncRefresh:
     @pytest.mark.asyncio
     async def test_async_refresh_no_pk(self):
         """Test async_refresh() raises ValueError without primary key."""
-        from data_bridge.postgres.async_utils import async_refresh, AsyncSession
+        from ouroboros.postgres.async_utils import async_refresh, AsyncSession
 
         session = AsyncSession()
         user = MockUser(name="Alice")  # No ID
@@ -545,7 +545,7 @@ class TestAsyncExpire:
     @pytest.mark.asyncio
     async def test_async_expire_all_attributes(self):
         """Test async_expire() expires all attributes."""
-        from data_bridge.postgres.async_utils import async_expire, AsyncSession
+        from ouroboros.postgres.async_utils import async_expire, AsyncSession
 
         session = AsyncSession()
         user = MockUser(id=1, name="Alice", email="alice@test.com")
@@ -564,7 +564,7 @@ class TestAsyncExpire:
     @pytest.mark.asyncio
     async def test_async_expire_specific_attributes(self):
         """Test async_expire() expires specific attributes."""
-        from data_bridge.postgres.async_utils import async_expire, AsyncSession
+        from ouroboros.postgres.async_utils import async_expire, AsyncSession
 
         session = AsyncSession()
         user = MockUser(id=1, name="Alice", email="alice@test.com")
@@ -583,7 +583,7 @@ class TestAsyncExpire:
     @pytest.mark.asyncio
     async def test_async_expire_no_session(self):
         """Test async_expire() raises RuntimeError without session."""
-        from data_bridge.postgres.async_utils import async_expire
+        from ouroboros.postgres.async_utils import async_expire
 
         user = MockUser(id=1, name="Alice")
 
@@ -600,7 +600,7 @@ class TestAsyncResultIterator:
     @pytest.mark.asyncio
     async def test_async_iteration(self):
         """Test async iteration works."""
-        from data_bridge.postgres.async_utils import AsyncResultIterator
+        from ouroboros.postgres.async_utils import AsyncResultIterator
 
         async def query_func():
             return [1, 2, 3, 4, 5]
@@ -616,7 +616,7 @@ class TestAsyncResultIterator:
     @pytest.mark.asyncio
     async def test_async_iteration_empty(self):
         """Test async iteration with empty results."""
-        from data_bridge.postgres.async_utils import AsyncResultIterator
+        from ouroboros.postgres.async_utils import AsyncResultIterator
 
         async def query_func():
             return []
@@ -632,7 +632,7 @@ class TestAsyncResultIterator:
     @pytest.mark.asyncio
     async def test_async_iteration_custom_batch_size(self):
         """Test custom batch size."""
-        from data_bridge.postgres.async_utils import AsyncResultIterator
+        from ouroboros.postgres.async_utils import AsyncResultIterator
 
         async def query_func():
             return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -656,9 +656,9 @@ class TestAsyncStream:
     @pytest.mark.asyncio
     async def test_async_stream_basic(self):
         """Test async_stream() streams results."""
-        from data_bridge.postgres.async_utils import async_stream, AsyncSession
+        from ouroboros.postgres.async_utils import async_stream, AsyncSession
 
-        with patch('data_bridge.postgres.find_many', new_callable=AsyncMock) as mock_find:
+        with patch('ouroboros.postgres.find_many', new_callable=AsyncMock) as mock_find:
             mock_find.side_effect = [
                 [{"id": 1, "name": "Alice"}],
                 []  # Empty to signal end
@@ -675,9 +675,9 @@ class TestAsyncStream:
     @pytest.mark.asyncio
     async def test_async_stream_empty_results(self):
         """Test async_stream() handles empty results."""
-        from data_bridge.postgres.async_utils import async_stream, AsyncSession
+        from ouroboros.postgres.async_utils import async_stream, AsyncSession
 
-        with patch('data_bridge.postgres.find_many', new_callable=AsyncMock) as mock_find:
+        with patch('ouroboros.postgres.find_many', new_callable=AsyncMock) as mock_find:
             mock_find.return_value = []
 
             async with AsyncSession() as session:
@@ -690,9 +690,9 @@ class TestAsyncStream:
     @pytest.mark.asyncio
     async def test_async_stream_multiple_batches(self):
         """Test async_stream() handles multiple batches."""
-        from data_bridge.postgres.async_utils import async_stream, AsyncSession
+        from ouroboros.postgres.async_utils import async_stream, AsyncSession
 
-        with patch('data_bridge.postgres.find_many', new_callable=AsyncMock) as mock_find:
+        with patch('ouroboros.postgres.find_many', new_callable=AsyncMock) as mock_find:
             mock_find.side_effect = [
                 [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}],
                 [{"id": 3, "name": "Charlie"}],
@@ -709,7 +709,7 @@ class TestAsyncStream:
     @pytest.mark.asyncio
     async def test_async_stream_no_session(self):
         """Test async_stream() raises RuntimeError without session."""
-        from data_bridge.postgres.async_utils import async_stream
+        from ouroboros.postgres.async_utils import async_stream
 
         with pytest.raises(RuntimeError, match="No active async session"):
             async for user in async_stream(MockUser):
@@ -725,7 +725,7 @@ class TestAsyncEngine:
 
     def test_engine_creation(self):
         """Test creating engine with parameters."""
-        from data_bridge.postgres.async_utils import AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncEngine
 
         engine = AsyncEngine(
             host="localhost",
@@ -748,7 +748,7 @@ class TestAsyncEngine:
 
     def test_engine_with_connection_string(self):
         """Test creating engine with connection string."""
-        from data_bridge.postgres.async_utils import AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncEngine
 
         conn_str = "postgresql://user:pass@localhost:5432/test"
         engine = AsyncEngine(connection_string=conn_str)
@@ -758,9 +758,9 @@ class TestAsyncEngine:
     @pytest.mark.asyncio
     async def test_engine_connect(self):
         """Test engine connect() initializes connection."""
-        from data_bridge.postgres.async_utils import AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncEngine
 
-        with patch('data_bridge.postgres.init', new_callable=AsyncMock) as mock_init:
+        with patch('ouroboros.postgres.init', new_callable=AsyncMock) as mock_init:
             engine = AsyncEngine(database="test")
             await engine.connect()
 
@@ -770,10 +770,10 @@ class TestAsyncEngine:
     @pytest.mark.asyncio
     async def test_engine_dispose(self):
         """Test engine dispose() closes connections."""
-        from data_bridge.postgres.async_utils import AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncEngine
 
-        with patch('data_bridge.postgres.init', new_callable=AsyncMock), \
-             patch('data_bridge.postgres.close', new_callable=AsyncMock) as mock_close:
+        with patch('ouroboros.postgres.init', new_callable=AsyncMock), \
+             patch('ouroboros.postgres.close', new_callable=AsyncMock) as mock_close:
 
             engine = AsyncEngine(database="test")
             await engine.connect()
@@ -785,10 +785,10 @@ class TestAsyncEngine:
     @pytest.mark.asyncio
     async def test_engine_context_manager(self):
         """Test engine async context manager."""
-        from data_bridge.postgres.async_utils import AsyncEngine
+        from ouroboros.postgres.async_utils import AsyncEngine
 
-        with patch('data_bridge.postgres.init', new_callable=AsyncMock), \
-             patch('data_bridge.postgres.close', new_callable=AsyncMock) as mock_close:
+        with patch('ouroboros.postgres.init', new_callable=AsyncMock), \
+             patch('ouroboros.postgres.close', new_callable=AsyncMock) as mock_close:
 
             async with AsyncEngine(database="test") as engine:
                 assert engine.is_connected
@@ -807,17 +807,17 @@ class TestGreenlet:
 
     def test_greenlet_available_flag(self):
         """Test GREENLET_AVAILABLE flag."""
-        from data_bridge.postgres.async_utils import GREENLET_AVAILABLE
+        from ouroboros.postgres.async_utils import GREENLET_AVAILABLE
 
         assert isinstance(GREENLET_AVAILABLE, bool)
 
     @pytest.mark.skipif(
-        "not __import__('data_bridge.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
+        "not __import__('ouroboros.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
         reason="greenlet not installed"
     )
     def test_greenlet_spawn_available(self):
         """Test greenlet_spawn when greenlet is available."""
-        from data_bridge.postgres.async_utils import greenlet_spawn
+        from ouroboros.postgres.async_utils import greenlet_spawn
 
         async def async_func():
             return "test"
@@ -827,22 +827,22 @@ class TestGreenlet:
         assert callable(greenlet_spawn)
 
     @pytest.mark.skipif(
-        "__import__('data_bridge.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
+        "__import__('ouroboros.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
         reason="greenlet is installed"
     )
     def test_greenlet_spawn_not_available(self):
         """Test greenlet_spawn raises when greenlet not installed."""
-        from data_bridge.postgres.async_utils import greenlet_spawn
+        from ouroboros.postgres.async_utils import greenlet_spawn
 
         expect(lambda: greenlet_spawn(lambda: None)).to_raise(RuntimeError)
 
     @pytest.mark.skipif(
-        "__import__('data_bridge.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
+        "__import__('ouroboros.postgres.async_utils').postgres.async_utils.GREENLET_AVAILABLE",
         reason="greenlet is installed"
     )
     def test_async_greenlet_not_available(self):
         """Test AsyncGreenlet raises when greenlet not installed."""
-        from data_bridge.postgres.async_utils import AsyncGreenlet
+        from ouroboros.postgres.async_utils import AsyncGreenlet
 
         expect(lambda: AsyncGreenlet()).to_raise(RuntimeError)
 
@@ -857,7 +857,7 @@ class TestAsyncUtilsIntegration:
     @pytest.mark.asyncio
     async def test_factory_with_scoped(self):
         """Test factory works with scoped sessions."""
-        from data_bridge.postgres.async_utils import (
+        from ouroboros.postgres.async_utils import (
             AsyncSessionFactory, AsyncScoped
         )
 
@@ -875,12 +875,12 @@ class TestAsyncUtilsIntegration:
     @pytest.mark.asyncio
     async def test_session_with_engine_lifecycle(self):
         """Test session lifecycle with engine."""
-        from data_bridge.postgres.async_utils import (
+        from ouroboros.postgres.async_utils import (
             AsyncEngine, AsyncSessionFactory
         )
 
-        with patch('data_bridge.postgres.init', new_callable=AsyncMock), \
-             patch('data_bridge.postgres.close', new_callable=AsyncMock):
+        with patch('ouroboros.postgres.init', new_callable=AsyncMock), \
+             patch('ouroboros.postgres.close', new_callable=AsyncMock):
 
             async with AsyncEngine(database="test") as engine:
                 factory = AsyncSessionFactory(engine=engine)
@@ -895,7 +895,7 @@ class TestAsyncUtilsIntegration:
     @pytest.mark.asyncio
     async def test_multiple_concurrent_sessions(self):
         """Test multiple concurrent sessions."""
-        from data_bridge.postgres.async_utils import AsyncSession
+        from ouroboros.postgres.async_utils import AsyncSession
 
         async def use_session():
             async with AsyncSession() as session:

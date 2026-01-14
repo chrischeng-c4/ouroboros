@@ -11,7 +11,7 @@ This example shows how to:
 from dataclasses import dataclass
 from typing import Annotated, List, Optional
 
-from data_bridge.api import App, Path, Query, Body
+from ouroboros.api import App, Path, Query, Body
 
 
 # Define data models

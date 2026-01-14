@@ -8,13 +8,13 @@ Tests for:
 - fetch_all_links() method
 - Link and BackLink classes
 
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
 from typing import Optional
 from bson import ObjectId
 
-from data_bridge import Document, Link, BackLink, WriteRules, DeleteRules
-from data_bridge.test import test, expect
+from ouroboros import Document, Link, BackLink, WriteRules, DeleteRules
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite
 
 
@@ -86,7 +86,7 @@ class TestWriteRules(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -94,7 +94,7 @@ class TestWriteRules(MongoTestSuite):
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -167,13 +167,13 @@ class TestDeleteRules(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
@@ -224,7 +224,7 @@ class TestFetchLinks(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -233,7 +233,7 @@ class TestFetchLinks(MongoTestSuite):
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
         await _engine.delete_many("test_categories_relations", {})
@@ -381,12 +381,12 @@ class TestLinkClass(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
 
     @test(tags=["mongo", "relations", "link"])
@@ -467,13 +467,13 @@ class TestBackLinkClass(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
     async def teardown(self):
         """Clean up test collections."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_authors_relations", {})
         await _engine.delete_many("test_articles_relations", {})
 
@@ -538,7 +538,7 @@ class TestBackLinkClass(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestWriteRules,

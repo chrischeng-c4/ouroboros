@@ -2,12 +2,12 @@
 Tests for embedded document support (EmbeddedDocument fields).
 
 Beanie-compatible embedded documents allow type-safe nested structures.
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
 from typing import Optional, List
 
-from data_bridge import Document, EmbeddedDocument
-from data_bridge.test import test, expect
+from ouroboros import Document, EmbeddedDocument
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite
 
 
@@ -79,14 +79,14 @@ class TestEmbeddedDocumentBasics(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
         await _engine.delete_many("test_embedded_profiles", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
         await _engine.delete_many("test_embedded_profiles", {})
@@ -190,12 +190,12 @@ class TestEmbeddedSerialization(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "serialization"])
@@ -246,12 +246,12 @@ class TestEmbeddedRoundTrip(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "roundtrip"])
@@ -297,12 +297,12 @@ class TestEmbeddedQueries(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
 
     @test(tags=["mongo", "embedded", "query"])
@@ -356,13 +356,13 @@ class TestEmbeddedEdgeCases(MongoTestSuite):
 
     async def setup(self):
         """Cleanup before each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
 
     async def teardown(self):
         """Cleanup after each test."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_embedded_users", {})
         await _engine.delete_many("test_embedded_companies", {})
 
@@ -446,7 +446,7 @@ class TestEmbeddedEdgeCases(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestEmbeddedDocumentBasics,

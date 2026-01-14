@@ -39,7 +39,7 @@ def get_collection_name(framework: str, operation: str, batch_size: int = None) 
     Ensures complete isolation to prevent data interference.
 
     Args:
-        framework: Framework identifier (e.g., "data_bridge", "beanie")
+        framework: Framework identifier (e.g., "ouroboros", "beanie")
         operation: Operation name (e.g., "insert_bulk", "find_one")
         batch_size: Optional batch size for further isolation
 

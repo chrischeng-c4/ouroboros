@@ -8,8 +8,8 @@ Tests for:
 
 Migrated from test_coverage.py and focused for maintainability.
 """
-from data_bridge.mongodb.connection import _build_connection_string
-from data_bridge.test import test, expect
+from ouroboros.mongodb.connection import _build_connection_string
+from ouroboros.test import test, expect
 from tests.base import CommonTestSuite
 
 
@@ -128,7 +128,7 @@ class TestConnectionInit(CommonTestSuite):
     @test(tags=["unit", "connection"])
     async def test_init_without_params_raises(self):
         """Test init raises without connection_string or database."""
-        from data_bridge.mongodb.connection import init
+        from ouroboros.mongodb.connection import init
 
         error_caught = False
         try:
@@ -142,7 +142,7 @@ class TestConnectionInit(CommonTestSuite):
     @test(tags=["unit", "connection"])
     async def test_is_connected_returns_bool(self):
         """Test is_connected returns boolean."""
-        from data_bridge.mongodb.connection import is_connected
+        from ouroboros.mongodb.connection import is_connected
 
         result = is_connected()
         expect(isinstance(result, bool)).to_be_true()
@@ -150,7 +150,7 @@ class TestConnectionInit(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestConnectionStringBuilding,

@@ -1,5 +1,5 @@
 """Example showing app.run() for local development."""
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App(title="Local Dev Example", version="1.0.0")
 

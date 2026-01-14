@@ -4,7 +4,7 @@ Unit tests for Session and Unit of Work functionality.
 Tests the ORM session pattern without requiring a database connection.
 """
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -35,7 +35,7 @@ class TestIdentityMap:
 
     def test_add_and_get(self):
         """Test adding and retrieving objects."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         user = MockUser(id=1, name="Alice")
@@ -47,14 +47,14 @@ class TestIdentityMap:
 
     def test_get_nonexistent(self):
         """Test getting nonexistent object returns None."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         assert imap.get("users", 999) is None
 
     def test_contains(self):
         """Test contains check."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         user = MockUser(id=1, name="Alice")
@@ -65,7 +65,7 @@ class TestIdentityMap:
 
     def test_remove(self):
         """Test removing objects."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         user = MockUser(id=1, name="Alice")
@@ -77,7 +77,7 @@ class TestIdentityMap:
 
     def test_clear(self):
         """Test clearing all entries."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         imap.add("users", 1, MockUser(id=1))
@@ -89,7 +89,7 @@ class TestIdentityMap:
 
     def test_length(self):
         """Test length property."""
-        from data_bridge.postgres.session import IdentityMap
+        from ouroboros.postgres.session import IdentityMap
 
         imap = IdentityMap(use_weak_refs=False)
         assert len(imap) == 0
@@ -106,7 +106,7 @@ class TestDirtyTracker:
 
     def test_take_snapshot(self):
         """Test taking snapshot."""
-        from data_bridge.postgres.session import DirtyTracker
+        from ouroboros.postgres.session import DirtyTracker
 
         tracker = DirtyTracker()
         user = MockUser(id=1, name="Alice", email="alice@test.com")
@@ -117,7 +117,7 @@ class TestDirtyTracker:
 
     def test_detect_dirty_field(self):
         """Test detecting dirty fields."""
-        from data_bridge.postgres.session import DirtyTracker
+        from ouroboros.postgres.session import DirtyTracker
 
         tracker = DirtyTracker()
         user = MockUser(id=1, name="Alice", email="alice@test.com")
@@ -132,7 +132,7 @@ class TestDirtyTracker:
 
     def test_detect_multiple_dirty_fields(self):
         """Test detecting multiple dirty fields."""
-        from data_bridge.postgres.session import DirtyTracker
+        from ouroboros.postgres.session import DirtyTracker
 
         tracker = DirtyTracker()
         user = MockUser(id=1, name="Alice", email="alice@test.com")
@@ -148,7 +148,7 @@ class TestDirtyTracker:
 
     def test_refresh_snapshot(self):
         """Test refreshing snapshot clears dirty state."""
-        from data_bridge.postgres.session import DirtyTracker
+        from ouroboros.postgres.session import DirtyTracker
 
         tracker = DirtyTracker()
         user = MockUser(id=1, name="Alice")
@@ -162,7 +162,7 @@ class TestDirtyTracker:
 
     def test_clear_snapshot(self):
         """Test clearing snapshot for specific object."""
-        from data_bridge.postgres.session import DirtyTracker
+        from ouroboros.postgres.session import DirtyTracker
 
         tracker = DirtyTracker()
         user = MockUser(id=1, name="Alice")
@@ -179,7 +179,7 @@ class TestUnitOfWork:
 
     def test_register_new(self):
         """Test registering new objects."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         user = MockUser(name="Alice")
@@ -191,7 +191,7 @@ class TestUnitOfWork:
 
     def test_register_new_idempotent(self):
         """Test registering same object twice doesn't duplicate."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         user = MockUser(name="Alice")
@@ -203,7 +203,7 @@ class TestUnitOfWork:
 
     def test_register_deleted(self):
         """Test registering deleted objects."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         user = MockUser(id=1, name="Alice")
@@ -215,7 +215,7 @@ class TestUnitOfWork:
 
     def test_register_deleted_removes_from_new(self):
         """Test deleting new object removes it from new list."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         user = MockUser(name="Alice")
@@ -228,7 +228,7 @@ class TestUnitOfWork:
 
     def test_register_clean(self):
         """Test registering clean objects takes snapshot."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         user = MockUser(id=1, name="Alice")
@@ -241,7 +241,7 @@ class TestUnitOfWork:
 
     def test_clear(self):
         """Test clearing all pending operations."""
-        from data_bridge.postgres.session import UnitOfWork
+        from ouroboros.postgres.session import UnitOfWork
 
         uow = UnitOfWork()
         uow.register_new(MockUser(name="Alice"))
@@ -259,7 +259,7 @@ class TestSession:
 
     def test_add_object(self):
         """Test adding object to session."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         user = MockUser(name="Alice")
@@ -270,7 +270,7 @@ class TestSession:
 
     def test_add_returns_existing(self):
         """Test adding object with same PK returns existing."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         user1 = MockUser(id=1, name="Alice")
@@ -284,7 +284,7 @@ class TestSession:
 
     def test_delete_object(self):
         """Test deleting object from session."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         user = MockUser(id=1, name="Alice")
@@ -297,7 +297,7 @@ class TestSession:
 
     def test_expunge_object(self):
         """Test expunging object from session."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         user = MockUser(id=1, name="Alice")
@@ -311,7 +311,7 @@ class TestSession:
 
     def test_expunge_all(self):
         """Test expunging all objects."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         session.add(MockUser(id=1, name="Alice"))
@@ -324,7 +324,7 @@ class TestSession:
 
     def test_is_modified(self):
         """Test checking if object is modified."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
 
         session = Session()
         user = MockUser(id=1, name="Alice")
@@ -335,7 +335,7 @@ class TestSession:
 
     def test_closed_session_raises(self):
         """Test operations on closed session raise error."""
-        from data_bridge.postgres.session import Session
+        from ouroboros.postgres.session import Session
         import asyncio
 
         async def test():
@@ -348,7 +348,7 @@ class TestSession:
 
     def test_get_session(self):
         """Test getting current session."""
-        from data_bridge.postgres.session import Session, get_session
+        from ouroboros.postgres.session import Session, get_session
 
         # No session active
         assert get_session() is None
@@ -368,7 +368,7 @@ class TestObjectState:
 
     def test_all_states_exist(self):
         """Test all expected states exist."""
-        from data_bridge.postgres.session import ObjectState
+        from ouroboros.postgres.session import ObjectState
 
         assert ObjectState.TRANSIENT
         assert ObjectState.PENDING

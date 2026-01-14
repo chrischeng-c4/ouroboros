@@ -3,7 +3,7 @@
 import asyncio
 import pytest
 import httpx
-from data_bridge.test import TestSuite, test, fixture, TestServer, expect
+from ouroboros.test import TestSuite, test, fixture, TestServer, expect
 
 
 class APITests(TestSuite):

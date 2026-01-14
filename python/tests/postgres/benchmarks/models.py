@@ -5,7 +5,7 @@ Comparing: data-bridge-postgres (Rust async) vs asyncpg vs psycopg2 vs SQLAlchem
 """
 
 from typing import Optional
-from data_bridge.postgres import Table, Column
+from ouroboros.postgres import Table, Column
 
 
 # data-bridge model
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS bench_psycopg2_users (
 def get_table_name(framework: str) -> str:
     """Get table name for a specific framework."""
     return {
-        "data_bridge": "bench_db_users",
+        "ouroboros": "bench_db_users",
         "asyncpg": "bench_asyncpg_users",
         "psycopg2": "bench_psycopg2_users",
         "sqlalchemy": "bench_sa_users",

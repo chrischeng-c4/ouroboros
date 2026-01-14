@@ -1,7 +1,7 @@
 """Integration tests for PostgreSQL extensions (Full-Text Search, PostGIS, Arrays)."""
 import pytest
-from data_bridge.test import expect
-from data_bridge.postgres import (
+from ouroboros.test import expect
+from ouroboros.postgres import (
     Table, Column, init,
     FullTextSearch, fts,
     Point, GeoQuery,

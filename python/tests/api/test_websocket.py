@@ -3,7 +3,7 @@ Tests for WebSocket support.
 """
 
 import pytest
-from data_bridge.api import WebSocket, WebSocketState, WebSocketDisconnect, App
+from ouroboros.api import WebSocket, WebSocketState, WebSocketDisconnect, App
 
 
 class TestWebSocketState:

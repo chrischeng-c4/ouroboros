@@ -10,9 +10,9 @@ Tests distributed locking functionality including:
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 import asyncio
-from data_bridge.kv import KvClient, Lock
+from ouroboros.kv import KvClient, Lock
 
 
 class TestSetnx:

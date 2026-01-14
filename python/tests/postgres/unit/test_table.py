@@ -7,8 +7,8 @@ without requiring a real database connection.
 import pytest
 from typing import Optional
 from unittest.mock import patch, AsyncMock
-from data_bridge.postgres import Table, Column, ColumnProxy
-from data_bridge.test import expect
+from ouroboros.postgres import Table, Column, ColumnProxy
+from ouroboros.test import expect
 
 
 class TestTableMetaclass:
@@ -354,7 +354,7 @@ class TestTableClassMethods:
     @pytest.mark.asyncio
     async def test_find_returns_query_builder(self, sample_table_class):
         """Test find() returns QueryBuilder."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         User = sample_table_class
         query = User.find()
@@ -365,7 +365,7 @@ class TestTableClassMethods:
     @pytest.mark.asyncio
     async def test_find_with_filters(self, sample_table_class):
         """Test find() accepts filters."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         User = sample_table_class
         query = User.find(User.age > 25)
@@ -376,13 +376,13 @@ class TestTableClassMethods:
     @pytest.mark.asyncio
     async def test_count_delegates_to_find(self, sample_table_class):
         """Test count() delegates to find().count()."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         User = sample_table_class
 
         # count() should return a QueryBuilder.count() call
         # Mock the query engine
-        with patch('data_bridge.postgres.query._engine') as mock_engine:
+        with patch('ouroboros.postgres.query._engine') as mock_engine:
             mock_engine.count = AsyncMock(return_value=42)
 
             result = await User.count()

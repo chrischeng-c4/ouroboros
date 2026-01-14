@@ -1,6 +1,6 @@
 # FastAPI + OpenTelemetry Integration - Complete Package
 
-This directory contains a production-ready example demonstrating distributed tracing with FastAPI, data-bridge PostgreSQL ORM, and OpenTelemetry.
+This directory contains a production-ready example demonstrating distributed tracing with FastAPI, ouroboros PostgreSQL ORM, and OpenTelemetry.
 
 ## Files Overview
 
@@ -102,7 +102,7 @@ docker run -d --name jaeger \
     -p 16686:16686 -p 4317:4317 \
     jaegertracing/all-in-one:latest
 
-# Build data-bridge
+# Build ouroboros
 maturin develop --release
 
 # Run application
@@ -118,7 +118,7 @@ python examples/test_fastapi_otel.py
 - Tracer configuration with OTLP exporter
 - Resource attributes (service name, version, environment)
 - FastAPI automatic instrumentation
-- data-bridge ORM spans
+- ouroboros ORM spans
 
 ### 2. Distributed Tracing
 - Parent-child span hierarchy
@@ -160,7 +160,7 @@ python examples/test_fastapi_otel.py
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         data-bridge PostgreSQL ORM                          │
+│         ouroboros PostgreSQL ORM                          │
 │         Span: db.query.find                                 │
 │         db.system, db.collection.name, db.operation.name    │
 └─────────────────┬───────────────────────────────────────────┘
@@ -267,7 +267,7 @@ export DD_API_KEY=<your-api-key>
 
 ### Module not found
 ```bash
-cd /path/to/data-bridge-posgres
+cd /path/to/ouroboros-posgres
 maturin develop --release
 ```
 
@@ -287,13 +287,13 @@ query = session.find(Post).options(selectinload(Post.author))
 
 ### 3. Monitor Connection Pool
 ```python
-from data_bridge.postgres.telemetry import get_connection_pool_metrics
+from ouroboros.postgres.telemetry import get_connection_pool_metrics
 metrics = get_connection_pool_metrics()
 ```
 
 ### 4. Add Custom Spans
 ```python
-from data_bridge.postgres.telemetry import instrument_span
+from ouroboros.postgres.telemetry import instrument_span
 
 @instrument_span("business.process_order")
 async def process_order(order_id: int):
@@ -322,7 +322,7 @@ async def process_order(order_id: int):
 - [OpenTelemetry Python](https://opentelemetry.io/docs/instrumentation/python/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Jaeger Documentation](https://www.jaegertracing.io/docs/)
-- [data-bridge PostgreSQL](../README.md)
+- [ouroboros PostgreSQL](../README.md)
 - [OTLP Specification](https://opentelemetry.io/docs/specs/otlp/)
 
 ## Support
@@ -331,7 +331,7 @@ For issues or questions:
 1. Check troubleshooting sections in docs
 2. Review trace examples in Jaeger
 3. Enable debug logging: `OTEL_LOG_LEVEL=debug`
-4. Check data-bridge documentation
+4. Check ouroboros documentation
 
 ## License
 
@@ -340,6 +340,6 @@ MIT License - See [LICENSE](../LICENSE) for details.
 ---
 
 **Created**: 2026-01-06
-**data-bridge Version**: 0.1.0
+**ouroboros Version**: 0.1.0
 **Python**: 3.12+
 **OpenTelemetry**: Latest stable

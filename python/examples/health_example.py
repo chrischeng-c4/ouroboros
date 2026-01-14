@@ -7,7 +7,7 @@ This shows how to:
 3. Use async health checks
 """
 import asyncio
-from data_bridge.api import App
+from ouroboros.api import App
 
 
 # Create app

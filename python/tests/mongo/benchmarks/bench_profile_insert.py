@@ -2,8 +2,8 @@
 
 import asyncio
 import time
-from data_bridge import Document, init, close
-from data_bridge import mongodb as _rust
+from ouroboros import Document, init, close
+from ouroboros import mongodb as _rust
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import MongoClient
 

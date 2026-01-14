@@ -6,11 +6,11 @@ to the current implementation, maintaining 100% backward compatibility.
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from datetime import datetime, timezone
 from decimal import Decimal
 from bson import ObjectId, Binary
-from data_bridge import Document
+from ouroboros import Document
 
 
 class TestDoc(Document):

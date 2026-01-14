@@ -1,9 +1,9 @@
 """Tests for API dependency injection system."""
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from typing import Annotated
-from data_bridge.api.dependencies import (
+from ouroboros.api.dependencies import (
     Depends, Scope, DependencyContainer, RequestContext,
     extract_dependencies, build_dependency_graph
 )

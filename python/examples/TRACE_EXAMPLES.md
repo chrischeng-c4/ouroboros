@@ -373,7 +373,7 @@ All spans in this distributed trace share the same trace_id, enabling:
 Add your own attributes for better insights:
 
 ```python
-from data_bridge.postgres.telemetry import instrument_span
+from ouroboros.postgres.telemetry import instrument_span
 
 @instrument_span("business.validate_order", attributes={
     "order_type": "standard",
@@ -392,4 +392,4 @@ These will appear in Jaeger as searchable tags!
 
 - [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)
 - [Jaeger Documentation](https://www.jaegertracing.io/docs/)
-- [data-bridge Telemetry Guide](../docs/telemetry.md)
+- [ouroboros Telemetry Guide](../docs/telemetry.md)

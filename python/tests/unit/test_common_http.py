@@ -1,7 +1,7 @@
 """Tests for shared HTTP types."""
 
 import pytest
-from data_bridge.common import HttpMethod, HttpStatus, BaseRequest, BaseResponse
+from ouroboros.common import HttpMethod, HttpStatus, BaseRequest, BaseResponse
 from dataclasses import dataclass
 
 

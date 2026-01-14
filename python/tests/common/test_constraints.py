@@ -10,7 +10,7 @@ Tests cover:
 
 from typing import Annotated, Optional
 
-from data_bridge import (
+from ouroboros import (
     MinLen,
     MaxLen,
     Min,
@@ -19,13 +19,13 @@ from data_bridge import (
     Url,
     Constraint,
 )
-from data_bridge.mongodb.type_extraction import (
+from ouroboros.mongodb.type_extraction import (
     python_type_to_bson_type,
     extract_constraints,
     is_annotated_type,
     unwrap_annotated_type,
 )
-from data_bridge.test import TestSuite, test, expect
+from ouroboros.test import TestSuite, test, expect
 
 from tests.base import CommonTestSuite
 
@@ -406,7 +406,7 @@ class TestEdgeCases(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites, ReportFormat
+    from ouroboros.test import run_suites, ReportFormat
 
     suites = [
         TestConstraintClasses,

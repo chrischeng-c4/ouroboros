@@ -15,8 +15,8 @@ and manipulation overhead only.
 """
 import pytest
 from typing import Optional
-from data_bridge.test import benchmark, BenchmarkConfig, expect
-from data_bridge.postgres import Table, Column, QueryBuilder, ColumnProxy
+from ouroboros.test import benchmark, BenchmarkConfig, expect
+from ouroboros.postgres import Table, Column, QueryBuilder, ColumnProxy
 
 
 # Mark to skip database fixtures

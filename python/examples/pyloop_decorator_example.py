@@ -11,7 +11,7 @@ Test with:
     curl -X POST http://127.0.0.1:8000/users -H "Content-Type: application/json" -d '{"name": "Alice"}'
 """
 
-from data_bridge.pyloop import App
+from ouroboros.pyloop import App
 import asyncio
 
 app = App(title="PyLoop Demo", version="1.0.0")

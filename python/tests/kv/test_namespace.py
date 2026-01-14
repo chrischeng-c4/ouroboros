@@ -10,7 +10,7 @@ Tests namespace functionality including:
 
 import pytest
 import asyncio
-from data_bridge.kv import KvClient, Lock
+from ouroboros.kv import KvClient, Lock
 
 
 class TestNamespaceProperty:

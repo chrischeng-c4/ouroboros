@@ -41,7 +41,7 @@ def bench_pyloop_call_soon(iterations: int = 10000) -> Dict[str, Any]:
         - ops_per_sec: Callbacks per second
         - us_per_op: Microseconds per callback
     """
-    from data_bridge.pyloop import PyLoop
+    from ouroboros.pyloop import PyLoop
 
     loop = PyLoop()
     counter = [0]
@@ -130,7 +130,7 @@ def bench_pyloop_timers(num_timers: int = 1000) -> Dict[str, Any]:
         - timers_per_sec: Timers scheduled per second
         - avg_scheduling_time_us: Average time to schedule one timer
     """
-    from data_bridge.pyloop import PyLoop
+    from ouroboros.pyloop import PyLoop
 
     loop = PyLoop()
     completed = [0]
@@ -222,7 +222,7 @@ def bench_pyloop_empty_iterations(iterations: int = 10000) -> Dict[str, Any]:
         - iterations: Number of iterations performed
         - us_per_iteration: Microseconds per iteration
     """
-    from data_bridge.pyloop import PyLoop
+    from ouroboros.pyloop import PyLoop
 
     loop = PyLoop()
     counter = [0]

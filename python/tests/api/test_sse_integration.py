@@ -6,7 +6,7 @@ These tests verify that SSE responses work correctly with the data-bridge API.
 
 import asyncio
 import pytest
-from data_bridge.api import App, ServerSentEvent, EventSourceResponse
+from ouroboros.api import App, ServerSentEvent, EventSourceResponse
 
 
 @pytest.fixture

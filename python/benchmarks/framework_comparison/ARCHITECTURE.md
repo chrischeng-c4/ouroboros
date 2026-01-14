@@ -2,7 +2,7 @@
 
 ## Overview
 
-This benchmark suite provides a comprehensive, fair comparison between **pytest** and **data-bridge-test** by measuring performance across multiple dimensions while minimizing external factors.
+This benchmark suite provides a comprehensive, fair comparison between **pytest** and **ouroboros-test** by measuring performance across multiple dimensions while minimizing external factors.
 
 ## Design Principles
 
@@ -37,7 +37,7 @@ This benchmark suite provides a comprehensive, fair comparison between **pytest*
 3. Collect test items using pytest hooks
 4. Build test tree with parametrization
 
-**data-bridge-test approach**:
+**ouroboros-test approach**:
 1. Walk filesystem with Rust (faster I/O)
 2. Parse Python AST to find test functions
 3. Minimal Python imports
@@ -59,7 +59,7 @@ This benchmark suite provides a comprehensive, fair comparison between **pytest*
 4. Teardown phase
 5. Report generation
 
-**data-bridge-test approach**:
+**ouroboros-test approach**:
 1. Rust-based test orchestration
 2. Direct async function calls
 3. Custom assertion engine in Rust
@@ -82,7 +82,7 @@ This benchmark suite provides a comprehensive, fair comparison between **pytest*
 3. Store parameters in test metadata
 4. Inject parameters at runtime via fixtures
 
-**data-bridge-test approach**:
+**ouroboros-test approach**:
 1. Parse parametrize at decoration time
 2. Generate test variants in Rust
 3. Direct parameter passing (no fixture overhead)
@@ -104,7 +104,7 @@ This benchmark suite provides a comprehensive, fair comparison between **pytest*
 3. Cache fixtures by scope
 4. Support for fixture factories and parametrization
 
-**data-bridge-test approach**:
+**ouroboros-test approach**:
 1. Rust-based dependency resolution
 2. Pre-compute execution order
 3. Efficient scope-based caching
@@ -207,12 +207,12 @@ Provides comprehensive statistical view:
 
 ### Speedup Calculation
 ```
-speedup = pytest_time / data_bridge_test_time
+speedup = pytest_time / ouroboros_test_time
 ```
 
 Example:
 - pytest: 45.23ms
-- data-bridge-test: 18.45ms
+- ouroboros-test: 18.45ms
 - Speedup: 45.23 / 18.45 = 2.45x
 
 ### Statistical Significance
@@ -253,7 +253,7 @@ def benchmark_pytest_new_feature() -> Dict[str, float]:
     return results
 ```
 
-2. **Define data-bridge-test benchmark**:
+2. **Define ouroboros-test benchmark**:
 ```python
 async def benchmark_dbt_new_feature() -> Dict[str, float]:
     results = {"metric": []}
@@ -300,7 +300,7 @@ results = {
 
 ## Performance Optimization Guide
 
-### For data-bridge-test Developers
+### For ouroboros-test Developers
 
 If benchmarks show unexpected results:
 
@@ -325,7 +325,7 @@ To improve pytest performance:
 ### Environment
 - Record Python version
 - Record pytest version
-- Record data-bridge version
+- Record ouroboros version
 - Record OS and hardware
 - Record other running processes
 
@@ -351,4 +351,4 @@ To improve pytest performance:
 
 ## License
 
-Same as data-bridge project.
+Same as ouroboros project.

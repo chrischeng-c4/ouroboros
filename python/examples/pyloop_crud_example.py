@@ -28,8 +28,8 @@ Then test with:
 """
 
 import asyncio
-from data_bridge.mongodb import Document, init_db
-from data_bridge.pyloop import App
+from ouroboros.mongodb import Document, init_db
+from ouroboros.pyloop import App
 
 # Define a Product model
 class Product(Document):

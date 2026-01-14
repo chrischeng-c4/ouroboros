@@ -14,8 +14,8 @@ Run with:
 """
 
 import pytest
-from data_bridge.postgres import execute
-from data_bridge.test import expect
+from ouroboros.postgres import execute
+from ouroboros.test import expect
 
 
 # Note: Connection setup is handled by conftest.py fixtures

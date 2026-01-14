@@ -1,10 +1,10 @@
 """Tests for HTTP client integration in data-bridge-api."""
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from typing import Annotated
-from data_bridge.api import App, Depends, RequestContext
-from data_bridge.http import HttpClient
-from data_bridge.api.http_integration import HttpClientProvider, create_http_client
+from ouroboros.api import App, Depends, RequestContext
+from ouroboros.http import HttpClient
+from ouroboros.api.http_integration import HttpClientProvider, create_http_client
 
 
 def test_create_http_client():
@@ -91,7 +91,7 @@ async def test_http_client_as_dependency_bare_type():
         return response.json()
 
     # Resolve dependencies
-    from data_bridge.api.dependencies import RequestContext as DepRequestContext
+    from ouroboros.api.dependencies import RequestContext as DepRequestContext
     context = DepRequestContext()
     deps = await app.resolve_dependencies(handler, context)
 
@@ -119,7 +119,7 @@ async def test_http_client_multiple_handlers():
         return http
 
     # Resolve for both handlers
-    from data_bridge.api.dependencies import RequestContext as DepRequestContext
+    from ouroboros.api.dependencies import RequestContext as DepRequestContext
     context = DepRequestContext()
 
     deps1 = await app.resolve_dependencies(handler1, context)
@@ -131,7 +131,7 @@ async def test_http_client_multiple_handlers():
 
 def test_request_context_http_property():
     """Test RequestContext.http property."""
-    from data_bridge.http import HttpClient
+    from ouroboros.http import HttpClient
 
     client = HttpClient()
     ctx = RequestContext(_http_client=client)
@@ -216,7 +216,7 @@ async def test_dependency_injection_order():
     app.configure_http_client(base_url="https://api.example.com")
 
     # Should still resolve correctly
-    from data_bridge.api.dependencies import RequestContext as DepRequestContext
+    from ouroboros.api.dependencies import RequestContext as DepRequestContext
     context = DepRequestContext()
     deps = await app.resolve_dependencies(handler, context)
 

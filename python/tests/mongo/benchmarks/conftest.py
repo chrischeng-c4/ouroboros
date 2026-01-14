@@ -9,7 +9,7 @@ pymongo+gevent, and mongoengine.
 import pytest
 import asyncio
 from typing import List, Dict, Any
-from data_bridge import init, close, is_connected
+from ouroboros import init, close, is_connected
 
 
 # =====================
@@ -24,7 +24,7 @@ BATCH_SIZES = [10, 100, 1000, 10000, 50000]
 
 # Framework identifiers
 FRAMEWORKS = [
-    "data_bridge",
+    "ouroboros",
     "beanie",
     "motor",
     "pymongo_sync",
@@ -46,7 +46,7 @@ async def benchmark_db():
 
     Uses separate database for benchmarks to avoid interference.
     """
-    from data_bridge import init, close, is_connected
+    from ouroboros import init, close, is_connected
 
     # Close existing connection and switch to benchmark database
     if is_connected():
@@ -204,7 +204,7 @@ def get_collection_name(framework: str, operation: str, batch_size: int = None) 
     Ensures complete isolation to prevent data interference.
 
     Args:
-        framework: Framework identifier (e.g., "data_bridge", "beanie")
+        framework: Framework identifier (e.g., "ouroboros", "beanie")
         operation: Operation name (e.g., "insert_bulk", "find_one")
         batch_size: Optional batch size for further isolation
 

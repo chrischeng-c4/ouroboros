@@ -30,7 +30,7 @@ async def _async_setup():
     if _setup_complete:
         return
 
-    from data_bridge import init, close, is_connected
+    from ouroboros import init, close, is_connected
     from beanie import init_beanie
     from motor.motor_asyncio import AsyncIOMotorClient
     from .models import BEANIE_MODELS
@@ -93,7 +93,7 @@ async def cleanup():
     if not _setup_complete:
         return
 
-    from data_bridge import close
+    from ouroboros import close
 
     await close()
     if _motor_client:

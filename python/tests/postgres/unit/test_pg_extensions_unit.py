@@ -1,6 +1,6 @@
 """Unit tests for PostgreSQL extensions (no database required)."""
 import pytest
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     Table, Column,
     FullTextSearch, fts,
     Point, GeoQuery,

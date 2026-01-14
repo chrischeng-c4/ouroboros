@@ -1,6 +1,6 @@
 """Delete benchmark (includes insert since delete needs data)."""
 
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 from tests.mongo.benchmarks.models import DBUser, BeanieUser
 
 DATA_1000 = [{"name": f"Del{i}", "email": f"del{i}@test.com", "age": 20 + i % 50} for i in range(1000)]

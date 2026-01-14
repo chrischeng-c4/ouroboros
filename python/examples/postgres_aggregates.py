@@ -5,7 +5,7 @@ This example demonstrates how to use the query_aggregate function
 to perform various aggregate operations on PostgreSQL tables.
 """
 import asyncio
-from data_bridge._engine import postgres
+from ouroboros._engine import postgres
 
 
 async def main():

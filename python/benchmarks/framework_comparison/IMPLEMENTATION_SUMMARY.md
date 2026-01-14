@@ -2,7 +2,7 @@
 
 ## Overview
 
-Comprehensive benchmark suite comparing **pytest** and **data-bridge-test** performance across multiple dimensions.
+Comprehensive benchmark suite comparing **pytest** and **ouroboros-test** performance across multiple dimensions.
 
 **Created**: 2026-01-12
 **Total Lines**: 2,631 (1,354 Python, 1,277 Markdown)
@@ -13,11 +13,11 @@ Comprehensive benchmark suite comparing **pytest** and **data-bridge-test** perf
 
 ### Core Implementation (1,354 lines Python)
 
-#### `pytest_vs_data_bridge_test.py` (978 lines)
+#### `pytest_vs_ouroboros_test.py` (978 lines)
 Main benchmark script with comprehensive performance measurements.
 
 **Features**:
-- Test discovery benchmarks (pytest vs data-bridge-test)
+- Test discovery benchmarks (pytest vs ouroboros-test)
 - Test execution benchmarks (simple test cases)
 - Parametrization benchmarks (decorator overhead + execution)
 - Fixture benchmarks (setup + dependency resolution)
@@ -34,7 +34,7 @@ benchmark_pytest_execution()      # Test execution speed
 benchmark_pytest_parametrize()    # Parametrization overhead
 benchmark_pytest_fixtures()       # Fixture overhead
 
-# data-bridge-test benchmarks
+# ouroboros-test benchmarks
 benchmark_dbt_discovery()         # Test discovery speed
 benchmark_dbt_execution()         # Test execution speed
 benchmark_dbt_parametrize()       # Parametrization overhead
@@ -79,20 +79,20 @@ Pre-flight validation script to ensure setup is correct.
 **Checks**:
 1. pytest installation and version
 2. psutil installation (optional)
-3. data-bridge-test availability
+3. ouroboros-test availability
 4. Sample test file existence
 5. pytest can execute sample tests
-6. data-bridge-test can execute basic tests
+6. ouroboros-test can execute basic tests
 7. Benchmark infrastructure works
 
 **Output**:
 ```
 ✓ pytest 7.4.0 installed
 ✓ psutil 5.9.5 installed (memory tracking enabled)
-✓ data-bridge-test available
+✓ ouroboros-test available
 ✓ Sample tests found
 ✓ pytest execution successful (13 tests passed)
-✓ data-bridge-test execution successful (3 tests passed)
+✓ ouroboros-test execution successful (3 tests passed)
 ✓ Benchmark infrastructure working (mean: 0.124ms)
 ```
 
@@ -122,7 +122,7 @@ Comprehensive overview and user guide.
 
 **Steps**:
 1. Install dependencies
-2. Build data-bridge
+2. Build ouroboros
 3. Validate setup
 4. Run benchmark
 5. Review results
@@ -162,14 +162,14 @@ Practical examples and use cases.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     Main Script                         │
-│         pytest_vs_data_bridge_test.py                   │
+│         pytest_vs_ouroboros_test.py                   │
 └──────────────────┬──────────────────────────────────────┘
                    │
        ┌───────────┴───────────┐
        │                       │
        ▼                       ▼
 ┌──────────────┐      ┌──────────────┐
-│   pytest     │      │ data-bridge  │
+│   pytest     │      │ ouroboros  │
 │  Benchmarks  │      │    -test     │
 │              │      │  Benchmarks  │
 └──────┬───────┘      └──────┬───────┘
@@ -270,19 +270,19 @@ Based on Rust-powered architecture:
 
 ### Quick Run
 ```bash
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ### Validation First
 ```bash
 python benchmarks/framework_comparison/validate.py
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 ### CI/CD Integration
 ```yaml
 - name: Run benchmark
-  run: python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+  run: python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
 - name: Check regression
   run: |
@@ -300,14 +300,14 @@ python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
 ### Syntax Validation
 All Python files pass `python -m py_compile`:
 - ✓ `__init__.py`
-- ✓ `pytest_vs_data_bridge_test.py`
+- ✓ `pytest_vs_ouroboros_test.py`
 - ✓ `sample_tests.py`
 - ✓ `validate.py`
 
 ### Pre-flight Checks
 Run `validate.py` to verify:
 - Dependencies installed
-- data-bridge built
+- ouroboros built
 - Sample tests work
 - Benchmark infrastructure ready
 
@@ -316,12 +316,12 @@ Run `validate.py` to verify:
 ### Console Report
 ```
 ================================================================================
-pytest vs data-bridge-test Performance Comparison
+pytest vs ouroboros-test Performance Comparison
 ================================================================================
 
 SUMMARY
 --------------------------------------------------------------------------------
-Metric                    pytest (ms)     data-bridge (ms) Speedup
+Metric                    pytest (ms)     ouroboros (ms) Speedup
 --------------------------------------------------------------------------------
 Test Discovery                  42.15            15.32     2.75x
 Test Execution                  75.34            23.45     3.21x
@@ -344,7 +344,7 @@ Saved to `BENCHMARK_REPORT.md`:
 ### GitHub Actions
 ```yaml
 - name: Benchmark
-  run: python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+  run: python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
 - name: Upload report
   uses: actions/upload-artifact@v3
@@ -373,7 +373,7 @@ def benchmark_pytest_new_feature() -> Dict[str, float]:
     pass
 ```
 
-2. **Add data-bridge-test benchmark function**:
+2. **Add ouroboros-test benchmark function**:
 ```python
 async def benchmark_dbt_new_feature() -> Dict[str, float]:
     # Implement benchmark
@@ -441,7 +441,7 @@ Target: 2-5x speedup across all metrics
 
 This benchmark suite provides:
 
-1. **Comprehensive measurement** of pytest vs data-bridge-test performance
+1. **Comprehensive measurement** of pytest vs ouroboros-test performance
 2. **Fair comparison** with identical test logic and data
 3. **Statistical rigor** with multiple rounds and analysis
 4. **Production-ready** with validation, documentation, CI/CD examples

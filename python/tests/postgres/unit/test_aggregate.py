@@ -4,7 +4,7 @@ Unit tests for aggregate query functionality.
 Tests the query_aggregate PyO3 binding without requiring a real database connection.
 """
 import pytest
-from data_bridge import postgres
+from ouroboros import postgres
 
 
 class TestAggregateInputValidation:

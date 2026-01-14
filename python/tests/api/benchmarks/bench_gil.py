@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 from . import benchmark_setup
 
 

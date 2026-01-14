@@ -6,8 +6,8 @@ requiring a real database connection.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
-from data_bridge.postgres import Table, Column
-from data_bridge.test import expect
+from ouroboros.postgres import Table, Column
+from ouroboros.test import expect
 
 
 @pytest.fixture
@@ -35,13 +35,13 @@ class TestSaveOperation:
         """Test save() raises RuntimeError when engine not available."""
         user = User(name="Alice", email="alice@example.com")
 
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await user.save()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_save_insert_new(self, User):
         """Test save() performs insert for new records."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.insert_one = AsyncMock(return_value=1)
 
             user = User(name="Alice", email="alice@example.com")
@@ -56,7 +56,7 @@ class TestSaveOperation:
     @pytest.mark.asyncio
     async def test_save_update_existing(self, User):
         """Test save() performs update for existing records."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.update_one = AsyncMock(return_value=1)
 
             user = User(id=5, name="Alice", email="alice@example.com")
@@ -69,7 +69,7 @@ class TestSaveOperation:
     @pytest.mark.asyncio
     async def test_save_insert_includes_data(self, User):
         """Test save() passes data to insert_one."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.insert_one = AsyncMock(return_value=1)
 
             user = User(name="Alice", email="alice@example.com", age=30)
@@ -86,7 +86,7 @@ class TestSaveOperation:
     @pytest.mark.asyncio
     async def test_save_update_excludes_id_from_data(self, User):
         """Test save() doesn't include id in update data."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.update_one = AsyncMock(return_value=1)
 
             user = User(id=5, name="Alice", email="alice@example.com")
@@ -108,13 +108,13 @@ class TestDeleteOperation:
         """Test delete() raises RuntimeError when engine not available."""
         user = User(id=1, name="Alice", email="alice@example.com")
 
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await user.delete()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_delete_with_id(self, User):
         """Test delete() calls engine.delete_one."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.delete_one = AsyncMock(return_value=1)
 
             user = User(id=5, name="Alice", email="alice@example.com")
@@ -127,7 +127,7 @@ class TestDeleteOperation:
     @pytest.mark.asyncio
     async def test_delete_without_id(self, User):
         """Test delete() returns False when no id."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             user = User(name="Alice", email="alice@example.com")
             result = await user.delete()
 
@@ -138,7 +138,7 @@ class TestDeleteOperation:
     @pytest.mark.asyncio
     async def test_delete_not_found(self, User):
         """Test delete() returns False when row not found."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.delete_one = AsyncMock(return_value=0)
 
             user = User(id=999, name="Alice", email="alice@example.com")
@@ -155,13 +155,13 @@ class TestRefreshOperation:
         """Test refresh() raises RuntimeError when engine not available."""
         user = User(id=1, name="Alice", email="alice@example.com")
 
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await user.refresh()).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_refresh_raises_without_id(self, User):
         """Test refresh() raises ValueError when no id."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             user = User(name="Alice", email="alice@example.com")
 
             expect(lambda: await user.refresh()).to_raise(ValueError)
@@ -169,7 +169,7 @@ class TestRefreshOperation:
     @pytest.mark.asyncio
     async def test_refresh_updates_data(self, User):
         """Test refresh() updates instance data from database."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.find_one = AsyncMock(return_value={
                 "id": 5,
                 "name": "Alice Updated",
@@ -188,7 +188,7 @@ class TestRefreshOperation:
     @pytest.mark.asyncio
     async def test_refresh_not_found(self, User):
         """Test refresh() raises ValueError when row not found."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.find_one = AsyncMock(return_value=None)
 
             user = User(id=999, name="Alice", email="alice@example.com")
@@ -202,13 +202,13 @@ class TestGetOperation:
     @pytest.mark.asyncio
     async def test_get_raises_without_engine(self, User):
         """Test get() raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await User.get(1)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_get_returns_instance(self, User):
         """Test get() returns Table instance."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.find_one = AsyncMock(return_value={
                 "id": 1,
                 "name": "Alice",
@@ -226,7 +226,7 @@ class TestGetOperation:
     @pytest.mark.asyncio
     async def test_get_not_found(self, User):
         """Test get() returns None when row not found."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.find_one = AsyncMock(return_value=None)
 
             user = await User.get(999)
@@ -236,7 +236,7 @@ class TestGetOperation:
     @pytest.mark.asyncio
     async def test_get_calls_engine_with_pk(self, User):
         """Test get() calls engine with primary key."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.find_one = AsyncMock(return_value=None)
 
             await User.get(5)
@@ -255,13 +255,13 @@ class TestInsertMany:
     @pytest.mark.asyncio
     async def test_insert_many_raises_without_engine(self, User):
         """Test insert_many() raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await User.insert_many([{"name": "Alice", "email": "alice@example.com"}])).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_insert_many_with_dicts(self, User):
         """Test insert_many() with list of dictionaries."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.insert_many = AsyncMock(return_value=[1, 2, 3])
 
             rows = [
@@ -278,7 +278,7 @@ class TestInsertMany:
     @pytest.mark.asyncio
     async def test_insert_many_with_instances(self, User):
         """Test insert_many() with list of Table instances."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.insert_many = AsyncMock(return_value=[1, 2])
 
             rows = [
@@ -298,7 +298,7 @@ class TestInsertMany:
     @pytest.mark.asyncio
     async def test_insert_many_mixed_types_raises(self, User):
         """Test insert_many() raises TypeError for invalid types."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             rows = [
                 {"name": "Alice", "email": "alice@example.com"},
                 "invalid",  # Invalid type
@@ -313,13 +313,13 @@ class TestDeleteMany:
     @pytest.mark.asyncio
     async def test_delete_many_raises_without_engine(self, User):
         """Test delete_many() raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await User.delete_many(User.age < 18)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_delete_many_with_filters(self, User):
         """Test delete_many() with filters works correctly."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=5)
             result = await User.delete_many(User.age < 18)
             expect(result).to_equal(5)
@@ -333,7 +333,7 @@ class TestDeleteMany:
     @pytest.mark.asyncio
     async def test_delete_many_no_filters(self, User):
         """Test delete_many() without filters (delete all)."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=10)
             result = await User.delete_many()
             expect(result).to_equal(10)
@@ -347,7 +347,7 @@ class TestDeleteMany:
     @pytest.mark.asyncio
     async def test_delete_many_with_dict_filter(self, User):
         """Test delete_many() with dict filter."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.delete_many = AsyncMock(return_value=3)
             result = await User.delete_many({"name": "Alice"})
             expect(result).to_equal(3)
@@ -365,13 +365,13 @@ class TestUpdateMany:
     @pytest.mark.asyncio
     async def test_update_many_raises_without_engine(self, User):
         """Test update_many() raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.table._engine', None):
+        with patch('ouroboros.postgres.table._engine', None):
             expect(lambda: await User.update_many({"status": "active"}, User.age >= 18)).to_raise(RuntimeError)
 
     @pytest.mark.asyncio
     async def test_update_many_with_filters(self, User):
         """Test update_many() with filters works correctly."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=5)
             result = await User.update_many({"status": "active"}, User.age >= 18)
             expect(result).to_equal(5)
@@ -386,7 +386,7 @@ class TestUpdateMany:
     @pytest.mark.asyncio
     async def test_update_many_no_filters(self, User):
         """Test update_many() without filters (update all)."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=10)
             result = await User.update_many({"status": "inactive"})
             expect(result).to_equal(10)
@@ -401,7 +401,7 @@ class TestUpdateMany:
     @pytest.mark.asyncio
     async def test_update_many_with_dict_filter(self, User):
         """Test update_many() with dict filter."""
-        with patch('data_bridge.postgres.table._engine') as mock_engine:
+        with patch('ouroboros.postgres.table._engine') as mock_engine:
             mock_engine.update_many = AsyncMock(return_value=3)
             result = await User.update_many({"age": 31}, {"name": "Alice"})
             expect(result).to_equal(3)
@@ -420,7 +420,7 @@ class TestFindOne:
     @pytest.mark.asyncio
     async def test_find_one_delegates_to_find(self, User):
         """Test find_one() delegates to find().first()."""
-        with patch('data_bridge.postgres.query._engine') as mock_engine:
+        with patch('ouroboros.postgres.query._engine') as mock_engine:
             mock_engine.find_many = AsyncMock(return_value=[
                 {"id": 1, "name": "Alice", "email": "alice@example.com", "age": 30}
             ])
@@ -434,7 +434,7 @@ class TestFindOne:
     @pytest.mark.asyncio
     async def test_find_one_returns_none(self, User):
         """Test find_one() returns None when not found."""
-        with patch('data_bridge.postgres.query._engine') as mock_engine:
+        with patch('ouroboros.postgres.query._engine') as mock_engine:
             mock_engine.find_many = AsyncMock(return_value=[])
 
             user = await User.find_one(User.email == "notfound@example.com")
@@ -448,7 +448,7 @@ class TestCount:
     @pytest.mark.asyncio
     async def test_count_delegates_to_find(self, User):
         """Test count() delegates to find().count()."""
-        with patch('data_bridge.postgres.query._engine') as mock_engine:
+        with patch('ouroboros.postgres.query._engine') as mock_engine:
             mock_engine.count = AsyncMock(return_value=42)
 
             count = await User.count(User.age > 18)
@@ -458,7 +458,7 @@ class TestCount:
     @pytest.mark.asyncio
     async def test_count_all(self, User):
         """Test count() with no filters."""
-        with patch('data_bridge.postgres.query._engine') as mock_engine:
+        with patch('ouroboros.postgres.query._engine') as mock_engine:
             mock_engine.count = AsyncMock(return_value=100)
 
             count = await User.count()

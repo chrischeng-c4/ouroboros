@@ -8,14 +8,14 @@ These tests verify:
 """
 
 import pytest
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     execute,
     get_foreign_keys,
     find_by_foreign_key,
     Column,
     ForeignKeyProxy,
 )
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 @pytest.mark.asyncio

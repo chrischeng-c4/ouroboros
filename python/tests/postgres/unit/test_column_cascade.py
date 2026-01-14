@@ -4,8 +4,8 @@ Unit tests for Column cascade parameters (on_delete, on_update).
 Tests foreign key cascade behavior configuration.
 No database required - testing Column object creation and representation.
 """
-from data_bridge.test import expect
-from data_bridge.postgres import Column
+from ouroboros.test import expect
+from ouroboros.postgres import Column
 
 
 class TestColumnOnDelete:

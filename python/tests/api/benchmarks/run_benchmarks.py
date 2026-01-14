@@ -3,7 +3,7 @@
 API Server Benchmarks Runner
 
 Standalone runner for comparing data-bridge-api vs FastAPI performance.
-Uses data_bridge.test framework directly.
+Uses ouroboros.test framework directly.
 
 Usage:
     python run_benchmarks.py              # Run all benchmarks
@@ -20,8 +20,8 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from data_bridge.http import HttpClient
-from data_bridge.test import (
+from ouroboros.http import HttpClient
+from ouroboros.test import (
     run_benchmarks,
     print_comparison_table,
 )
@@ -123,7 +123,7 @@ class ServerManager:
 # =====================
 
 DATA_BRIDGE_SCRIPT = """
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App()
 

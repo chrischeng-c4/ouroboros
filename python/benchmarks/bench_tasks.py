@@ -27,7 +27,7 @@ WARMUP_TASKS = 100
 
 async def benchmark_data_bridge():
     """Benchmark data-bridge-tasks"""
-    from data_bridge.tasks import task, init, AsyncResult
+    from ouroboros.tasks import task, init, AsyncResult
 
     # Initialize
     await init("nats://localhost:4222", "redis://localhost:6379")

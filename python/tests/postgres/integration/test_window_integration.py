@@ -15,8 +15,8 @@ Tests cover:
 import pytest
 from decimal import Decimal
 from datetime import date
-from data_bridge.postgres import execute, insert_one, Table, Column
-from data_bridge.postgres.query import WindowSpec
+from ouroboros.postgres import execute, insert_one, Table, Column
+from ouroboros.postgres.query import WindowSpec
 
 
 @pytest.fixture

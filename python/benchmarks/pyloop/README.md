@@ -1,6 +1,6 @@
 # PyLoop Performance Benchmarks
 
-This directory contains comprehensive performance benchmarks comparing **data-bridge-pyloop** (Rust/Tokio-backed event loop) against Python's standard **asyncio** implementation.
+This directory contains comprehensive performance benchmarks comparing **ouroboros-pyloop** (Rust/Tokio-backed event loop) against Python's standard **asyncio** implementation.
 
 ## Quick Start
 
@@ -149,7 +149,7 @@ def bench_pyloop_operation(params: int) -> Dict[str, Any]:
     Returns:
         Dict with metrics (duration, throughput, latency, etc.)
     """
-    from data_bridge.pyloop import PyLoop
+    from ouroboros.pyloop import PyLoop
 
     loop = PyLoop()
     # ... benchmark implementation ...
@@ -262,7 +262,7 @@ diff baseline.txt current.txt || echo "Performance regression detected"
 ### Import Errors
 
 ```
-ImportError: Failed to import PyLoop from data_bridge native module
+ImportError: Failed to import PyLoop from ouroboros native module
 ```
 
 **Solution**: Build the extension module
@@ -314,8 +314,8 @@ Please include:
 
 ## References
 
-- **PyLoop Source**: `crates/data-bridge-pyloop/src/`
-- **Design Doc**: `openspec/changes/implement-data-bridge-pyloop/design.md`
+- **PyLoop Source**: `crates/ouroboros-pyloop/src/`
+- **Design Doc**: `openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Phase Summary**: `PYLOOP_PHASE1_SUMMARY.md`
 - **Tokio**: https://tokio.rs/
 - **Python asyncio**: https://docs.python.org/3/library/asyncio.html
@@ -323,7 +323,7 @@ Please include:
 
 ## License
 
-Same as data-bridge project.
+Same as ouroboros project.
 
 ---
 

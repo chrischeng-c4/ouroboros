@@ -1,12 +1,12 @@
 # PostgreSQL Integration Tests
 
-This directory contains integration tests for data-bridge-postgres that require a real PostgreSQL database.
+This directory contains integration tests for ouroboros-postgres that require a real PostgreSQL database.
 
 ## Prerequisites
 
 - PostgreSQL running in Docker container `rstn-postgres` on port 5432
 - Database credentials: `rstn:rstn`
-- Test database: `data_bridge_test` (automatically created by setup script)
+- Test database: `ouroboros_test` (automatically created by setup script)
 
 ## Quick Start
 
@@ -15,7 +15,7 @@ This directory contains integration tests for data-bridge-postgres that require 
 bash scripts/run_integration_tests.sh
 
 # Or manually with pytest
-POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
     uv run pytest tests/postgres/integration/ -v -m integration
 ```
 
@@ -55,18 +55,18 @@ All fixtures are defined in `conftest.py`:
 
 ```bash
 # Smoke tests only
-POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
     uv run pytest tests/postgres/integration/test_smoke.py -v
 
 # Single test
-POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
     uv run pytest tests/postgres/integration/test_smoke.py::test_database_connection -v
 ```
 
 ## Configuration
 
 Default configuration (in conftest.py):
-- **URI**: postgresql://rstn:rstn@localhost:5432/data_bridge_test
+- **URI**: postgresql://rstn:rstn@localhost:5432/ouroboros_test
 - **Min connections**: 2
 - **Max connections**: 10
 
@@ -101,7 +101,7 @@ These should be addressed in a separate task focused on the execute() function.
 Example:
 ```python
 import pytest
-from data_bridge.postgres import execute
+from ouroboros.postgres import execute
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -115,11 +115,11 @@ async def test_my_feature(test_table):
 
 Run with verbose output and full tracebacks:
 ```bash
-POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
     uv run pytest tests/postgres/integration/ -vv --tb=long
 ```
 
 Check PostgreSQL connection:
 ```bash
-docker exec rstn-postgres psql -U rstn -d data_bridge_test -c "SELECT 1;"
+docker exec rstn-postgres psql -U rstn -d ouroboros_test -c "SELECT 1;"
 ```

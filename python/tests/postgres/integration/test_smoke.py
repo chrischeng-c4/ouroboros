@@ -6,8 +6,8 @@ before running more complex integration tests.
 """
 
 import pytest
-from data_bridge.postgres import execute
-from data_bridge.test import expect
+from ouroboros.postgres import execute
+from ouroboros.test import expect
 
 
 @pytest.mark.integration

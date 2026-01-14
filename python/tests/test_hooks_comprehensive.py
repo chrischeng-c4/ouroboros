@@ -3,7 +3,7 @@ Comprehensive tests for the hooks system including error handling and edge cases
 """
 import asyncio
 import pytest
-from data_bridge.test import TestSuite, test, expect
+from ouroboros.test import TestSuite, test, expect
 
 
 class TestHookExecutionOrder(TestSuite):
@@ -243,7 +243,7 @@ async def test_legacy_hooks():
 
 def test_hook_registry_basics():
     """Test HookRegistry basic functionality"""
-    from data_bridge.test import HookRegistry, HookType
+    from ouroboros.test import HookRegistry, HookType
 
     registry = HookRegistry()
 
@@ -274,7 +274,7 @@ def test_hook_registry_basics():
 
 def test_hook_type_enum():
     """Test HookType enum"""
-    from data_bridge.test import HookType
+    from ouroboros.test import HookType
 
     # Test string representation
     assert str(HookType.SetupClass) == "setup_class"

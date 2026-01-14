@@ -45,7 +45,7 @@ async def _async_setup():
     if _setup_complete:
         return
 
-    from data_bridge.postgres import init, close, is_connected
+    from ouroboros.postgres import init, close, is_connected
 
     postgres_uri = get_postgres_uri()
     conn_params = parse_postgres_uri(postgres_uri)
@@ -73,7 +73,7 @@ async def _async_setup():
 
     # Create tables for data-bridge models
     # We need to do this manually since we don't have a migration tool yet
-    from data_bridge.postgres import is_connected as db_is_connected
+    from ouroboros.postgres import is_connected as db_is_connected
     if db_is_connected():
         # Use asyncpg or psycopg2 to create tables if available, or use data-bridge execute if implemented
         # For now, we'll use asyncpg if available, otherwise fail gracefully
@@ -186,7 +186,7 @@ async def cleanup():
     if not _setup_complete:
         return
 
-    from data_bridge.postgres import close
+    from ouroboros.postgres import close
 
     await close()
 

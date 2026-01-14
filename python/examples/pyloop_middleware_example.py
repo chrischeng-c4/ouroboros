@@ -9,7 +9,7 @@ Demonstrates:
 """
 
 import logging
-from data_bridge.pyloop import (
+from ouroboros.pyloop import (
     App,
     CORSMiddleware,
     LoggingMiddleware,

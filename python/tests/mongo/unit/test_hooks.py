@@ -13,8 +13,8 @@ Migrated from test_comprehensive.py and split for maintainability.
 from datetime import datetime, timezone
 from typing import Optional
 
-from data_bridge import Document, before_event, after_event, Insert, Delete, Replace
-from data_bridge.test import test, expect
+from ouroboros import Document, before_event, after_event, Insert, Delete, Replace
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite
 
 
@@ -27,12 +27,12 @@ class TestBeforeInsertHook(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_articles_hooks", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_articles_hooks", {})
 
     @test(tags=["mongo", "hooks", "lifecycle"])
@@ -63,12 +63,12 @@ class TestAfterInsertHook(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_notifications_hooks", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_notifications_hooks", {})
 
     @test(tags=["mongo", "hooks", "lifecycle"])
@@ -100,12 +100,12 @@ class TestBeforeDeleteHook(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_logs_delete_hook", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_logs_delete_hook", {})
 
     @test(tags=["mongo", "hooks", "lifecycle"])
@@ -139,12 +139,12 @@ class TestMultipleHooks(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_tracked_items", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_tracked_items", {})
 
     @test(tags=["mongo", "hooks", "lifecycle"])
@@ -195,12 +195,12 @@ class TestAsyncHook(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_async_hooks", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_async_hooks", {})
 
     @test(tags=["mongo", "hooks", "lifecycle", "async"])
@@ -233,12 +233,12 @@ class TestBeforeReplaceHook(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_versioned_hooks", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_versioned_hooks", {})
 
     @test(tags=["mongo", "hooks", "lifecycle"])
@@ -279,12 +279,12 @@ class TestRevisionTracking(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_revisioned", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_revisioned", {})
 
     @test(tags=["mongo", "hooks", "revision"])
@@ -395,12 +395,12 @@ class TestStateManagement(MongoTestSuite):
 
     async def setup(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_tracked", {})
 
     async def teardown(self):
         """Clean up test data."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_tracked", {})
 
     @test(tags=["mongo", "hooks", "state"])
@@ -558,7 +558,7 @@ class TestStateManagement(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestBeforeInsertHook,

@@ -20,7 +20,7 @@ def test_concurrent_find_one_no_gil_blocking(sample_users):
 
     Success criteria (FR-008): Concurrent overhead <10%
     """
-    from data_bridge import Document
+    from ouroboros import Document
 
     class User(Document):
         name: str

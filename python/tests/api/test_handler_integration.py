@@ -43,7 +43,7 @@ class TestHandlerIntegration:
         """Start a test server for the integration tests."""
         server_script = '''
 import asyncio
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App(title="Test API", version="1.0.0")
 
@@ -208,7 +208,7 @@ class TestValidation:
     def validation_server(self):
         """Start a validation test server."""
         server_script = '''
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App(title="Validation Test API", version="1.0.0")
 
@@ -296,7 +296,7 @@ class TestQueryParameterPassthrough:
     def passthrough_server(self):
         """Start a server to test query parameter passthrough."""
         server_script = '''
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App(title="Passthrough Test API", version="1.0.0")
 

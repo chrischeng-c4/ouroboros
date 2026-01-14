@@ -1,8 +1,8 @@
-site_name: data-bridge
-site_description: High-performance MongoDB ORM for Python with Rust backend
+site_name: ouroboros
+site_description: High-performance Rust-powered Python platform
 site_author: Chris Cheng
-site_url: https://chrischeng-c4.github.io/data-bridge/
-repo_url: https://github.com/chrischeng-c4/data-bridge
+site_url: https://chrischeng-c4.github.io/ouroboros/
+repo_url: https://github.com/chrischeng-c4/ouroboros
 
 theme:
   name: material

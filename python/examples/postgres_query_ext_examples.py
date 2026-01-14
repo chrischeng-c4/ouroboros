@@ -7,7 +7,7 @@ complex, composable queries with a SQLAlchemy-like API.
 
 import asyncio
 from datetime import datetime, timedelta
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     Table, Column, init, close,
     filter_by, and_, or_, not_,
     QueryFragment, aliased,

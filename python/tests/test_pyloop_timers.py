@@ -2,7 +2,7 @@
 
 import time
 import pytest
-from data_bridge.pyloop import PyLoop
+from ouroboros.pyloop import PyLoop
 
 
 class TestCallLater:

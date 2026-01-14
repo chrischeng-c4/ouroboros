@@ -38,7 +38,7 @@ docker run -d --name jaeger \
     jaegertracing/all-in-one:latest
 ```
 
-### Step 3: Build data-bridge
+### Step 3: Build ouroboros
 
 ```bash
 # From project root
@@ -58,7 +58,7 @@ OpenTelemetry configured:
   - Environment: development
   - OTLP Endpoint: http://localhost:4317
   - Insecure: True
-  - data-bridge tracing: True
+  - ouroboros tracing: True
 
 Connected to PostgreSQL: localhost:5432/fastapi_demo
 Database tables ready
@@ -116,7 +116,7 @@ HTTP Request: GET /users/1
 │   ├── http.route: /users/{user_id}
 │   └── http.status_code: 200
 │
-└── data-bridge ORM
+└── ouroboros ORM
     ├── Query Span
     │   ├── span: db.query.find
     │   ├── db.system: postgresql
@@ -177,11 +177,11 @@ docker start postgres
 2. OTLP endpoint is correct: `echo $OTEL_EXPORTER_OTLP_ENDPOINT`
 3. Tracing is enabled: `curl http://localhost:8000/ | jq .tracing`
 
-### Issue: "ModuleNotFoundError: No module named 'data_bridge'"
+### Issue: "ModuleNotFoundError: No module named 'ouroboros'"
 
-**Solution**: Build data-bridge first:
+**Solution**: Build ouroboros first:
 ```bash
-cd /path/to/data-bridge-posgres
+cd /path/to/ouroboros-posgres
 maturin develop --release
 ```
 
@@ -241,4 +241,4 @@ For production use:
 - [OpenTelemetry Python](https://opentelemetry.io/docs/instrumentation/python/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Jaeger](https://www.jaegertracing.io/docs/)
-- [data-bridge](../README.md)
+- [ouroboros](../README.md)

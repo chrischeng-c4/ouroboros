@@ -4,9 +4,9 @@ Unit tests for Column descriptors and SQL expressions.
 Tests ColumnProxy, SqlExpr, and Column classes.
 """
 import pytest
-from data_bridge.test import expect
-from data_bridge.postgres import Table, Column
-from data_bridge.postgres.columns import ColumnProxy, SqlExpr
+from ouroboros.test import expect
+from ouroboros.postgres import Table, Column
+from ouroboros.postgres.columns import ColumnProxy, SqlExpr
 
 
 class TestColumnProxy:

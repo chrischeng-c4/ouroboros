@@ -1,12 +1,12 @@
-# Comprehensive Benchmark Suite for data-bridge
+# Comprehensive Benchmark Suite for ouroboros
 
 ## Overview
 
-This comprehensive benchmark suite compares **data-bridge** (Rust-backed MongoDB ORM) against 5 other Python MongoDB frameworks:
+This comprehensive benchmark suite compares **ouroboros** (Rust-backed MongoDB ORM) against 5 other Python MongoDB frameworks:
 
 | Framework | Type | Description |
 |-----------|------|-------------|
-| **data-bridge** | Async + Rust | Rust backend with zero Python byte handling |
+| **ouroboros** | Async + Rust | Rust backend with zero Python byte handling |
 | **Beanie** | Async ODM | Popular async ODM built on motor |
 | **motor** | Async (raw) | Pure pymongo-async (no ODM layer) |
 | **pymongo** | Sync | Standard synchronous pymongo |
@@ -39,7 +39,7 @@ This comprehensive benchmark suite compares **data-bridge** (Rust-backed MongoDB
 Run all 270+ benchmark tests:
 
 ```bash
-MONGODB_URI="mongodb://localhost:27018/data-bridge-benchmark" \
+MONGODB_URI="mongodb://localhost:27018/ouroboros-benchmark" \
 uv run pytest tests/benchmarks/ -v \
   --benchmark-only \
   --benchmark-json=tests/benchmarks/results/full_results.json \
@@ -88,14 +88,14 @@ uv run pytest tests/benchmarks/ -v --benchmark-only -k "10000 or 50000"
 Compare specific frameworks:
 
 ```bash
-# data-bridge vs Beanie only
-uv run pytest tests/benchmarks/ -v --benchmark-only -k "data_bridge or beanie"
+# ouroboros vs Beanie only
+uv run pytest tests/benchmarks/ -v --benchmark-only -k "ouroboros or beanie"
 
-# data-bridge vs motor only
-uv run pytest tests/benchmarks/ -v --benchmark-only -k "data_bridge or motor"
+# ouroboros vs motor only
+uv run pytest tests/benchmarks/ -v --benchmark-only -k "ouroboros or motor"
 
-# Async frameworks (data-bridge, beanie, motor)
-uv run pytest tests/benchmarks/ -v --benchmark-only -k "data_bridge or beanie or motor"
+# Async frameworks (ouroboros, beanie, motor)
+uv run pytest tests/benchmarks/ -v --benchmark-only -k "ouroboros or beanie or motor"
 ```
 
 ## Generate Report
@@ -128,7 +128,7 @@ pytest-benchmark provides:
 ## Interpretation
 
 - **Lower times are better**
-- **Speedup factor**: If Beanie takes 0.010s and data-bridge takes 0.004s, data-bridge is **2.5x faster**
+- **Speedup factor**: If Beanie takes 0.010s and ouroboros takes 0.004s, ouroboros is **2.5x faster**
 - **Consistency**: Lower StdDev indicates more consistent performance
 
 ## File Structure
@@ -187,15 +187,15 @@ tests/benchmarks/
 2. Run the full suite when you have 30-60 minutes
 3. Generate and analyze the report
 4. Identify performance bottlenecks
-5. Optimize data-bridge based on findings
+5. Optimize ouroboros based on findings
 
 ## Troubleshooting
 
 ### Import Errors
 
-If you see import errors, ensure you're running from the data-bridge root:
+If you see import errors, ensure you're running from the ouroboros root:
 ```bash
-cd data-bridge
+cd ouroboros
 uv run pytest tests/benchmarks/...
 ```
 
@@ -203,7 +203,7 @@ uv run pytest tests/benchmarks/...
 
 Verify MongoDB is accessible:
 ```bash
-mongosh "mongodb://localhost:27018/data-bridge-benchmark" --eval "db.runCommand({ping: 1})"
+mongosh "mongodb://localhost:27018/ouroboros-benchmark" --eval "db.runCommand({ping: 1})"
 ```
 
 ### Memory Issues (50000 batch)
@@ -220,7 +220,7 @@ pytest tests/benchmarks/ --benchmark-only -k "not 50000"
 ------------------------------------------------ benchmark 'bulk-insert': 6 tests ------------------------------------------------
 Name (time in s)                             Min      Max     Mean   StdDev   Median      IQR  Outliers  OPS  Rounds  Iterations
 ---------------------------------------------------------------------------------------------------------------------------------
-test_data_bridge_insert_many[1000]       0.0823   0.0891   0.0851   0.0021   0.0847   0.0024       2;0  11.7514       5          20
+test_ouroboros_insert_many[1000]       0.0823   0.0891   0.0851   0.0021   0.0847   0.0024       2;0  11.7514       5          20
 test_beanie_insert_many[1000]            0.2145   0.2301   0.2198   0.0058   0.2187   0.0077       1;0   4.5497       5          20
 test_motor_insert_many[1000]             0.1876   0.2012   0.1932   0.0051   0.1921   0.0068       2;0   5.1761       5          20
 test_pymongo_sync_insert_many[1000]      0.1956   0.2098   0.2014   0.0054   0.2005   0.0071       1;1   4.9653       5          20
@@ -228,5 +228,5 @@ test_pymongo_gevent_insert_many[1000]    0.1989   0.2145   0.2053   0.0060   0.2
 test_mongoengine_insert_many[1000]       0.2312   0.2476   0.2380   0.0062   0.2367   0.0084       1;0   4.2017       5          20
 ---------------------------------------------------------------------------------------------------------------------------------
 
-Result: data-bridge is 2.5x faster than Beanie for 1000-document bulk insert
+Result: ouroboros is 2.5x faster than Beanie for 1000-document bulk insert
 ```

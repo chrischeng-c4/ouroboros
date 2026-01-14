@@ -2,9 +2,9 @@
 
 import asyncio
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 import httpx
-from data_bridge.test import TestServer
+from ouroboros.test import TestServer
 
 
 @pytest.mark.asyncio

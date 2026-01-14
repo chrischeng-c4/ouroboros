@@ -17,7 +17,7 @@ def mock_postgres_engine():
     This fixture patches the _engine module that the postgres package
     imports, allowing unit tests to run without a real database connection.
     """
-    with patch('data_bridge.postgres.table._engine') as mock:
+    with patch('ouroboros.postgres.table._engine') as mock:
         # Mock connection state
         mock.is_connected = MagicMock(return_value=False)
 
@@ -48,7 +48,7 @@ def sample_table_class():
 
     Returns a User table with common fields for testing.
     """
-    from data_bridge.postgres import Table, Column
+    from ouroboros.postgres import Table, Column
 
     class User(Table):
         id: int
@@ -94,7 +94,7 @@ def mock_query_engine():
 
     Provides mock responses for find_many, count, and other query operations.
     """
-    with patch('data_bridge.postgres.query._engine') as mock:
+    with patch('ouroboros.postgres.query._engine') as mock:
         mock.is_connected = MagicMock(return_value=True)
         mock.find_many = AsyncMock(return_value=[
             {"id": 1, "name": "Alice", "email": "alice@example.com", "age": 30},
@@ -108,7 +108,7 @@ def mock_query_engine():
 @pytest.fixture
 def mock_connection_engine():
     """Mock the engine for connection tests."""
-    with patch('data_bridge.postgres.connection._engine') as mock:
+    with patch('ouroboros.postgres.connection._engine') as mock:
         mock.is_connected = MagicMock(return_value=False)
         mock.init = AsyncMock()
         mock.close = AsyncMock()

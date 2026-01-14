@@ -9,7 +9,7 @@ class TestCreateTask:
 
     def test_create_task_requires_coroutine(self):
         """Test that create_task requires a coroutine."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -22,7 +22,7 @@ class TestCreateTask:
 
     def test_create_task_on_closed_loop(self):
         """Test that create_task fails on closed loop."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
         loop.close()
@@ -35,7 +35,7 @@ class TestCreateTask:
 
     def test_task_has_name(self):
         """Test that task can have a name."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -47,7 +47,7 @@ class TestCreateTask:
 
     def test_task_set_name(self):
         """Test that task name can be changed."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -62,7 +62,7 @@ class TestCreateTask:
 
     def test_task_cancel(self):
         """Test that task can be cancelled."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -81,7 +81,7 @@ class TestCreateTask:
 
     def test_task_cancel_done_task(self):
         """Test that cancelling a done task returns False."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -103,7 +103,7 @@ class TestCreateTask:
 
     def test_task_repr(self):
         """Test task repr."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -117,7 +117,7 @@ class TestCreateTask:
 
     def test_task_repr_without_name(self):
         """Test task repr without name."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -131,7 +131,7 @@ class TestCreateTask:
 
     def test_task_result_not_done(self):
         """Test that getting result of pending task raises error."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
         import asyncio
 
         loop = PyLoop()
@@ -149,7 +149,7 @@ class TestCreateTask:
 
     def test_task_result_cancelled(self):
         """Test that getting result of cancelled task raises CancelledError."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
         import asyncio
 
         loop = PyLoop()
@@ -171,7 +171,7 @@ class TestCreateTask:
 
     def test_simple_coroutine_completion(self):
         """Test that a simple coroutine completes successfully."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -193,7 +193,7 @@ class TestCreateTask:
 
     def test_task_done_initially_false(self):
         """Test that newly created task is not done."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
         import asyncio
 
         loop = PyLoop()
@@ -208,7 +208,7 @@ class TestCreateTask:
 
     def test_task_cancelled_initially_false(self):
         """Test that newly created task is not cancelled."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 
@@ -224,7 +224,7 @@ class TestTaskExceptions:
 
     def test_task_with_exception(self):
         """Test that exceptions in coroutines are captured."""
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
 
         loop = PyLoop()
 

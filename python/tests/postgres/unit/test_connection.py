@@ -5,7 +5,7 @@ Tests connection initialization and management without requiring a real database
 """
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 class TestConnectionInit:
@@ -14,7 +14,7 @@ class TestConnectionInit:
     @pytest.mark.asyncio
     async def test_init_with_connection_string(self, mock_connection_engine):
         """Test init with full connection string."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init("postgres://user:pass@localhost:5432/mydb")
 
@@ -25,7 +25,7 @@ class TestConnectionInit:
     @pytest.mark.asyncio
     async def test_init_with_parameters(self, mock_connection_engine):
         """Test init with individual parameters."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init(
             host="localhost",
@@ -49,7 +49,7 @@ class TestConnectionInit:
     @pytest.mark.asyncio
     async def test_init_defaults(self, mock_connection_engine):
         """Test init with default parameters."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init()
 
@@ -62,7 +62,7 @@ class TestConnectionInit:
     @pytest.mark.asyncio
     async def test_init_without_auth(self, mock_connection_engine):
         """Test init without username/password."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init(host="localhost", database="mydb")
 
@@ -73,8 +73,8 @@ class TestConnectionInit:
     @pytest.mark.asyncio
     async def test_init_raises_without_engine(self):
         """Test init raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.connection._engine', None):
-            from data_bridge.postgres import init
+        with patch('ouroboros.postgres.connection._engine', None):
+            from ouroboros.postgres import init
 
             expect(lambda: await init("postgres://localhost/test")).to_raise(RuntimeError)
 
@@ -85,7 +85,7 @@ class TestConnectionClose:
     @pytest.mark.asyncio
     async def test_close(self, mock_connection_engine):
         """Test close() calls engine.close()."""
-        from data_bridge.postgres import close
+        from ouroboros.postgres import close
 
         await close()
 
@@ -94,8 +94,8 @@ class TestConnectionClose:
     @pytest.mark.asyncio
     async def test_close_raises_without_engine(self):
         """Test close raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.connection._engine', None):
-            from data_bridge.postgres import close
+        with patch('ouroboros.postgres.connection._engine', None):
+            from ouroboros.postgres import close
 
             expect(lambda: await close()).to_raise(RuntimeError)
 
@@ -107,7 +107,7 @@ class TestConnectionStatus:
         """Test is_connected returns True when connected."""
         mock_connection_engine.is_connected.return_value = True
 
-        from data_bridge.postgres import is_connected
+        from ouroboros.postgres import is_connected
 
         expect(is_connected()).to_be_true()
 
@@ -115,14 +115,14 @@ class TestConnectionStatus:
         """Test is_connected returns False when not connected."""
         mock_connection_engine.is_connected.return_value = False
 
-        from data_bridge.postgres import is_connected
+        from ouroboros.postgres import is_connected
 
         expect(is_connected()).to_be_false()
 
     def test_is_connected_no_engine(self):
         """Test is_connected returns False when engine not available."""
-        with patch('data_bridge.postgres.connection._engine', None):
-            from data_bridge.postgres import is_connected
+        with patch('ouroboros.postgres.connection._engine', None):
+            from ouroboros.postgres import is_connected
 
             expect(is_connected()).to_be_false()
 
@@ -133,7 +133,7 @@ class TestConnectionPooling:
     @pytest.mark.asyncio
     async def test_min_connections(self, mock_connection_engine):
         """Test min_connections parameter."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init("postgres://localhost/test", min_connections=2)
 
@@ -143,7 +143,7 @@ class TestConnectionPooling:
     @pytest.mark.asyncio
     async def test_max_connections(self, mock_connection_engine):
         """Test max_connections parameter."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init("postgres://localhost/test", max_connections=20)
 
@@ -153,7 +153,7 @@ class TestConnectionPooling:
     @pytest.mark.asyncio
     async def test_pool_defaults(self, mock_connection_engine):
         """Test connection pool defaults."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init("postgres://localhost/test")
 
@@ -168,7 +168,7 @@ class TestConnectionStringBuilding:
     @pytest.mark.asyncio
     async def test_build_with_all_params(self, mock_connection_engine):
         """Test connection string with all parameters."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         await init(
             host="db.example.com",
@@ -190,7 +190,7 @@ class TestConnectionStringBuilding:
     @pytest.mark.asyncio
     async def test_connection_string_overrides_params(self, mock_connection_engine):
         """Test connection_string parameter overrides individual params."""
-        from data_bridge.postgres import init
+        from ouroboros.postgres import init
 
         # If connection_string is provided, individual params should be ignored
         await init(

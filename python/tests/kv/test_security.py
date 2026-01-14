@@ -13,9 +13,9 @@ edge cases that could lead to security issues.
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 import asyncio
-from data_bridge.kv import KvClient, KvPool, PoolConfig
+from ouroboros.kv import KvClient, KvPool, PoolConfig
 
 
 class TestKeyValidation:

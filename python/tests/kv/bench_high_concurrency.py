@@ -17,7 +17,7 @@ import statistics
 sys.path.insert(0, "/Users/chris.cheng/chris-project/data-bridge/python")
 
 async def run_benchmark():
-    from data_bridge.kv import KvClient, KvPool, PoolConfig
+    from ouroboros.kv import KvClient, KvPool, PoolConfig
 
     SERVER = "127.0.0.1:16380"
 

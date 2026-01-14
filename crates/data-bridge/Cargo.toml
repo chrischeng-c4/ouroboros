@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "data_bridge"
+name = "ouroboros"
 crate-type = ["cdylib"]
 
 [dependencies]

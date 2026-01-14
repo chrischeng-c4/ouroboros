@@ -40,7 +40,7 @@ BATCH_SIZES = [10, 100, 1000, 10000]
 
 # Framework identifiers
 FRAMEWORKS = [
-    "data_bridge",
+    "ouroboros",
     "asyncpg",
     "psycopg2",
     "sqlalchemy",
@@ -54,7 +54,7 @@ FRAMEWORKS = [
 @pytest.fixture(scope="session")
 async def data_bridge_db():
     """Initialize data-bridge connection for benchmarks (session-scoped)."""
-    from data_bridge.postgres import init, close, is_connected
+    from ouroboros.postgres import init, close, is_connected
 
     # Close existing connection if any
     if is_connected():

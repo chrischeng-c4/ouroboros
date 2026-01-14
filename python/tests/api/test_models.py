@@ -13,9 +13,9 @@ These tests verify:
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from typing import Optional, List
-from data_bridge.api import BaseModel, Field
+from ouroboros.api import BaseModel, Field
 
 
 class TestBasicModel:

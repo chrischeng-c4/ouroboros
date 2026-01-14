@@ -6,8 +6,8 @@ without requiring a MongoDB connection.
 """
 
 import pytest
-from data_bridge.pyloop import App
-from data_bridge.mongodb import Document
+from ouroboros.pyloop import App
+from ouroboros.mongodb import Document
 
 
 class SampleProduct(Document):

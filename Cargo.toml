@@ -26,7 +26,7 @@ version = "0.1.0"
 authors = ["Tech Platform Team <tech-platform@shopee.com>"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/your-org/data-bridge"
+repository = "https://github.com/chrischeng-c4/ouroboros"
 
 [workspace.dependencies]
 # Python bindings (upgraded to 0.24 for RUSTSEC-2025-0020 fix)

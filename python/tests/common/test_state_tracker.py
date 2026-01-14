@@ -2,12 +2,12 @@
 Unit tests for StateTracker (Copy-on-Write state management).
 
 Tests the core StateTracker functionality independent of Document class.
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
 import time
 
-from data_bridge.mongodb.state import StateTracker
-from data_bridge.test import test, expect
+from ouroboros.mongodb.state import StateTracker
+from ouroboros.test import test, expect
 from tests.base import CommonTestSuite
 
 
@@ -409,7 +409,7 @@ class TestStateTrackerPerformance(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestStateTrackerBasics,

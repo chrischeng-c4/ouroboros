@@ -14,7 +14,7 @@ IMPORTANT: Always use parameterized queries ($1, $2, etc.) to prevent SQL inject
 
 import asyncio
 import os
-from data_bridge.postgres import init, close, execute
+from ouroboros.postgres import init, close, execute
 
 
 async def main():

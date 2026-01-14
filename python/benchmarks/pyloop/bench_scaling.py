@@ -25,7 +25,7 @@ def bench_callback_scaling(loop_type: str, iterations: int) -> Dict[str, Any]:
         Performance metrics dictionary
     """
     if loop_type == "pyloop":
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
         loop = PyLoop()
     else:
         import asyncio
@@ -70,7 +70,7 @@ def bench_timer_scaling(loop_type: str, num_timers: int) -> Dict[str, Any]:
         Performance metrics dictionary
     """
     if loop_type == "pyloop":
-        from data_bridge.pyloop import PyLoop
+        from ouroboros.pyloop import PyLoop
         loop = PyLoop()
     else:
         import asyncio

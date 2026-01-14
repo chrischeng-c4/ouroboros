@@ -6,8 +6,8 @@ These tests verify that the Python layer properly validates inputs before passin
 them to the Rust engine.
 """
 import pytest
-from data_bridge.postgres import Table, Column
-from data_bridge.test import expect
+from ouroboros.postgres import Table, Column
+from ouroboros.test import expect
 
 
 class TestTableNameValidation:

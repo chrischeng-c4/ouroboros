@@ -7,7 +7,7 @@ route handlers and request/response serialization.
 
 import pytest
 from typing import Optional
-from data_bridge.api import App, BaseModel, Field, Body
+from ouroboros.api import App, BaseModel, Field, Body
 from typing import Annotated
 
 

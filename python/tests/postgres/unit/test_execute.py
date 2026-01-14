@@ -5,7 +5,7 @@ Tests the execute() function with various SQL query types and parameter binding.
 """
 import pytest
 from unittest.mock import AsyncMock, patch
-from data_bridge.test import expect
+from ouroboros.test import expect
 
 
 class TestExecuteFunction:
@@ -14,8 +14,8 @@ class TestExecuteFunction:
     @pytest.mark.asyncio
     async def test_execute_raises_without_engine(self):
         """Test execute raises RuntimeError when engine not available."""
-        with patch('data_bridge.postgres.connection._engine', None):
-            from data_bridge.postgres import execute
+        with patch('ouroboros.postgres.connection._engine', None):
+            from ouroboros.postgres import execute
 
             expect(lambda: await execute("SELECT 1")).to_raise(RuntimeError)
 
@@ -28,7 +28,7 @@ class TestExecuteFunction:
             {"id": 2, "name": "Bob", "age": 25}
         ])
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         results = await execute("SELECT * FROM users WHERE age > $1", [20])
 
@@ -42,7 +42,7 @@ class TestExecuteFunction:
         """Test execute with INSERT query returns row count."""
         mock_connection_engine.execute = AsyncMock(return_value=1)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         count = await execute(
             "INSERT INTO users (name, age) VALUES ($1, $2)",
@@ -57,7 +57,7 @@ class TestExecuteFunction:
         """Test execute with UPDATE query returns row count."""
         mock_connection_engine.execute = AsyncMock(return_value=3)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         count = await execute(
             "UPDATE users SET age = $1 WHERE age < $2",
@@ -72,7 +72,7 @@ class TestExecuteFunction:
         """Test execute with DELETE query returns row count."""
         mock_connection_engine.execute = AsyncMock(return_value=2)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         count = await execute("DELETE FROM users WHERE age < $1", [18])
 
@@ -84,7 +84,7 @@ class TestExecuteFunction:
         """Test execute with DDL query returns None."""
         mock_connection_engine.execute = AsyncMock(return_value=None)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         result = await execute("CREATE INDEX idx_users_age ON users(age)")
 
@@ -96,7 +96,7 @@ class TestExecuteFunction:
         """Test execute without parameters."""
         mock_connection_engine.execute = AsyncMock(return_value=[{"count": 10}])
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         result = await execute("SELECT COUNT(*) as count FROM users")
 
@@ -110,7 +110,7 @@ class TestExecuteFunction:
             {"id": 1, "name": "Alice"}
         ])
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         result = await execute(
             "SELECT * FROM users WHERE age BETWEEN $1 AND $2 ORDER BY name LIMIT $3",
@@ -127,7 +127,7 @@ class TestExecuteFunction:
         """Test execute with explicit None parameters."""
         mock_connection_engine.execute = AsyncMock(return_value=1)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         count = await execute(
             "INSERT INTO users (name, age, email) VALUES ($1, $2, $3)",
@@ -142,7 +142,7 @@ class TestExecuteFunction:
         """Test execute with various parameter types."""
         mock_connection_engine.execute = AsyncMock(return_value=1)
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         # Test with int, str, float, bool
         count = await execute(
@@ -162,7 +162,7 @@ class TestExecuteSecurity:
         """Test that parameters are bound, not concatenated."""
         mock_connection_engine.execute = AsyncMock(return_value=[])
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         # Even with SQL injection attempt, parameters should be safely bound
         malicious_input = "'; DROP TABLE users; --"
@@ -186,7 +186,7 @@ class TestExecuteErrorHandling:
             side_effect=RuntimeError("Query execution failed: syntax error")
         )
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         expect(lambda: await execute("INVALID SQL QUERY")).to_raise(RuntimeError)
 
@@ -197,6 +197,6 @@ class TestExecuteErrorHandling:
             side_effect=RuntimeError("Query execution failed")
         )
 
-        from data_bridge.postgres import execute
+        from ouroboros.postgres import execute
 
         expect(lambda: await execute("")).to_raise(RuntimeError)

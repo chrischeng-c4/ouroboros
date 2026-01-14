@@ -32,7 +32,7 @@ from typing import Dict, List, Optional, Tuple
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from data_bridge.test import (
+from ouroboros.test import (
     BenchmarkGroup, benchmark, register_group,
     DiscoveryConfig, TestRegistry, discover_files,
 )
@@ -361,7 +361,7 @@ async def benchmark_dbt_discovery() -> Dict[str, float]:
 
 async def benchmark_dbt_execution() -> Dict[str, float]:
     """Benchmark data-bridge-test execution speed."""
-    from data_bridge.test import TestSuite, test, expect, TestRunner
+    from ouroboros.test import TestSuite, test, expect, TestRunner
 
     results = {
         "execution_time_ms": [],
@@ -438,7 +438,7 @@ async def benchmark_dbt_execution() -> Dict[str, float]:
 
 async def benchmark_dbt_parametrize() -> Dict[str, float]:
     """Benchmark data-bridge-test parametrization."""
-    from data_bridge.test import TestSuite, test, expect, TestRunner, parametrize
+    from ouroboros.test import TestSuite, test, expect, TestRunner, parametrize
 
     results = {
         "generation_time_ms": [],
@@ -501,7 +501,7 @@ async def benchmark_dbt_parametrize() -> Dict[str, float]:
 
 async def benchmark_dbt_fixtures() -> Dict[str, float]:
     """Benchmark data-bridge-test fixture overhead."""
-    from data_bridge.test import TestSuite, test, expect, TestRunner, fixture
+    from ouroboros.test import TestSuite, test, expect, TestRunner, fixture
 
     results = {
         "execution_time_ms": [],

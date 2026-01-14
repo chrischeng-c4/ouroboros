@@ -6,10 +6,10 @@ Document inheritance allows:
 - Polymorphic loading (loading correct subclass based on _class_id)
 - Filtering by class type using with_children()
 
-Migrated from pytest to data_bridge.test framework.
+Migrated from pytest to ouroboros.test framework.
 """
-from data_bridge import Document
-from data_bridge.test import test, expect
+from ouroboros import Document
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -126,12 +126,12 @@ class TestInheritanceCRUD(MongoTestSuite):
 
     async def setup(self):
         """Clean up test collection."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_vehicles", {})
 
     async def teardown(self):
         """Clean up test collection."""
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_vehicles", {})
 
     @test(tags=["mongo", "inheritance", "crud"])
@@ -140,7 +140,7 @@ class TestInheritanceCRUD(MongoTestSuite):
         car = Car(name="Tesla Model S", wheels=4, doors=4)
         await car.save()
 
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         doc = await _engine.find_one("test_vehicles", {"_id": car._id})
         expect(doc["_class_id"]).to_equal("Car")
         expect(doc["name"]).to_equal("Tesla Model S")
@@ -278,7 +278,7 @@ class TestInheritanceFields(MongoTestSuite):
             download_url: str = ""
             file_size: int = 0
 
-        from data_bridge.mongodb import _engine
+        from ouroboros.mongodb import _engine
         await _engine.delete_many("test_products_inherit", {})
 
         product = DigitalProduct(
@@ -361,7 +361,7 @@ class TestInheritanceEdgeCases(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestInheritanceSetup,

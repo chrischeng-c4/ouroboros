@@ -11,8 +11,8 @@ This demonstrates:
 from decimal import Decimal
 from datetime import datetime, date
 
-from data_bridge.postgres import Table, Column
-from data_bridge.postgres.validation import (
+from ouroboros.postgres import Table, Column
+from ouroboros.postgres.validation import (
     validates, validates_many,
     TypeDecorator,
     ValidationError,
@@ -244,7 +244,7 @@ class Event(Table):
 
 async def main():
     """Example usage of validated tables."""
-    from data_bridge.postgres import init, close
+    from ouroboros.postgres import init, close
 
     # Initialize connection
     await init("postgresql://localhost/testdb")

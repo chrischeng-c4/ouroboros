@@ -19,7 +19,7 @@ Run:
 """
 
 import asyncio
-from data_bridge.postgres.telemetry import (
+from ouroboros.postgres.telemetry import (
     is_tracing_enabled,
     create_query_span,
     create_session_span,

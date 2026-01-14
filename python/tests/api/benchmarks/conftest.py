@@ -11,7 +11,7 @@ import sys
 import time
 from typing import Dict
 import asyncio
-from data_bridge.http import HttpClient
+from ouroboros.http import HttpClient
 
 # =====================
 # Constants
@@ -87,7 +87,7 @@ def data_bridge_server():
     """Start data-bridge-api server (session-scoped)."""
     # Create server script
     server_script = f"""
-from data_bridge.api import App
+from ouroboros.api import App
 
 app = App()
 

@@ -5,10 +5,10 @@ requiring a database connection.
 """
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 
-from data_bridge.postgres import Table, Column, relationship
-from data_bridge.postgres.relationships import (
+from ouroboros.postgres import Table, Column, relationship
+from ouroboros.postgres.relationships import (
     RelationshipDescriptor,
     RelationshipLoader,
     LoadingStrategy,

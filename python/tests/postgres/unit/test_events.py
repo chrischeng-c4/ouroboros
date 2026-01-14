@@ -8,7 +8,7 @@ import pytest
 import asyncio
 from typing import List, Any
 from unittest.mock import MagicMock, patch
-from data_bridge.postgres.events import (
+from ouroboros.postgres.events import (
     EventType,
     EventDispatcher,
     EventRegistration,
@@ -28,8 +28,8 @@ from data_bridge.postgres.events import (
     after_commit,
     AttributeEvents,
 )
-from data_bridge.postgres import Table
-from data_bridge.test import expect
+from ouroboros.postgres import Table
+from ouroboros.test import expect
 
 
 # Test fixtures

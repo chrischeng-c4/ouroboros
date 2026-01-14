@@ -15,7 +15,7 @@ import pytest
 import asyncio
 import time
 from typing import List
-from data_bridge.kv import KvClient
+from ouroboros.kv import KvClient
 
 
 # ============================================================================

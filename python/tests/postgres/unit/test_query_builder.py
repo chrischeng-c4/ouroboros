@@ -4,10 +4,10 @@ Unit tests for QueryBuilder class.
 Tests the query builder Python API without requiring a real database connection.
 """
 import pytest
-from data_bridge.postgres import Table, Column
-from data_bridge.postgres.query import QueryBuilder
-from data_bridge.postgres.columns import SqlExpr, ColumnProxy
-from data_bridge.test import expect
+from ouroboros.postgres import Table, Column
+from ouroboros.postgres.query import QueryBuilder
+from ouroboros.postgres.columns import SqlExpr, ColumnProxy
+from ouroboros.test import expect
 
 
 @pytest.fixture

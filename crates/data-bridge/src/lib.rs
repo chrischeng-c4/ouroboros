@@ -1,17 +1,21 @@
-//! data-bridge: High-performance data access library for Python
+//! ouroboros: High-performance Rust-powered Python platform
 //!
 //! This library provides Rust-based implementations for various data sources,
 //! with all serialization/deserialization happening in Rust for maximum performance.
 //!
 //! # Features
 //! - MongoDB ORM (Beanie-compatible)
+//! - PostgreSQL ORM
+//! - HTTP Client
+//! - Task Queue
+//! - KV Store
 //! - Zero Python byte handling
 //! - Full async/await support
-//! - Type-safe operations
 //!
 //! # Usage
 //! ```python
-//! from data_bridge.mongodb import Document, init
+//! import ouroboros as ob
+//! from ouroboros.mongodb import Document, init
 //!
 //! # Initialize MongoDB
 //! await init("mongodb://localhost:27017/mydb")
@@ -60,9 +64,9 @@ mod tasks;
 #[cfg(feature = "pyloop")]
 mod pyloop;
 
-/// data-bridge Python module
+/// ouroboros Python module
 #[pymodule]
-fn data_bridge(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
 

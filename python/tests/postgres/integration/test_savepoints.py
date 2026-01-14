@@ -1,8 +1,8 @@
 """Integration tests for PostgreSQL savepoint functionality."""
 
 import pytest
-from data_bridge.postgres import connection, execute
-from data_bridge.test import expect
+from ouroboros.postgres import connection, execute
+from ouroboros.test import expect
 
 
 @pytest.fixture
@@ -324,7 +324,7 @@ async def test_savepoint_release_after_release(test_table):
 @pytest.mark.asyncio
 async def test_savepoint_with_py_transaction_api(test_table):
     """Test using savepoint with the higher-level pg_transaction API."""
-    from data_bridge.postgres.transactions import pg_transaction
+    from ouroboros.postgres.transactions import pg_transaction
 
     async with pg_transaction() as tx:
         # Insert initial data - must use transaction object methods
@@ -353,7 +353,7 @@ async def test_savepoint_with_py_transaction_api(test_table):
 @pytest.mark.asyncio
 async def test_savepoint_context_manager_with_pg_transaction(test_table):
     """Test using savepoint as async context manager with pg_transaction."""
-    from data_bridge.postgres.transactions import pg_transaction
+    from ouroboros.postgres.transactions import pg_transaction
 
     async with pg_transaction() as tx:
         # Insert data before savepoint
@@ -377,7 +377,7 @@ async def test_savepoint_context_manager_with_pg_transaction(test_table):
 @pytest.mark.asyncio
 async def test_savepoint_context_manager_exception_with_pg_transaction(test_table):
     """Test savepoint context manager auto-rollback on exception with pg_transaction."""
-    from data_bridge.postgres.transactions import pg_transaction
+    from ouroboros.postgres.transactions import pg_transaction
 
     async with pg_transaction() as tx:
         # Insert data before savepoint

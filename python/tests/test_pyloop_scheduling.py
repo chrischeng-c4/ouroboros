@@ -9,10 +9,10 @@ This test suite verifies Phase 2.2 of the data-bridge-pyloop implementation:
 
 import threading
 import pytest
-import data_bridge
+import ouroboros
 
 # Access _pyloop as an attribute (it's a Rust submodule, not a Python module)
-pyloop_module = data_bridge._pyloop
+pyloop_module = ouroboros._pyloop
 PyLoop = pyloop_module.PyLoop
 Handle = pyloop_module.Handle
 

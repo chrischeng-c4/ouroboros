@@ -10,7 +10,7 @@ These fixtures provide:
 import pytest
 import asyncio
 import os
-from data_bridge.postgres import init, close, execute
+from ouroboros.postgres import init, close, execute
 
 
 # PostgreSQL connection URI for tests

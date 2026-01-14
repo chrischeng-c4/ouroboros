@@ -3,16 +3,16 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "data-bridge"
+name = "ouroboros-kit"
 version = "0.1.0"
-description = "High-performance data access library with Rust backend and zero Python byte handling"
+description = "High-performance Rust-powered Python platform: MongoDB/PostgreSQL ORM, HTTP client, task queue, KV store, and more"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [
     { name = "Tech Platform Team", email = "tech-platform@shopee.com" }
 ]
-keywords = ["mongodb", "orm", "rust", "async", "performance"]
+keywords = ["rust", "async", "mongodb", "postgres", "orm", "http", "performance"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -29,7 +29,7 @@ dependencies = [
 
 # Console scripts
 [project.scripts]
-dbtest = "data_bridge.test.cli:main"
+obtest = "ouroboros.test.cli:main"
 
 # Optional dependencies for different data sources
 [project.optional-dependencies]
@@ -54,7 +54,7 @@ comparison = [
 ]
 
 [tool.maturin]
-module-name = "data_bridge"
+module-name = "ouroboros"
 python-source = "python"
 manifest-path = "crates/data-bridge/Cargo.toml"
 # Build with all features by default

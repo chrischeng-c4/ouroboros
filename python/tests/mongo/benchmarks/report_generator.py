@@ -66,8 +66,8 @@ class BenchmarkReportGenerator:
 
     def _extract_framework(self, test_name: str) -> str:
         """Extract framework name from test function name."""
-        if "data_bridge" in test_name:
-            return "data_bridge"
+        if "ouroboros" in test_name:
+            return "ouroboros"
         elif "beanie" in test_name:
             return "beanie"
         elif "motor" in test_name:
@@ -83,7 +83,7 @@ class BenchmarkReportGenerator:
     def generate_comparison_table(
         self,
         operation: str,
-        baseline: str = "data_bridge",
+        baseline: str = "ouroboros",
         stat: str = "mean"
     ) -> str:
         """
@@ -101,7 +101,7 @@ class BenchmarkReportGenerator:
             return f"No data for operation: {operation}"
 
         op_data = self.grouped[operation]
-        frameworks = ["data_bridge", "beanie", "motor", "pymongo_sync", "pymongo_gevent", "mongoengine"]
+        frameworks = ["ouroboros", "beanie", "motor", "pymongo_sync", "pymongo_gevent", "mongoengine"]
 
         # Get all batch sizes
         batch_sizes = set()
@@ -230,10 +230,10 @@ class BenchmarkReportGenerator:
         # Bulk insert analysis
         if "bulk-insert" in self.grouped:
             bulk_data = self.grouped["bulk-insert"]
-            if "data_bridge" in bulk_data and "beanie" in bulk_data:
+            if "ouroboros" in bulk_data and "beanie" in bulk_data:
                 # Compare 1000-doc bulk insert
-                if "1000" in bulk_data["data_bridge"] and "1000" in bulk_data["beanie"]:
-                    db_time = bulk_data["data_bridge"]["1000"]["mean"]
+                if "1000" in bulk_data["ouroboros"] and "1000" in bulk_data["beanie"]:
+                    db_time = bulk_data["ouroboros"]["1000"]["mean"]
                     beanie_time = bulk_data["beanie"]["1000"]["mean"]
                     speedup = beanie_time / db_time
                     findings.append(f"- **Bulk Insert (1000 docs)**: data-bridge is {speedup:.1f}x faster than Beanie")
@@ -241,9 +241,9 @@ class BenchmarkReportGenerator:
         # Find one analysis
         if "find-one" in self.grouped:
             find_data = self.grouped["find-one"]
-            if "data_bridge" in find_data and "motor" in find_data:
-                if "single" in find_data["data_bridge"] and "single" in find_data["motor"]:
-                    db_time = find_data["data_bridge"]["single"]["mean"]
+            if "ouroboros" in find_data and "motor" in find_data:
+                if "single" in find_data["ouroboros"] and "single" in find_data["motor"]:
+                    db_time = find_data["ouroboros"]["single"]["mean"]
                     motor_time = find_data["motor"]["single"]["mean"]
                     speedup = motor_time / db_time
                     findings.append(f"- **find_one**: data-bridge is {speedup:.1f}x {'faster' if speedup > 1 else 'slower'} than raw motor")

@@ -15,8 +15,8 @@ from typing import Annotated, Optional
 
 from pydantic import Field
 
-from data_bridge import Document, PydanticObjectId
-from data_bridge.test import test, expect
+from ouroboros import Document, PydanticObjectId
+from ouroboros.test import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -436,7 +436,7 @@ class TestObjectIdRoundTrip(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from data_bridge.test import run_suites
+    from ouroboros.test import run_suites
 
     run_suites([
         TestBasicTypeHandling,

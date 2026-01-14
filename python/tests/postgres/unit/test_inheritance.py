@@ -7,9 +7,9 @@ PolymorphicQueryMixin, and helper functions.
 """
 import pytest
 from typing import Optional
-from data_bridge.test import expect
-from data_bridge.postgres import Table
-from data_bridge.postgres.inheritance import (
+from ouroboros.test import expect
+from ouroboros.postgres import Table
+from ouroboros.postgres.inheritance import (
     InheritanceType,
     InheritanceConfig,
     inheritance,

@@ -3,7 +3,7 @@ Tests for health check endpoints and HealthManager.
 """
 import pytest
 import asyncio
-from data_bridge.api import App, HealthManager, HealthCheck, HealthStatus
+from ouroboros.api import App, HealthManager, HealthCheck, HealthStatus
 
 
 class TestHealthCheck:

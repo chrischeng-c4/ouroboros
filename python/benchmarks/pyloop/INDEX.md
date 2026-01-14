@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains comprehensive performance benchmarks for **data-bridge-pyloop**, a Rust-backed Python asyncio event loop implementation using Tokio.
+This directory contains comprehensive performance benchmarks for **ouroboros-pyloop**, a Rust-backed Python asyncio event loop implementation using Tokio.
 
 ## Quick Access
 
@@ -263,7 +263,7 @@ vs uvloop:
 
 ### Project Documentation
 - **Implementation Summary**: `../../PYLOOP_PHASE1_SUMMARY.md`
-- **Design Document**: `../../openspec/changes/implement-data-bridge-pyloop/design.md`
+- **Design Document**: `../../openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Project Benchmarks**: `../../docs/PYLOOP_BENCHMARKS.md`
 
 ### External References
@@ -274,7 +274,7 @@ vs uvloop:
 
 ## License
 
-Same as data-bridge project.
+Same as ouroboros project.
 
 ---
 

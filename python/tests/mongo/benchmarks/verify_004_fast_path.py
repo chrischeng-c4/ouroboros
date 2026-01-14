@@ -9,8 +9,8 @@ import asyncio
 import time
 from statistics import mean, stdev
 
-from data_bridge import init, close
-from data_bridge.mongodb.document import Document
+from ouroboros import init, close
+from ouroboros.mongodb.document import Document
 
 
 class User(Document):

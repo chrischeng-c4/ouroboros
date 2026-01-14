@@ -1,12 +1,12 @@
 """Tests for PostgreSQL ORM validation module."""
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from datetime import datetime, date
 from decimal import Decimal
 
-from data_bridge.postgres import Table, Column
-from data_bridge.postgres.validation import (
+from ouroboros.postgres import Table, Column
+from ouroboros.postgres.validation import (
     validates, validates_many,
     TypeDecorator,
     coerce_int, coerce_float, coerce_str, coerce_bool, coerce_datetime, coerce_date, coerce_decimal,

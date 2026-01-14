@@ -17,13 +17,13 @@ This guide provides practical examples of using the framework comparison benchma
 
 ```bash
 # From project root
-cd /path/to/data-bridge
+cd /path/to/ouroboros
 
 # Validate setup first
 python benchmarks/framework_comparison/validate.py
 
 # Run full benchmark
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 ```
 
 Expected output:
@@ -45,12 +45,12 @@ Warmup: 3
 ...
 
 ================================================================================
-pytest vs data-bridge-test Performance Comparison
+pytest vs ouroboros-test Performance Comparison
 ================================================================================
 
 SUMMARY
 --------------------------------------------------------------------------------
-Metric                    pytest (ms)     data-bridge (ms) Speedup
+Metric                    pytest (ms)     ouroboros (ms) Speedup
 --------------------------------------------------------------------------------
 Test Discovery                  42.15            15.32     2.75x
 Test Execution                  75.34            23.45     3.21x
@@ -72,7 +72,7 @@ python benchmarks/framework_comparison/validate.py
 This checks:
 - pytest installation
 - psutil installation (optional)
-- data-bridge-test availability
+- ouroboros-test availability
 - Sample test files
 - Basic execution for both frameworks
 
@@ -90,7 +90,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from benchmarks.framework_comparison.pytest_vs_data_bridge_test import (
+from benchmarks.framework_comparison.pytest_vs_ouroboros_test import (
     benchmark_pytest_discovery,
     benchmark_dbt_discovery,
     calculate_stats,
@@ -104,10 +104,10 @@ async def main():
     pytest_stats = calculate_stats(pytest_result["discovery_time_ms"])
     print(f"pytest: {pytest_stats['mean']:.2f}ms")
 
-    # data-bridge-test
+    # ouroboros-test
     dbt_result = await benchmark_dbt_discovery()
     dbt_stats = calculate_stats(dbt_result["discovery_time_ms"])
-    print(f"data-bridge-test: {dbt_stats['mean']:.2f}ms")
+    print(f"ouroboros-test: {dbt_stats['mean']:.2f}ms")
 
     # Speedup
     speedup = pytest_stats['mean'] / dbt_stats['mean']
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 ```python
 #!/usr/bin/env python3
 import asyncio
-from benchmarks.framework_comparison.pytest_vs_data_bridge_test import (
+from benchmarks.framework_comparison.pytest_vs_ouroboros_test import (
     benchmark_pytest_execution,
     benchmark_dbt_execution,
     calculate_stats,
@@ -138,7 +138,7 @@ async def main():
     dbt_stats = calculate_stats(dbt_result["execution_time_ms"])
 
     print(f"pytest: {pytest_stats['mean']:.2f}ms")
-    print(f"data-bridge-test: {dbt_stats['mean']:.2f}ms")
+    print(f"ouroboros-test: {dbt_stats['mean']:.2f}ms")
     print(f"Speedup: {pytest_stats['mean'] / dbt_stats['mean']:.2f}x")
 
     # Memory comparison (if available)
@@ -147,7 +147,7 @@ async def main():
         dbt_mem = calculate_stats(dbt_result["memory_delta_mb"])
         print(f"\nMemory Usage:")
         print(f"pytest: {pytest_mem['mean']:.2f}MB")
-        print(f"data-bridge-test: {dbt_mem['mean']:.2f}MB")
+        print(f"ouroboros-test: {dbt_mem['mean']:.2f}MB")
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
 ### Increase Measurement Rounds for Stability
 
-Edit `pytest_vs_data_bridge_test.py`:
+Edit `pytest_vs_ouroboros_test.py`:
 
 ```python
 # At the top of the file
@@ -176,7 +176,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Monkey-patch constants
-import benchmarks.framework_comparison.pytest_vs_data_bridge_test as bench
+import benchmarks.framework_comparison.pytest_vs_ouroboros_test as bench
 bench.WARMUP_ROUNDS = 5
 bench.MEASUREMENT_ROUNDS = 20
 
@@ -233,14 +233,14 @@ jobs:
         run: |
           pip install maturin pytest psutil
 
-      - name: Build data-bridge
+      - name: Build ouroboros
         run: maturin develop --release
 
       - name: Validate benchmark setup
         run: python benchmarks/framework_comparison/validate.py
 
       - name: Run benchmark
-        run: python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+        run: python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
       - name: Upload report
         uses: actions/upload-artifact@v3
@@ -282,7 +282,7 @@ benchmark:
   script:
     - maturin develop --release
     - python benchmarks/framework_comparison/validate.py
-    - python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+    - python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
   artifacts:
     paths:
@@ -298,7 +298,7 @@ After a known good version:
 
 ```bash
 # Run benchmark
-python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
 # Save as baseline
 cp benchmarks/framework_comparison/BENCHMARK_REPORT.md \
@@ -376,7 +376,7 @@ python compare_baseline.py
 """Advanced statistical analysis of benchmark results."""
 import asyncio
 import statistics
-from benchmarks.framework_comparison.pytest_vs_data_bridge_test import (
+from benchmarks.framework_comparison.pytest_vs_ouroboros_test import (
     benchmark_pytest_execution,
     benchmark_dbt_execution,
     calculate_stats,
@@ -410,9 +410,9 @@ async def analyze_variance():
     print(f"pytest stdev: {statistics.stdev(pytest_means):.2f}ms")
     print(f"pytest CV: {statistics.stdev(pytest_means) / statistics.mean(pytest_means) * 100:.1f}%")
 
-    print(f"\ndata-bridge-test mean: {statistics.mean(dbt_means):.2f}ms")
-    print(f"data-bridge-test stdev: {statistics.stdev(dbt_means):.2f}ms")
-    print(f"data-bridge-test CV: {statistics.stdev(dbt_means) / statistics.mean(dbt_means) * 100:.1f}%")
+    print(f"\nouroboros-test mean: {statistics.mean(dbt_means):.2f}ms")
+    print(f"ouroboros-test stdev: {statistics.stdev(dbt_means):.2f}ms")
+    print(f"ouroboros-test CV: {statistics.stdev(dbt_means) / statistics.mean(dbt_means) * 100:.1f}%")
 
     print(f"\nAverage speedup: {statistics.mean(pytest_means) / statistics.mean(dbt_means):.2f}x")
 
@@ -428,7 +428,7 @@ if __name__ == "__main__":
 import asyncio
 import psutil
 import os
-from benchmarks.framework_comparison.pytest_vs_data_bridge_test import (
+from benchmarks.framework_comparison.pytest_vs_ouroboros_test import (
     benchmark_pytest_execution,
     benchmark_dbt_execution,
 )
@@ -457,11 +457,11 @@ async def profile_memory():
     after_gc = process.memory_info()
     print(f"After GC: {after_gc.rss / 1024 / 1024:.2f}MB")
 
-    # data-bridge-test
-    print("\nRunning data-bridge-test benchmark...")
+    # ouroboros-test
+    print("\nRunning ouroboros-test benchmark...")
     dbt_result = await benchmark_dbt_execution()
     dbt_mem = process.memory_info()
-    print(f"After data-bridge-test: {dbt_mem.rss / 1024 / 1024:.2f}MB")
+    print(f"After ouroboros-test: {dbt_mem.rss / 1024 / 1024:.2f}MB")
     print(f"Delta: {(dbt_mem.rss - after_gc.rss) / 1024 / 1024:.2f}MB")
 
 if __name__ == "__main__":
@@ -474,10 +474,10 @@ if __name__ == "__main__":
 # Profile pytest with py-spy
 py-spy record -o pytest.svg -- python -m pytest benchmarks/framework_comparison/sample_tests.py
 
-# Profile data-bridge-test benchmark
-py-spy record -o data-bridge-test.svg -- python -c "
+# Profile ouroboros-test benchmark
+py-spy record -o ouroboros-test.svg -- python -c "
 import asyncio
-from benchmarks.framework_comparison.pytest_vs_data_bridge_test import benchmark_dbt_execution
+from benchmarks.framework_comparison.pytest_vs_ouroboros_test import benchmark_dbt_execution
 asyncio.run(benchmark_dbt_execution())
 "
 ```
@@ -501,7 +501,7 @@ MEASUREMENT_ROUNDS = 30
 
 ### Different Test Counts
 
-If pytest and data-bridge-test find different numbers of tests:
+If pytest and ouroboros-test find different numbers of tests:
 
 ```bash
 # Check pytest collection
@@ -513,4 +513,4 @@ grep -c "^def test_" benchmarks/framework_comparison/sample_tests.py
 
 ## License
 
-Same as data-bridge project.
+Same as ouroboros project.

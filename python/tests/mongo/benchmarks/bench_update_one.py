@@ -1,7 +1,7 @@
 """Update One benchmark."""
 
 import time
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 from tests.mongo.benchmarks.models import DBUser, BeanieUser
 
 group = BenchmarkGroup("Update One")

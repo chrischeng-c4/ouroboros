@@ -5,8 +5,8 @@ This test verifies that the fixture system works correctly.
 """
 
 import pytest
-from data_bridge.test import expect
-from data_bridge.test import (
+from ouroboros.test import expect
+from ouroboros.test import (
     fixture, test, expect, TestSuite, run_suite,
     FixtureScope, FixtureRegistry, FixtureMeta
 )

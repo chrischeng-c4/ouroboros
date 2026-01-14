@@ -6,7 +6,7 @@ for different test categories.
 """
 
 import os
-from data_bridge.test import TestSuite
+from ouroboros.test import TestSuite
 
 # Shared database URI - use environment variable or default
 MONGODB_URI = os.environ.get(
@@ -31,14 +31,14 @@ class MongoTestSuite(TestSuite):
 
     async def setup_suite(self):
         """Initialize MongoDB connection for the test suite."""
-        from data_bridge import init, is_connected
+        from ouroboros import init, is_connected
 
         if not is_connected():
             await init(MONGODB_URI)
 
     async def teardown_suite(self):
         """Close MongoDB connection after all tests."""
-        from data_bridge import close
+        from ouroboros import close
         await close()
 
 
@@ -65,7 +65,7 @@ class HttpTestSuite(TestSuite):
     Example:
         class TestHttpClient(HttpTestSuite):
             async def setup_suite(self):
-                from data_bridge.http import HttpClient
+                from ouroboros.http import HttpClient
                 self.client = HttpClient(base_url="https://httpbin.org")
 
             @test()

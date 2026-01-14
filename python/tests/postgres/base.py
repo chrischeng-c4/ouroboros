@@ -1,5 +1,5 @@
 """Base classes for PostgreSQL tests using data-bridge-test framework."""
-from data_bridge.test import expect, TestMeta, TestResult, TestRunner, TestType, TestStatus
+from ouroboros.test import expect, TestMeta, TestResult, TestRunner, TestType, TestStatus
 
 
 class PostgresTestBase:

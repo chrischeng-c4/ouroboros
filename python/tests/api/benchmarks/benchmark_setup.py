@@ -2,12 +2,12 @@
 Shared setup and utilities for API benchmarks.
 
 This module provides shared state and helper functions for API benchmarks,
-using data_bridge.http.HttpClient.
+using ouroboros.http.HttpClient.
 """
 
 import asyncio
 from typing import Optional
-from data_bridge.http import HttpClient
+from ouroboros.http import HttpClient
 
 # Global URL storage
 _data_bridge_url: Optional[str] = None

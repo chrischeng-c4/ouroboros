@@ -6,7 +6,7 @@ This file shows how to use the three inheritance strategies:
 3. Concrete Table Inheritance (CONCRETE)
 """
 
-from data_bridge.postgres import (
+from ouroboros.postgres import (
     Table,
     Column,
     InheritanceType,

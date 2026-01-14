@@ -1,8 +1,8 @@
 """Tests for app.run() method."""
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from unittest.mock import Mock, patch
-from data_bridge.api import App
+from ouroboros.api import App
 
 
 class TestAppRun:

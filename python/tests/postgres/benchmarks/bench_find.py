@@ -1,7 +1,7 @@
 """Find/Select benchmarks for PostgreSQL."""
 
 import pytest
-from data_bridge.test import BenchmarkGroup, register_group
+from ouroboros.test import BenchmarkGroup, register_group
 from tests.postgres.benchmarks.models import DBUser, SAUser, SQLALCHEMY_AVAILABLE
 from tests.postgres.benchmarks.conftest import generate_user_data
 from tests.postgres.benchmarks import benchmark_setup

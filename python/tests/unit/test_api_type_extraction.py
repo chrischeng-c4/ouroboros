@@ -8,13 +8,13 @@ from uuid import UUID
 from decimal import Decimal
 from enum import Enum
 
-from data_bridge.api.type_extraction import (
+from ouroboros.api.type_extraction import (
     extract_handler_meta,
     extract_type_schema,
     schema_to_rust_type_descriptor,
     extract_dataclass_schema,
 )
-from data_bridge.api.types import Path, Query, Body, Header, Depends
+from ouroboros.api.types import Path, Query, Body, Header, Depends
 
 
 class TestBasicTypeExtraction:
@@ -493,7 +493,7 @@ class TestPydanticIntegration:
 
     def test_pydantic_unavailable_fallback(self):
         # When Pydantic is not available, should handle gracefully
-        from data_bridge.api.type_extraction import HAS_PYDANTIC
+        from ouroboros.api.type_extraction import HAS_PYDANTIC
 
         if not HAS_PYDANTIC:
             # Test that non-Pydantic code works
@@ -510,7 +510,7 @@ class TestBackwardCompatibility:
 
     def test_extract_type_info_alias(self):
         # extract_type_info should be an alias for extract_type_schema
-        from data_bridge.api.type_extraction import extract_type_info
+        from ouroboros.api.type_extraction import extract_type_info
 
         schema = extract_type_info(str)
         assert schema == {"type": "string"}

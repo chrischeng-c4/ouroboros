@@ -1,10 +1,10 @@
 """Tests for query extension utilities (SQLAlchemy-style query builders)."""
 
 import pytest
-from data_bridge.test import expect
+from ouroboros.test import expect
 from datetime import datetime, timedelta
 
-from data_bridge.postgres.query_ext import (
+from ouroboros.postgres.query_ext import (
     filter_by,
     and_,
     or_,
@@ -20,7 +20,7 @@ from data_bridge.postgres.query_ext import (
     in_list_filter,
     null_check_filter,
 )
-from data_bridge.postgres.columns import SqlExpr
+from ouroboros.postgres.columns import SqlExpr
 
 
 class TestFilterBy:
@@ -526,7 +526,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_filter_by(self):
         """Test QueryBuilder accepts filter_by results."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         filters = filter_by(name="Alice", status="active")
         qb = QueryBuilder(MockTable, tuple(filters))
@@ -539,7 +539,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_and_clause(self):
         """Test QueryBuilder accepts and_() results."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         condition = and_(
             SqlExpr("age", ">", 18),
@@ -555,7 +555,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_or_clause(self):
         """Test QueryBuilder accepts or_() results."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         condition = or_(
             SqlExpr("role", "=", "admin"),
@@ -571,7 +571,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_not_clause(self):
         """Test QueryBuilder accepts not_() results."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         condition = not_(SqlExpr("status", "=", "deleted"))
         qb = QueryBuilder(MockTable, (condition,))
@@ -583,7 +583,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_nested_clauses(self):
         """Test QueryBuilder with nested boolean clauses."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         # (age > 18) AND ((role = admin) OR (role = moderator))
         condition = and_(
@@ -600,7 +600,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_query_fragment(self):
         """Test QueryBuilder with QueryFragment."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         fragment = QueryFragment(status="active", verified=True)
         qb = QueryBuilder(MockTable, tuple(fragment))
@@ -612,7 +612,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_mixed_filters(self):
         """Test QueryBuilder with mixed filter types."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         fragment = QueryFragment(status="active")
         condition = or_(
@@ -630,7 +630,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_complex_scenario(self):
         """Test complex real-world scenario."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         # Find active users over 18 who are admins or verified moderators
         active = QueryFragment(status="active")
@@ -656,7 +656,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_with_dict_filters(self):
         """Test QueryBuilder with dict filters (backward compatibility)."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         qb = QueryBuilder(MockTable, ({"status": "active", "verified": True},))
 
@@ -667,7 +667,7 @@ class TestQueryBuilderIntegration:
 
     def test_query_builder_filter_and_boolean_clause(self):
         """Test mixing regular SqlExpr and BooleanClause."""
-        from data_bridge.postgres.query import QueryBuilder
+        from ouroboros.postgres.query import QueryBuilder
 
         regular = SqlExpr("status", "=", "active")
         boolean = or_(

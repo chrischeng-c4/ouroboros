@@ -1,13 +1,13 @@
-# FastAPI + data-bridge + OpenTelemetry Integration
+# FastAPI + ouroboros + OpenTelemetry Integration
 
-Production-ready example demonstrating distributed tracing with FastAPI, data-bridge PostgreSQL ORM, and OpenTelemetry.
+Production-ready example demonstrating distributed tracing with FastAPI, ouroboros PostgreSQL ORM, and OpenTelemetry.
 
 ## Overview
 
 This example shows how to build a cloud-native API with complete observability:
 
 - **FastAPI**: Modern Python web framework with automatic OpenAPI docs
-- **data-bridge**: High-performance Rust-backed PostgreSQL ORM
+- **ouroboros**: High-performance Rust-backed PostgreSQL ORM
 - **OpenTelemetry**: Vendor-neutral telemetry (traces, metrics, logs)
 - **OTLP Export**: Compatible with Jaeger, Grafana Cloud, DataDog, and more
 
@@ -27,7 +27,7 @@ This example shows how to build a cloud-native API with complete observability:
                   │
                   ▼
 ┌─────────────────────────────────────────────────────────────┐
-│         data-bridge ORM                                     │
+│         ouroboros ORM                                     │
 │         - Session spans (flush, commit)                     │
 │         - Query spans (find, insert, update, delete)        │
 │         - Relationship spans (lazy/eager loading)           │
@@ -109,7 +109,7 @@ pip install fastapi uvicorn pydantic[email] \
             opentelemetry-api opentelemetry-sdk \
             opentelemetry-instrumentation-fastapi \
             opentelemetry-exporter-otlp-proto-grpc \
-            data-bridge
+            ouroboros
 
 # 2. Start PostgreSQL
 docker run -d --name postgres \
@@ -257,7 +257,7 @@ python examples/fastapi_otel_example.py
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | OTLP collector endpoint |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `true` | Use insecure gRPC (HTTP) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | `None` | Custom headers (e.g., auth) |
-| `DATA_BRIDGE_TRACING_ENABLED` | `true` | Enable data-bridge tracing |
+| `DATA_BRIDGE_TRACING_ENABLED` | `true` | Enable ouroboros tracing |
 
 ### Sampling Configuration
 
@@ -302,7 +302,7 @@ Avoid high-cardinality attributes:
 
 Monitor connection pool health:
 ```python
-from data_bridge.postgres.telemetry import get_connection_pool_metrics
+from ouroboros.postgres.telemetry import get_connection_pool_metrics
 
 metrics = get_connection_pool_metrics()
 metrics.record_pool_stats(in_use=5, idle=3, max_size=10)
@@ -324,7 +324,7 @@ metrics.record_pool_stats(in_use=5, idle=3, max_size=10)
    # Should connect (may return error, but connection works)
    ```
 
-3. Check data-bridge tracing:
+3. Check ouroboros tracing:
    ```bash
    echo $DATA_BRIDGE_TRACING_ENABLED
    # Should be "true" or empty (defaults to true)
@@ -401,7 +401,7 @@ for post in posts:
 
 Add custom spans for business logic:
 ```python
-from data_bridge.postgres.telemetry import instrument_span
+from ouroboros.postgres.telemetry import instrument_span
 
 @instrument_span("business.validate_order")
 async def validate_order(order_id: int):
@@ -443,7 +443,7 @@ otlp_exporter = OTLPSpanExporter(
 
 - [OpenTelemetry Python SDK](https://opentelemetry.io/docs/instrumentation/python/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [data-bridge PostgreSQL ORM](../README.md)
+- [ouroboros PostgreSQL ORM](../README.md)
 - [Jaeger Documentation](https://www.jaegertracing.io/docs/)
 - [OTLP Specification](https://opentelemetry.io/docs/specs/otlp/)
 

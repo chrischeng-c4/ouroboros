@@ -1,7 +1,7 @@
 """Tests for PyLoop error handling."""
 
 import pytest
-from data_bridge.pyloop import App, HTTPException, ValidationError, NotFoundError
+from ouroboros.pyloop import App, HTTPException, ValidationError, NotFoundError
 
 def test_http_exception_basic():
     """Test HTTPException creation."""

@@ -1,8 +1,8 @@
 """Unit tests for PostgreSQL transaction support."""
 
 import pytest
-from data_bridge.postgres import connection
-from data_bridge.test import expect
+from ouroboros.postgres import connection
+from ouroboros.test import expect
 
 
 @pytest.mark.asyncio
@@ -20,7 +20,7 @@ async def test_transaction_basic_flow():
 @pytest.mark.asyncio
 async def test_transaction_isolation_levels():
     """Test that isolation levels are correctly typed."""
-    from data_bridge.postgres.connection import IsolationLevel
+    from ouroboros.postgres.connection import IsolationLevel
     from typing import get_args
 
     # Verify IsolationLevel type definition

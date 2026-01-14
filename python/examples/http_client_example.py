@@ -4,8 +4,8 @@ This example demonstrates how to use the HTTP client integration
 to make external API calls from route handlers.
 """
 import asyncio
-from data_bridge.api import App, RequestContext
-from data_bridge.http import HttpClient
+from ouroboros.api import App, RequestContext
+from ouroboros.http import HttpClient
 
 
 async def main():
@@ -70,7 +70,7 @@ async def main():
     # Test handlers by resolving dependencies manually
     print("\nTesting route handlers:")
 
-    from data_bridge.api.dependencies import RequestContext as DepContext
+    from ouroboros.api.dependencies import RequestContext as DepContext
 
     # Test get_post
     context = DepContext()

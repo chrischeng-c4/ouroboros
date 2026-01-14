@@ -4,7 +4,7 @@ Shared models for benchmarks.
 Comparing: data-bridge (Rust async) vs Beanie (Motor async)
 """
 
-from data_bridge import Document
+from ouroboros import Document
 from beanie import Document as BeanieDoc
 
 

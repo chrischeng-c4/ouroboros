@@ -9,8 +9,8 @@ This example shows:
 """
 
 from datetime import datetime
-from data_bridge.postgres import Table, Column
-from data_bridge.postgres.computed import (
+from ouroboros.postgres import Table, Column
+from ouroboros.postgres.computed import (
     hybrid_property,
     hybrid_method,
     column_property,
@@ -44,7 +44,7 @@ class User(Table):
     @full_name.expression
     def full_name(cls):
         """SQL expression for full_name."""
-        from data_bridge.postgres.columns import SqlExpr
+        from ouroboros.postgres.columns import SqlExpr
         # For queries, this would generate: first_name || ' ' || last_name
         return SqlExpr("first_name || ' ' || last_name", "RAW", None)
 
@@ -56,7 +56,7 @@ class User(Table):
     @is_older_than.expression
     def is_older_than(cls, min_age):
         """SQL expression for is_older_than."""
-        from data_bridge.postgres.columns import SqlExpr
+        from ouroboros.postgres.columns import SqlExpr
         return SqlExpr("age", ">", min_age)
 
     @hybrid_property
