@@ -5,11 +5,8 @@
 
 use data_bridge_kv::engine::KvEngine;
 use data_bridge_kv::types::{KvKey, KvValue};
-use data_bridge_test::benchmark::{
-    Benchmarker, BenchmarkConfig, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
-};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Helper to create a key for benchmarks
 fn make_key(id: usize) -> KvKey {

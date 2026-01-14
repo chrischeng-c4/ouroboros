@@ -16,7 +16,7 @@ fn make_key(id: usize) -> KvKey {
 fn analyze_shard_distribution() {
     println!("\n=== Shard Distribution Analysis ===\n");
 
-    let engine = KvEngine::new();
+    let _engine = KvEngine::new();
     let num_keys = 10_000;
 
     // Track which shard each key goes to

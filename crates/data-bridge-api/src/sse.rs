@@ -147,6 +147,14 @@ impl SseEvent {
     /// Format this event according to the SSE specification
     ///
     /// The format is:
+    /// Convert to bytes for transmission
+    pub fn to_bytes(&self) -> Bytes {
+        Bytes::from(format_sse_event(self))
+    }
+}
+
+impl fmt::Display for SseEvent {
+    /// Format as SSE event string:
     /// ```text
     /// event: eventname
     /// id: 123
@@ -155,19 +163,8 @@ impl SseEvent {
     /// data: line2
     ///
     /// ```
-    pub fn to_string(&self) -> String {
-        format_sse_event(self)
-    }
-
-    /// Convert to bytes for transmission
-    pub fn to_bytes(&self) -> Bytes {
-        Bytes::from(self.to_string())
-    }
-}
-
-impl fmt::Display for SseEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", format_sse_event(self))
     }
 }
 

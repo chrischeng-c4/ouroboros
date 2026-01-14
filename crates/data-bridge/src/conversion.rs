@@ -253,6 +253,18 @@ fn extract_py_value_recursive(
         return Ok(SerializablePyValue::Float(val));
     }
 
+    // PydanticObjectId (ouroboros.mongodb.types.PydanticObjectId)
+    // MUST be checked BEFORE string since it's a str subclass
+    if let Ok(mongodb_types) = py.import("ouroboros.mongodb.types") {
+        if let Ok(pydantic_oid_cls) = mongodb_types.getattr("PydanticObjectId") {
+            if value.is_instance(&pydantic_oid_cls)? {
+                // PydanticObjectId is a str subclass, extract as string
+                let hex_str: String = value.extract()?;
+                return Ok(SerializablePyValue::ObjectId(hex_str));
+            }
+        }
+    }
+
     // String
     if let Ok(s) = value.downcast::<pyo3::types::PyString>() {
         let val = s.extract::<String>()?;

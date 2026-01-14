@@ -300,7 +300,7 @@ mod tests {
         };
 
         let engine = Arc::new(KvEngine::new());
-        let mut handle = PersistenceHandle::new(config, engine.clone()).unwrap();
+        let handle = PersistenceHandle::new(config, engine.clone()).unwrap();
 
         // Log some operations
         handle.log_operation(WalOp::Set {
@@ -343,7 +343,7 @@ mod tests {
         let key1 = KvKey::new("key1").unwrap();
         engine.set(&key1, KvValue::String("value1".to_string()), None);
 
-        let mut handle = PersistenceHandle::new(config, engine.clone()).unwrap();
+        let handle = PersistenceHandle::new(config, engine.clone()).unwrap();
 
         // Trigger snapshot creation
         handle.create_snapshot();

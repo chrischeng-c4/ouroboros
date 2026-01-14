@@ -22,10 +22,7 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-dependencies = [
-    "redis>=7.1.0",
-    "uvloop>=0.21.0",
-]
+dependencies = []  # Zero runtime dependencies - all functionality is in Rust
 
 # Console scripts
 [project.scripts]
@@ -43,6 +40,7 @@ observability = [
 ]
 
 dev = [
+    "maturin>=1.11.5",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
 ]
