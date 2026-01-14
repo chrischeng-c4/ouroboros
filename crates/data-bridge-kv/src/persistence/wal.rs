@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_wal_cleanup() {
-        let (temp_dir, config) = create_test_config();
+        let (temp_dir, _config) = create_test_config();
         let data_dir = temp_dir.path().to_path_buf();
 
         // Create multiple rotated WAL files

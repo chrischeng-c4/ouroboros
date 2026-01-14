@@ -42,7 +42,7 @@ from typing import (
     ForwardRef,
     TYPE_CHECKING,
 )
-from bson import ObjectId
+from ..ouroboros import ObjectId
 
 
 class WriteRules(str, Enum):

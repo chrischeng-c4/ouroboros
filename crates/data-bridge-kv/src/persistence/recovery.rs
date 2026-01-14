@@ -289,6 +289,7 @@ impl RecoveryManager {
 mod tests {
     use super::*;
     use crate::types::KvKey;
+    use crate::KvValue;
     use crate::persistence::WalConfig;
     use crate::persistence::wal::WalWriter;
     use tempfile::TempDir;

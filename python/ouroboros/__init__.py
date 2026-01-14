@@ -28,6 +28,9 @@ __version__ = "0.1.0"
 # This provides: mongodb, postgres, http, kv, api, test submodules
 # Note: The .so file is named 'ouroboros.abi3.so' and can be imported as '.ouroboros'
 
+# Import ObjectId from Rust extension (replaces bson.ObjectId dependency)
+from .ouroboros import ObjectId
+
 # Import sub-packages (Python wrappers around Rust modules)
 from . import mongodb
 from . import http
@@ -79,6 +82,8 @@ __all__ = [
     "postgres",
     "test",
     "kv",
+    # Core Types
+    "ObjectId",
     # Connection
     "init",
     "is_connected",

@@ -41,6 +41,7 @@ use pyo3::types::{PyAny, PyBytes, PyDict, IntoPyDict};
 use pyo3::exceptions::PyValueError;
 use bson::{Bson, Document as BsonDocument, oid::ObjectId};
 use crate::config::SecurityConfig;
+use crate::types::PyObjectId;
 use std::str::FromStr;
 
 /// Maximum nesting depth for recursive structures (MongoDB limit)
@@ -252,6 +253,18 @@ fn extract_py_value_recursive(
         return Ok(SerializablePyValue::Float(val));
     }
 
+    // PydanticObjectId (ouroboros.mongodb.types.PydanticObjectId)
+    // MUST be checked BEFORE string since it's a str subclass
+    if let Ok(mongodb_types) = py.import("ouroboros.mongodb.types") {
+        if let Ok(pydantic_oid_cls) = mongodb_types.getattr("PydanticObjectId") {
+            if value.is_instance(&pydantic_oid_cls)? {
+                // PydanticObjectId is a str subclass, extract as string
+                let hex_str: String = value.extract()?;
+                return Ok(SerializablePyValue::ObjectId(hex_str));
+            }
+        }
+    }
+
     // String
     if let Ok(s) = value.downcast::<pyo3::types::PyString>() {
         let val = s.extract::<String>()?;
@@ -309,7 +322,12 @@ fn extract_py_value_recursive(
         }
     }
 
-    // ObjectId (from bson package)
+    // ObjectId (ouroboros.ObjectId - our native Rust type)
+    if let Ok(py_oid) = value.downcast::<PyObjectId>() {
+        return Ok(SerializablePyValue::ObjectId(py_oid.borrow().to_hex()));
+    }
+
+    // ObjectId (from bson package - for backward compatibility)
     if let Ok(bson_mod) = py.import("bson") {
         if let Ok(objectid_cls) = bson_mod.getattr("ObjectId") {
             if value.is_instance(&objectid_cls)? {
@@ -565,11 +583,11 @@ fn serializable_to_py_any<'py>(
         }
 
         SerializablePyValue::ObjectId(hex_str) => {
-            // Create Python bson.ObjectId from hex string
-            let bson_mod = py.import("bson")?;
-            let objectid_cls = bson_mod.getattr("ObjectId")?;
-            let oid = objectid_cls.call1((hex_str,))?;
-            Ok(oid)
+            // Create ouroboros.ObjectId from hex string
+            let py_oid = PyObjectId::from_hex(hex_str).map_err(|e| {
+                PyValueError::new_err(e)
+            })?;
+            Ok(Py::new(py, py_oid)?.into_bound(py).into_any())
         }
 
         SerializablePyValue::DateTime(micros) => {

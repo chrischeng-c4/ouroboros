@@ -185,13 +185,13 @@ class TestPydanticObjectIdBasic(CommonTestSuite):
         expect(str(oid)).to_equal(hex_str)
 
     @test(tags=["unit", "types", "objectid"])
-    async def test_create_from_bson_objectid(self):
-        """Test creating from bson.ObjectId."""
-        from bson import ObjectId
+    async def test_create_from_objectid(self):
+        """Test creating from ouroboros.ObjectId."""
+        from ouroboros import ObjectId
 
-        bson_oid = ObjectId()
-        oid = PydanticObjectId(bson_oid)
-        expect(str(oid)).to_equal(str(bson_oid))
+        rust_oid = ObjectId.new()
+        oid = PydanticObjectId(rust_oid)
+        expect(str(oid)).to_equal(str(rust_oid))
 
     @test(tags=["unit", "types", "objectid"])
     async def test_create_from_pydantic_objectid(self):
@@ -214,16 +214,16 @@ class TestPydanticObjectIdBasic(CommonTestSuite):
     @test(tags=["unit", "types", "objectid"])
     async def test_equality(self):
         """Test equality comparisons."""
-        from bson import ObjectId
+        from ouroboros import ObjectId
 
         hex_str = "507f1f77bcf86cd799439011"
         oid1 = PydanticObjectId(hex_str)
         oid2 = PydanticObjectId(hex_str)
-        bson_oid = ObjectId(hex_str)
+        rust_oid = ObjectId(hex_str)
 
         expect(oid1 == oid2).to_be_true()
         expect(oid1 == hex_str).to_be_true()
-        expect(oid1 == bson_oid).to_be_true()
+        expect(oid1 == rust_oid).to_be_true()
 
     @test(tags=["unit", "types", "objectid"])
     async def test_hash(self):
@@ -238,21 +238,21 @@ class TestPydanticObjectIdBasic(CommonTestSuite):
 
     @test(tags=["unit", "types", "objectid"])
     async def test_to_object_id(self):
-        """Test conversion to bson.ObjectId."""
-        from bson import ObjectId
+        """Test conversion to ouroboros.ObjectId."""
+        from ouroboros import ObjectId
 
         oid = PydanticObjectId()
-        bson_oid = oid.to_object_id()
-        expect(isinstance(bson_oid, ObjectId)).to_be_true()
-        expect(str(bson_oid)).to_equal(str(oid))
+        rust_oid = oid.to_object_id()
+        expect(isinstance(rust_oid, ObjectId)).to_be_true()
+        expect(str(rust_oid)).to_equal(str(oid))
 
     @test(tags=["unit", "types", "objectid"])
     async def test_is_valid(self):
         """Test is_valid class method."""
-        from bson import ObjectId
+        from ouroboros import ObjectId
 
         expect(PydanticObjectId.is_valid("507f1f77bcf86cd799439011")).to_be_true()
-        expect(PydanticObjectId.is_valid(ObjectId())).to_be_true()
+        expect(PydanticObjectId.is_valid(ObjectId.new())).to_be_true()
         expect(PydanticObjectId.is_valid(PydanticObjectId())).to_be_true()
         expect(PydanticObjectId.is_valid(None)).to_be_true()
         expect(PydanticObjectId.is_valid("invalid")).to_be_false()
