@@ -1,0 +1,1307 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/SHEET_CONTRIBUTING/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Contributing to RuSheet - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#contributing-to-rusheet" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Contributing to RuSheet
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-of-conduct" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code of Conduct
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Started
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development Setup
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Setup">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-the-development-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Development Server
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Project Structure
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#making-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Making Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Making Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#branching-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Branching Strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Style
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Code Style">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rust" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typescript" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TypeScript
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#commit-messages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commit Messages
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rust-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rust Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typescript-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TypeScript Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#writing-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submitting-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submitting Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Submitting Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-request-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pull Request Process
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PR Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Review Process
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#issue-guidelines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue Guidelines
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Issue Guidelines">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bug-reports" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bug Reports
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#feature-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Requests
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#areas-to-contribute" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Areas to Contribute
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Areas to Contribute">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#good-first-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Good First Issues
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#medium-complexity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Medium Complexity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#advanced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Advanced
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#questions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Questions?
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="contributing-to-rusheet">Contributing to RuSheet<a class="headerlink" href="#contributing-to-rusheet" title="Permanent link">&para;</a></h1>
+<p>Thank you for your interest in contributing to RuSheet! This document provides guidelines and instructions for contributing.</p>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="#code-of-conduct">Code of Conduct</a></li>
+<li><a href="#getting-started">Getting Started</a></li>
+<li><a href="#development-setup">Development Setup</a></li>
+<li><a href="#project-structure">Project Structure</a></li>
+<li><a href="#making-changes">Making Changes</a></li>
+<li><a href="#code-style">Code Style</a></li>
+<li><a href="#testing">Testing</a></li>
+<li><a href="#submitting-changes">Submitting Changes</a></li>
+<li><a href="#issue-guidelines">Issue Guidelines</a></li>
+</ul>
+<h2 id="code-of-conduct">Code of Conduct<a class="headerlink" href="#code-of-conduct" title="Permanent link">&para;</a></h2>
+<p>Please be respectful and considerate in all interactions. We're building something together, and a positive environment helps everyone contribute their best work.</p>
+<h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Fork the repository</strong> on GitHub</li>
+<li><strong>Clone your fork</strong> locally:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/YOUR_USERNAME/rusheet.git
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>rusheet
+</code></pre></div></li>
+<li><strong>Add upstream remote</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>remote<span class="w"> </span>add<span class="w"> </span>upstream<span class="w"> </span>https://github.com/chrischeng-c4/rusheet.git
+</code></pre></div></li>
+</ol>
+<h2 id="development-setup">Development Setup<a class="headerlink" href="#development-setup" title="Permanent link">&para;</a></h2>
+<h3 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Rust</strong> 1.70+ (with <code>wasm32-unknown-unknown</code> target)</li>
+<li><strong>Node.js</strong> 18+</li>
+<li><strong>pnpm</strong> (package manager)</li>
+<li><strong>wasm-pack</strong> (for building WASM)</li>
+<li><strong>just</strong> (command runner)</li>
+<li><strong>Docker</strong> (optional, for collaboration server)</li>
+</ul>
+<h3 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Install Rust (if not installed)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>curl<span class="w"> </span>--proto<span class="w"> </span><span class="s1">&#39;=https&#39;</span><span class="w"> </span>--tlsv1.2<span class="w"> </span>-sSf<span class="w"> </span>https://sh.rustup.rs<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="c1"># Add WASM target</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>rustup<span class="w"> </span>target<span class="w"> </span>add<span class="w"> </span>wasm32-unknown-unknown
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Install wasm-pack</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>cargo<span class="w"> </span>install<span class="w"> </span>wasm-pack
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+<a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="c1"># Install just</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>cargo<span class="w"> </span>install<span class="w"> </span>just
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>
+<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="c1"># Install Node.js dependencies</span>
+<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>pnpm<span class="w"> </span>install
+<a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>
+<a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Build WASM module</span>
+<a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>just<span class="w"> </span>build-wasm
+<a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>
+<a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="c1"># Verify setup</span>
+<a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a>just<span class="w"> </span>check
+</code></pre></div>
+<h3 id="running-the-development-server">Running the Development Server<a class="headerlink" href="#running-the-development-server" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Start Vite dev server (frontend only)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>just<span class="w"> </span>dev
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="c1"># With collaboration server (requires Docker)</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>just<span class="w"> </span>db-up<span class="w">      </span><span class="c1"># Start PostgreSQL</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>just<span class="w"> </span>server<span class="w">     </span><span class="c1"># Start collaboration server</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>just<span class="w"> </span>dev<span class="w">        </span><span class="c1"># Start frontend (in another terminal)</span>
+</code></pre></div>
+<h2 id="project-structure">Project Structure<a class="headerlink" href="#project-structure" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>rusheet/
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── crates/                 # Rust crates
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│   ├── rusheet-core/       # Core data structures
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── rusheet-formula/    # Formula parser &amp; evaluator
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   ├── rusheet-history/    # Undo/redo system
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   ├── rusheet-wasm/       # WebAssembly bindings
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│   └── rusheet-server/     # Collaboration server
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>├── src/                    # TypeScript frontend
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   ├── core/               # API layer (RusheetAPI, WasmBridge)
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   ├── canvas/             # Canvas rendering
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   ├── ui/                 # UI components
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│   ├── collab/             # Collaboration client
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>│   └── worker/             # Web Worker for rendering
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>├── docs/                   # VitePress documentation
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>├── migrations/             # Database migrations
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>└── pkg/                    # Built WASM package (generated)
+</code></pre></div>
+<h2 id="making-changes">Making Changes<a class="headerlink" href="#making-changes" title="Permanent link">&para;</a></h2>
+<h3 id="branching-strategy">Branching Strategy<a class="headerlink" href="#branching-strategy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>main</code> - Stable release branch</li>
+<li><code>feature/*</code> - New features</li>
+<li><code>fix/*</code> - Bug fixes</li>
+<li><code>docs/*</code> - Documentation updates</li>
+</ul>
+<h3 id="workflow">Workflow<a class="headerlink" href="#workflow" title="Permanent link">&para;</a></h3>
+<ol>
+<li>
+<p><strong>Sync with upstream</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>git<span class="w"> </span>fetch<span class="w"> </span>upstream
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>git<span class="w"> </span>checkout<span class="w"> </span>main
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>git<span class="w"> </span>merge<span class="w"> </span>upstream/main
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Create a feature branch</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>checkout<span class="w"> </span>-b<span class="w"> </span>feature/your-feature-name
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Make your changes</strong> with clear, atomic commits</p>
+</li>
+<li>
+<p><strong>Test your changes</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>just<span class="w"> </span>test-rust<span class="w">       </span><span class="c1"># Rust tests</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>just<span class="w"> </span>test-unit<span class="w">       </span><span class="c1"># TypeScript unit tests</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>just<span class="w"> </span>check<span class="w">           </span><span class="c1"># Type checking</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Push and create a PR</strong>:
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>push<span class="w"> </span>origin<span class="w"> </span>feature/your-feature-name
+</code></pre></div></p>
+</li>
+</ol>
+<h2 id="code-style">Code Style<a class="headerlink" href="#code-style" title="Permanent link">&para;</a></h2>
+<h3 id="rust">Rust<a class="headerlink" href="#rust" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Follow standard Rust conventions</li>
+<li>Use <code>cargo fmt</code> before committing</li>
+<li>Run <code>cargo clippy</code> and address warnings</li>
+<li>Document public APIs with doc comments</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Format Rust code</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>cargo<span class="w"> </span>fmt<span class="w"> </span>--all
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># Run linter</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>cargo<span class="w"> </span>clippy<span class="w"> </span>--workspace
+</code></pre></div>
+<h3 id="typescript">TypeScript<a class="headerlink" href="#typescript" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Use TypeScript strict mode</li>
+<li>Prefer <code>const</code> over <code>let</code></li>
+<li>Use meaningful variable names</li>
+<li>Add JSDoc comments for public functions</li>
+</ul>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Type check</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>npx<span class="w"> </span>tsc<span class="w"> </span>--noEmit
+</code></pre></div>
+<h3 id="commit-messages">Commit Messages<a class="headerlink" href="#commit-messages" title="Permanent link">&para;</a></h3>
+<p>Follow <a href="https://www.conventionalcommits.org/">Conventional Commits</a>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>&lt;type&gt;(&lt;scope&gt;): &lt;description&gt;
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>[optional body]
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>[optional footer]
+</code></pre></div>
+<p><strong>Types:</strong>
+- <code>feat</code> - New feature
+- <code>fix</code> - Bug fix
+- <code>docs</code> - Documentation
+- <code>style</code> - Formatting (no code change)
+- <code>refactor</code> - Code restructuring
+- <code>test</code> - Adding tests
+- <code>chore</code> - Maintenance tasks</p>
+<p><strong>Examples:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>feat(formula): add VLOOKUP function
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>fix(core): prevent panic on empty cell reference
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>docs(api): add examples for event handlers
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>test(history): add undo/redo edge cases
+</code></pre></div></p>
+<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
+<h3 id="rust-tests">Rust Tests<a class="headerlink" href="#rust-tests" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Run all Rust tests</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--workspace
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="c1"># Run specific crate tests</span>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>-p<span class="w"> </span>rusheet-core
+<a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>-p<span class="w"> </span>rusheet-formula
+<a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+<a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="c1"># Run with output</span>
+<a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--workspace<span class="w"> </span>--<span class="w"> </span>--nocapture
+</code></pre></div>
+<h3 id="typescript-tests">TypeScript Tests<a class="headerlink" href="#typescript-tests" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Unit tests (fast, no WASM)</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>pnpm<span class="w"> </span>test:unit
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="c1"># Integration tests (browser, real WASM)</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>pnpm<span class="w"> </span>test:integration
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="c1"># All tests with coverage</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>pnpm<span class="w"> </span>test:coverage
+<a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>
+<a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="c1"># E2E tests (Playwright)</span>
+<a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>pnpm<span class="w"> </span>test:e2e
+</code></pre></div>
+<h3 id="writing-tests">Writing Tests<a class="headerlink" href="#writing-tests" title="Permanent link">&para;</a></h3>
+<p><strong>Rust:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="cp">#[cfg(test)]</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="k">mod</span><span class="w"> </span><span class="nn">tests</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="k">use</span><span class="w"> </span><span class="k">super</span><span class="p">::</span><span class="o">*</span><span class="p">;</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
+<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">    </span><span class="cp">#[test]</span>
+<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">test_cell_value</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Cell</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">        </span><span class="n">cell</span><span class="p">.</span><span class="n">set_value</span><span class="p">(</span><span class="n">CellValue</span><span class="p">::</span><span class="n">Number</span><span class="p">(</span><span class="mf">42.0</span><span class="p">));</span>
+<a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">        </span><span class="fm">assert_eq!</span><span class="p">(</span><span class="n">cell</span><span class="p">.</span><span class="n">value</span><span class="p">(),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">CellValue</span><span class="p">::</span><span class="n">Number</span><span class="p">(</span><span class="mf">42.0</span><span class="p">));</span>
+<a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="p">}</span>
+</code></pre></div></p>
+<p><strong>TypeScript:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">describe</span><span class="p">,</span><span class="w"> </span><span class="nx">it</span><span class="p">,</span><span class="w"> </span><span class="nx">expect</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s1">&#39;vitest&#39;</span><span class="p">;</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="nx">describe</span><span class="p">(</span><span class="s1">&#39;RusheetAPI&#39;</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">  </span><span class="nx">it</span><span class="p">(</span><span class="s1">&#39;should set and get cell value&#39;</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="k">await</span><span class="w"> </span><span class="nx">rusheet</span><span class="p">.</span><span class="nx">init</span><span class="p">();</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="nx">rusheet</span><span class="p">.</span><span class="nx">setCellValue</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;Hello&#39;</span><span class="p">);</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">rusheet</span><span class="p">.</span><span class="nx">getCellData</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="nx">expect</span><span class="p">(</span><span class="nx">cell</span><span class="o">?</span><span class="p">.</span><span class="nx">value</span><span class="p">).</span><span class="nx">toBe</span><span class="p">(</span><span class="s1">&#39;Hello&#39;</span><span class="p">);</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">  </span><span class="p">});</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="p">});</span>
+</code></pre></div></p>
+<h2 id="submitting-changes">Submitting Changes<a class="headerlink" href="#submitting-changes" title="Permanent link">&para;</a></h2>
+<h3 id="pull-request-process">Pull Request Process<a class="headerlink" href="#pull-request-process" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Ensure all tests pass</strong> locally</li>
+<li><strong>Update documentation</strong> if needed</li>
+<li><strong>Create a Pull Request</strong> with:</li>
+<li>Clear title following commit message conventions</li>
+<li>Description of what changed and why</li>
+<li>Link to related issues (e.g., "Fixes #123")</li>
+<li>Screenshots for UI changes</li>
+</ol>
+<h3 id="pr-template">PR Template<a class="headerlink" href="#pr-template" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="gu">## Summary</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>Brief description of changes
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a><span class="gu">## Changes</span>
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a><span class="k">-</span><span class="w"> </span>Change 1
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a><span class="k">-</span><span class="w"> </span>Change 2
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a><span class="gu">## Testing</span>
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a><span class="k">- [ ]</span> Rust tests pass
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a><span class="k">- [ ]</span> TypeScript tests pass
+<a id="__codelineno-17-11" name="__codelineno-17-11" href="#__codelineno-17-11"></a><span class="k">- [ ]</span> Manual testing done
+<a id="__codelineno-17-12" name="__codelineno-17-12" href="#__codelineno-17-12"></a>
+<a id="__codelineno-17-13" name="__codelineno-17-13" href="#__codelineno-17-13"></a><span class="gu">## Related Issues</span>
+<a id="__codelineno-17-14" name="__codelineno-17-14" href="#__codelineno-17-14"></a>Fixes <span class="ni">#123</span>
+</code></pre></div>
+<h3 id="review-process">Review Process<a class="headerlink" href="#review-process" title="Permanent link">&para;</a></h3>
+<ul>
+<li>PRs require at least one approval</li>
+<li>Address review feedback promptly</li>
+<li>Keep PRs focused and reasonably sized</li>
+<li>Large changes should be discussed in an issue first</li>
+</ul>
+<h2 id="issue-guidelines">Issue Guidelines<a class="headerlink" href="#issue-guidelines" title="Permanent link">&para;</a></h2>
+<h3 id="bug-reports">Bug Reports<a class="headerlink" href="#bug-reports" title="Permanent link">&para;</a></h3>
+<p>Include:
+- <strong>Description</strong> - What happened?
+- <strong>Expected behavior</strong> - What should happen?
+- <strong>Steps to reproduce</strong> - How can we see the bug?
+- <strong>Environment</strong> - OS, browser, Rust version, Node version
+- <strong>Screenshots/logs</strong> - If applicable</p>
+<h3 id="feature-requests">Feature Requests<a class="headerlink" href="#feature-requests" title="Permanent link">&para;</a></h3>
+<p>Include:
+- <strong>Problem statement</strong> - What problem does this solve?
+- <strong>Proposed solution</strong> - How should it work?
+- <strong>Alternatives considered</strong> - Other approaches?
+- <strong>Additional context</strong> - Examples, mockups, etc.</p>
+<h2 id="areas-to-contribute">Areas to Contribute<a class="headerlink" href="#areas-to-contribute" title="Permanent link">&para;</a></h2>
+<p>Looking for something to work on? Check these areas:</p>
+<h3 id="good-first-issues">Good First Issues<a class="headerlink" href="#good-first-issues" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Documentation improvements</li>
+<li>Adding test cases</li>
+<li>Small bug fixes</li>
+<li>Typo corrections</li>
+</ul>
+<h3 id="medium-complexity">Medium Complexity<a class="headerlink" href="#medium-complexity" title="Permanent link">&para;</a></h3>
+<ul>
+<li>New formula functions</li>
+<li>UI improvements</li>
+<li>Performance optimizations</li>
+<li>Error message improvements</li>
+</ul>
+<h3 id="advanced">Advanced<a class="headerlink" href="#advanced" title="Permanent link">&para;</a></h3>
+<ul>
+<li>XLSX import/export</li>
+<li>Cross-sheet references</li>
+<li>React/Vue component wrappers</li>
+<li>Accessibility improvements</li>
+</ul>
+<p>See <a href="TODOS.md">TODOS.md</a> for the complete roadmap.</p>
+<h2 id="questions">Questions?<a class="headerlink" href="#questions" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Open a <a href="https://github.com/chrischeng-c4/rusheet/discussions">GitHub Discussion</a></li>
+<li>Check existing <a href="https://github.com/chrischeng-c4/rusheet/issues">Issues</a></li>
+</ul>
+<p>Thank you for contributing!</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

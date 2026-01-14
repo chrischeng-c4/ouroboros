@@ -1,0 +1,1159 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/legacy/PYLOOP_PHASE2_3_SUMMARY/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>PyLoop Phase 2.3 Implementation Summary - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyloop-phase-23-implementation-summary" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PyLoop Phase 2.3 Implementation Summary
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-date" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation Date
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features Implemented
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Features Implemented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-timerhandle-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. TimerHandle Class
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-loop-time-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Loop Time Tracking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-call_later-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. call_later Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-call_at-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. call_at Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-time-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. time Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technical-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Technical Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gil-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIL Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#thread-safety" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Thread Safety
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Testing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-coverage-22-tests-all-passing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test Coverage (22 tests, all passing)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#all-tests-passing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        All Tests Passing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-modified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files Modified
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-created" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files Created
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api-compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API Compatibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-characteristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Characteristics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps-phase-24" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps (Phase 2.4)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Quality
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-decisions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Decisions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Decisions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#composition-over-inheritance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Composition over Inheritance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lazy-time-initialization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lazy Time Initialization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-spawning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task Spawning
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compatibility-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compatibility Notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pyloop-phase-23-implementation-summary">PyLoop Phase 2.3 Implementation Summary<a class="headerlink" href="#pyloop-phase-23-implementation-summary" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Successfully implemented Phase 2.3 of the data-bridge-pyloop proposal: <code>call_later</code> and <code>call_at</code> methods for delayed callback scheduling.</p>
+<h2 id="implementation-date">Implementation Date<a class="headerlink" href="#implementation-date" title="Permanent link">&para;</a></h2>
+<p>January 12, 2026</p>
+<h2 id="features-implemented">Features Implemented<a class="headerlink" href="#features-implemented" title="Permanent link">&para;</a></h2>
+<h3 id="1-timerhandle-class">1. TimerHandle Class<a class="headerlink" href="#1-timerhandle-class" title="Permanent link">&para;</a></h3>
+<p><strong>Location</strong>: <code>crates/data-bridge-pyloop/src/handle.rs</code></p>
+<ul>
+<li>Created <code>TimerHandle</code> class that wraps a <code>Handle</code> and adds timer-specific functionality</li>
+<li>Contains both a cancellation flag (via base Handle) and a Tokio JoinHandle for the timer task</li>
+<li>Supports cancellation of both the base handle and the underlying Tokio task</li>
+<li>Proper <code>__repr__</code> implementation showing active/cancelled state</li>
+</ul>
+<p><strong>Key Design Decision</strong>: Used composition instead of inheritance (PyClass subclassing) because PyO3 0.24 with abi3 doesn't support subclassing. TimerHandle contains a Handle rather than extending it.</p>
+<h3 id="2-loop-time-tracking">2. Loop Time Tracking<a class="headerlink" href="#2-loop-time-tracking" title="Permanent link">&para;</a></h3>
+<p><strong>Location</strong>: <code>crates/data-bridge-pyloop/src/loop_impl.rs</code></p>
+<p>Added to <code>PyLoop</code> struct:
+- <code>start_time: Arc&lt;Mutex&lt;Option&lt;Instant&gt;&gt;&gt;</code> - tracks when the loop's internal clock started
+- <code>init_start_time()</code> - lazy initialization of start time
+- <code>loop_time()</code> - returns elapsed time since loop start
+- <code>time()</code> - public method that initializes start time and returns loop time</p>
+<h3 id="3-call_later-method">3. call_later Method<a class="headerlink" href="#3-call_later-method" title="Permanent link">&para;</a></h3>
+<p><strong>Signature</strong>: <code>loop.call_later(delay, callback, *args) -&gt; TimerHandle</code></p>
+<p><strong>Features</strong>:
+- Schedules a callback to run after a specified delay (in seconds)
+- Uses <code>tokio::time::sleep</code> for the delay
+- Returns a <code>TimerHandle</code> that can be cancelled
+- Validates delay is non-negative
+- Checks that loop is not closed
+- Spawns a Tokio task that waits and then schedules the callback
+- Properly handles cancellation - checks if handle is cancelled before scheduling</p>
+<h3 id="4-call_at-method">4. call_at Method<a class="headerlink" href="#4-call_at-method" title="Permanent link">&para;</a></h3>
+<p><strong>Signature</strong>: <code>loop.call_at(when, callback, *args) -&gt; TimerHandle</code></p>
+<p><strong>Features</strong>:
+- Schedules a callback to run at an absolute time
+- <code>when</code> is seconds since loop start (using <code>loop.time()</code> as reference)
+- Converts absolute time to relative delay and delegates to <code>call_later</code>
+- Handles past times gracefully (schedules with 0 delay)</p>
+<h3 id="5-time-method">5. time Method<a class="headerlink" href="#5-time-method" title="Permanent link">&para;</a></h3>
+<p><strong>Signature</strong>: <code>loop.time() -&gt; float</code></p>
+<p><strong>Features</strong>:
+- Returns current loop time (seconds since loop start)
+- Lazily initializes the start time on first call
+- Each loop instance has independent time reference
+- Works even on closed loops</p>
+<h2 id="technical-details">Technical Details<a class="headerlink" href="#technical-details" title="Permanent link">&para;</a></h2>
+<h3 id="gil-management">GIL Management<a class="headerlink" href="#gil-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Timer tasks spawn using <code>self.runtime.spawn()</code> which runs on Tokio threads</li>
+<li>No GIL is held during the <code>sleep()</code> operation</li>
+<li>GIL is only acquired when scheduling the callback to the task queue</li>
+</ul>
+<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ValueError</code> for negative delays</li>
+<li><code>RuntimeError</code> for operations on closed loops</li>
+<li>Proper PyResult error propagation throughout</li>
+</ul>
+<h3 id="thread-safety">Thread Safety<a class="headerlink" href="#thread-safety" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>start_time</code> uses <code>Arc&lt;Mutex&lt;Option&lt;Instant&gt;&gt;&gt;</code> for thread-safe lazy initialization</li>
+<li>Timer tasks use atomic cancellation flags</li>
+<li>Task sender/receiver are thread-safe by design</li>
+</ul>
+<h2 id="testing">Testing<a class="headerlink" href="#testing" title="Permanent link">&para;</a></h2>
+<p><strong>Test File</strong>: <code>tests/test_pyloop_timers.py</code></p>
+<h3 id="test-coverage-22-tests-all-passing">Test Coverage (22 tests, all passing)<a class="headerlink" href="#test-coverage-22-tests-all-passing" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>call_later tests</strong>:</li>
+<li>Basic functionality</li>
+<li>Zero delay</li>
+<li>Negative delay raises ValueError</li>
+<li>Closed loop raises RuntimeError</li>
+<li>Handle cancellation</li>
+<li>
+<p>Arguments passed correctly</p>
+</li>
+<li>
+<p><strong>call_at tests</strong>:</p>
+</li>
+<li>Basic functionality</li>
+<li>Past time handling</li>
+<li>Current time handling</li>
+<li>Arguments passed correctly</li>
+<li>
+<p>Closed loop raises RuntimeError</p>
+</li>
+<li>
+<p><strong>loop.time() tests</strong>:</p>
+</li>
+<li>Time progression</li>
+<li>Starts near zero</li>
+<li>Independent time references for multiple loops</li>
+<li>
+<p>Works on closed loops</p>
+</li>
+<li>
+<p><strong>TimerHandle tests</strong>:</p>
+</li>
+<li>Repr for active/cancelled handles</li>
+<li>Different type from regular Handle</li>
+<li>
+<p>Safe to cancel multiple times</p>
+</li>
+<li>
+<p><strong>Edge cases</strong>:</p>
+</li>
+<li>Very large delays (1 year)</li>
+<li>Very far future times</li>
+<li>Fractional seconds</li>
+</ol>
+<h3 id="all-tests-passing">All Tests Passing<a class="headerlink" href="#all-tests-passing" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>$<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>tests/test_pyloop*.py<span class="w"> </span>-v
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="m">51</span><span class="w"> </span>passed<span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="m">0</span>.14s
+</code></pre></div>
+<h2 id="files-modified">Files Modified<a class="headerlink" href="#files-modified" title="Permanent link">&para;</a></h2>
+<ol>
+<li><code>crates/data-bridge-pyloop/src/handle.rs</code> - Added TimerHandle</li>
+<li><code>crates/data-bridge-pyloop/src/loop_impl.rs</code> - Added timer methods and time tracking</li>
+<li><code>crates/data-bridge-pyloop/src/lib.rs</code> - Export TimerHandle</li>
+<li><code>crates/data-bridge/src/pyloop.rs</code> - Register TimerHandle with Python</li>
+</ol>
+<h2 id="files-created">Files Created<a class="headerlink" href="#files-created" title="Permanent link">&para;</a></h2>
+<ol>
+<li><code>tests/test_pyloop_timers.py</code> - Comprehensive test suite for timer functionality</li>
+</ol>
+<h2 id="api-compatibility">API Compatibility<a class="headerlink" href="#api-compatibility" title="Permanent link">&para;</a></h2>
+<p>The implementation follows asyncio's API exactly:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.pyloop</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyLoop</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># asyncio API</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">loop</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">get_event_loop</span><span class="p">()</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="n">handle1</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">callback</span><span class="p">,</span> <span class="n">arg1</span><span class="p">,</span> <span class="n">arg2</span><span class="p">)</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">handle2</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">call_at</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">callback</span><span class="p">)</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">now</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="c1"># data_bridge.pyloop API (identical)</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="n">loop</span> <span class="o">=</span> <span class="n">PyLoop</span><span class="p">()</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">handle1</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">call_later</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">callback</span><span class="p">,</span> <span class="n">arg1</span><span class="p">,</span> <span class="n">arg2</span><span class="p">)</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">handle2</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">call_at</span><span class="p">(</span><span class="n">loop</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">+</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">callback</span><span class="p">)</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">now</span> <span class="o">=</span> <span class="n">loop</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="performance-characteristics">Performance Characteristics<a class="headerlink" href="#performance-characteristics" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Timer Resolution</strong>: Tokio's timer resolution (typically milliseconds)</li>
+<li><strong>Overhead</strong>: Minimal - spawns a single Tokio task per timer</li>
+<li><strong>Cancellation</strong>: O(1) - just sets atomic flag and aborts task</li>
+<li><strong>Memory</strong>: Each timer uses:</li>
+<li>~200 bytes for Handle + TimerHandle</li>
+<li>Tokio task overhead</li>
+<li>Captured callback and arguments</li>
+</ul>
+<h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Timers don't execute until the loop is running (Phase 2.4: run_forever/run_until_complete)</li>
+<li>No timer coalescing (each timer is independent)</li>
+<li>No timer statistics/debugging yet</li>
+<li>No loop.call_later() callback execution tracking yet</li>
+</ol>
+<h2 id="next-steps-phase-24">Next Steps (Phase 2.4)<a class="headerlink" href="#next-steps-phase-24" title="Permanent link">&para;</a></h2>
+<p>Now that we have timer scheduling, the next phase will implement:
+- <code>run_forever()</code> - runs the event loop indefinitely
+- <code>run_until_complete(future)</code> - runs until a future completes
+- <code>stop()</code> - stops a running loop
+- Task processing integration with timers</p>
+<h2 id="code-quality">Code Quality<a class="headerlink" href="#code-quality" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Clippy</strong>: No warnings</li>
+<li><strong>Tests</strong>: 51 tests pass (29 existing + 22 new)</li>
+<li><strong>Documentation</strong>: All public methods documented</li>
+<li><strong>Error Handling</strong>: Proper PyResult usage, no unwrap() in production code</li>
+</ul>
+<h2 id="architecture-decisions">Architecture Decisions<a class="headerlink" href="#architecture-decisions" title="Permanent link">&para;</a></h2>
+<h3 id="composition-over-inheritance">Composition over Inheritance<a class="headerlink" href="#composition-over-inheritance" title="Permanent link">&para;</a></h3>
+<p>We chose to use composition (TimerHandle contains a Handle) rather than inheritance because:
+1. PyO3 0.24 with abi3 feature doesn't support PyClass subclassing
+2. Composition provides better flexibility
+3. Simpler to understand and maintain
+4. No loss of functionality</p>
+<h3 id="lazy-time-initialization">Lazy Time Initialization<a class="headerlink" href="#lazy-time-initialization" title="Permanent link">&para;</a></h3>
+<p>The loop's start time is initialized lazily on first call to <code>time()</code> or timer method:
+1. Simpler implementation
+2. No overhead for loops that don't use timers
+3. Consistent behavior with asyncio
+4. Easy to test</p>
+<h3 id="task-spawning">Task Spawning<a class="headerlink" href="#task-spawning" title="Permanent link">&para;</a></h3>
+<p>Timer tasks are spawned using the shared Tokio runtime:
+1. No per-loop runtime overhead
+2. Efficient thread utilization
+3. Proper cancellation support
+4. Natural integration with future phases</p>
+<h2 id="compatibility-notes">Compatibility Notes<a class="headerlink" href="#compatibility-notes" title="Permanent link">&para;</a></h2>
+<p>This implementation is compatible with:
+- Python 3.12+
+- PyO3 0.24+ with abi3
+- Tokio 1.40+
+- asyncio event loop protocol</p>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<p>Phase 2.3 is complete and fully functional. All 22 new tests pass, and all existing 29 tests continue to pass. The implementation follows asyncio's API exactly while providing better performance through Rust/Tokio backend.</p>
+<p>Ready to proceed with Phase 2.4: Event loop execution (<code>run_forever</code>, <code>run_until_complete</code>, <code>stop</code>).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

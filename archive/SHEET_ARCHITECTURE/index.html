@@ -1,0 +1,1791 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/SHEET_ARCHITECTURE/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Spreadsheet Engine Architecture - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#spreadsheet-engine-architecture" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Spreadsheet Engine Architecture
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Overview">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#design-goals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design Goals
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="System Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#layer-diagram" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layer Diagram
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#component-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Component Details
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Component Details">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-data-bridge-sheet-core" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. data-bridge-sheet-core
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. data-bridge-sheet-core">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#key-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Key Types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-data-bridge-sheet-db" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. data-bridge-sheet-db
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. data-bridge-sheet-db">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#morton-encoding-z-order-curve" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Morton Encoding (Z-order Curve)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#query-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Query Layer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#crdt-operations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CRDT Operations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-data-bridge-sheet-formula" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. data-bridge-sheet-formula
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. data-bridge-sheet-formula">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parser" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parser
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#evaluator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Evaluator
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#built-in-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Built-in Functions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-data-bridge-sheet-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. data-bridge-sheet-history
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#5-data-bridge-sheet-wasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. data-bridge-sheet-wasm
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#6-data-bridge-sheet-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. data-bridge-sheet-server
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. data-bridge-sheet-server">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#architecture_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-optimizations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Optimizations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Optimizations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-morton-encoding-benefits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Morton Encoding Benefits
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-sparse-storage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Sparse Storage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-zero-copy-wasm" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Zero-copy WASM
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-formula-caching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Formula Caching
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Flow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Data Flow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#cell-edit-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cell Edit Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#formula-evaluation-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Formula Evaluation Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#collaboration-sync-flow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Collaboration Sync Flow
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#future-enhancements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Future Enhancements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Future Enhancements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#planned-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Planned Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="spreadsheet-engine-architecture">Spreadsheet Engine Architecture<a class="headerlink" href="#spreadsheet-engine-architecture" title="Permanent link">&para;</a></h1>
+<p>Technical architecture documentation for the data-bridge-sheet spreadsheet system.</p>
+<p><strong>Last Updated:</strong> 2026-01-08</p>
+<hr />
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#system-architecture">System Architecture</a></li>
+<li><a href="#component-details">Component Details</a></li>
+<li><a href="#custom-database-engine">Custom Database Engine</a></li>
+<li><a href="#formula-engine">Formula Engine</a></li>
+<li><a href="#collaboration-system">Collaboration System</a></li>
+<li><a href="#performance-optimizations">Performance Optimizations</a></li>
+<li><a href="#data-flow">Data Flow</a></li>
+</ol>
+<hr />
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>The data-bridge spreadsheet engine is a high-performance spreadsheet system built with Rust and WebAssembly. It features:</p>
+<ul>
+<li><strong>Zero-copy rendering</strong> - Direct memory access from JavaScript</li>
+<li><strong>Custom database</strong> - Morton-encoded spatial indexing for O(1) cell lookup</li>
+<li><strong>CRDT-based collaboration</strong> - Multi-user editing with conflict-free replication</li>
+<li><strong>Formula evaluation</strong> - 24+ built-in functions with dependency tracking</li>
+<li><strong>Event-driven architecture</strong> - Subscribe to changes, selections, and operations</li>
+</ul>
+<h3 id="design-goals">Design Goals<a class="headerlink" href="#design-goals" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Performance</strong> - Match or exceed native spreadsheet applications</li>
+<li><strong>Scalability</strong> - Handle millions of cells efficiently</li>
+<li><strong>Collaboration</strong> - Real-time multi-user editing without conflicts</li>
+<li><strong>Extensibility</strong> - Easy to add new functions and features</li>
+<li><strong>Web-first</strong> - Optimized for browser environments via WebAssembly</li>
+</ol>
+<hr />
+<h2 id="system-architecture">System Architecture<a class="headerlink" href="#system-architecture" title="Permanent link">&para;</a></h2>
+<h3 id="layer-diagram">Layer Diagram<a class="headerlink" href="#layer-diagram" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>┌─────────────────────────────────────────────────────────────┐
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>│                    Browser Frontend                          │
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>│  │ Canvas      │  │  Yjs Client │  │   RuSheet API       │  │
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>│  │ Renderer    │  │  (collab)   │  │   (TypeScript)      │  │
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>│  │             │  │             │  │                     │  │
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>│  │ - Virtual   │  │ - Awareness │  │ - Event handlers    │  │
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>│  │   viewport  │  │ - Cursors   │  │ - State management  │  │
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>│  │ - Smooth    │  │ - Sync      │  │ - WASM bridge       │  │
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>│  │   scrolling │  │             │  │                     │  │
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>└──────────────────────────┬──────────────────────────────────┘
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>                           │
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>                      WASM Bridge
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>                    (wasm-bindgen)
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>                           │
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>┌──────────────────────────▼──────────────────────────────────┐
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>│              Spreadsheet Engine (WASM/Rust)                  │
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>│  ┌──────────────────────────────────────────────────────┐   │
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>│  │                 sheet-core                           │   │
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>│  │  - Cell (value, format, formula)                     │   │
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>│  │  - Sheet (grid operations)                           │   │
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>│  │  - Workbook (multi-sheet)                            │   │
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>│  │  - Formatting (styles, alignment, colors)            │   │
+<a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>│  └──────────────────────────────────────────────────────┘   │
+<a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>│  ┌──────────────────────────────────────────────────────┐   │
+<a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>│  │               sheet-formula                          │   │
+<a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>│  │  - Parser (nom-based, recursive descent)             │   │
+<a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>│  │  - Evaluator (lazy evaluation)                       │   │
+<a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>│  │  - Functions (SUM, IF, VLOOKUP, etc.)                │   │
+<a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>│  │  - Dependency tracker (directed acyclic graph)       │   │
+<a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>│  └──────────────────────────────────────────────────────┘   │
+<a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>│  ┌──────────────────────────────────────────────────────┐   │
+<a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>│  │               sheet-history                          │   │
+<a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>│  │  - Command pattern (undo/redo)                       │   │
+<a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>│  │  - History stack (unlimited undo)                    │   │
+<a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>│  │  - Batch operations (group commands)                 │   │
+<a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>│  └──────────────────────────────────────────────────────┘   │
+<a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>│  ┌──────────────────────────────────────────────────────┐   │
+<a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>│  │                sheet-db                              │   │
+<a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>│  │  - Morton encoding (Z-order curve)                   │   │
+<a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>│  │  - Sparse storage (only non-empty cells)             │   │
+<a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>│  │  - Write-ahead log (crash recovery)                  │   │
+<a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>│  │  - Range queries (O(log n) spatial queries)          │   │
+<a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>│  └──────────────────────────────────────────────────────┘   │
+<a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>└──────────────────────────┬──────────────────────────────────┘
+<a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>                           │
+<a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>                    WebSocket / HTTP
+<a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>                           │
+<a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>┌──────────────────────────▼──────────────────────────────────┐
+<a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>│             Collaboration Server (Axum + Yjs)                │
+<a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
+<a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>│  │  Axum HTTP   │  │  yrs (CRDT)  │  │   PostgreSQL     │   │
+<a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>│  │  - REST API  │  │  - Y.Doc     │  │   - Workbooks    │   │
+<a id="__codelineno-0-55" name="__codelineno-0-55" href="#__codelineno-0-55"></a>│  │  - WebSocket │  │  - Awareness │  │   - Users        │   │
+<a id="__codelineno-0-56" name="__codelineno-0-56" href="#__codelineno-0-56"></a>│  │  - Auth      │  │  - Sync      │  │   - Snapshots    │   │
+<a id="__codelineno-0-57" name="__codelineno-0-57" href="#__codelineno-0-57"></a>│  └──────────────┘  └──────────────┘  └──────────────────┘   │
+<a id="__codelineno-0-58" name="__codelineno-0-58" href="#__codelineno-0-58"></a>└─────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<hr />
+<h2 id="component-details">Component Details<a class="headerlink" href="#component-details" title="Permanent link">&para;</a></h2>
+<h3 id="1-data-bridge-sheet-core">1. data-bridge-sheet-core<a class="headerlink" href="#1-data-bridge-sheet-core" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> Core data structures for cells, sheets, and workbooks.</p>
+<h4 id="key-types">Key Types<a class="headerlink" href="#key-types" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1">// Cell data structure</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">Cell</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="nc">CellValue</span><span class="p">,</span><span class="w">           </span><span class="c1">// Actual value (number, text, bool, error)</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">formula</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w">     </span><span class="c1">// Formula string (e.g., &quot;=SUM(A1:A10)&quot;)</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">format</span><span class="p">:</span><span class="w"> </span><span class="nc">CellFormat</span><span class="p">,</span><span class="w">          </span><span class="c1">// Formatting (font, color, alignment)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">dependencies</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="n">CellRef</span><span class="o">&gt;</span><span class="p">,</span><span class="w">  </span><span class="c1">// Cells this formula depends on</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">}</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="c1">// Cell value types</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">CellValue</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="n">Empty</span><span class="p">,</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">    </span><span class="n">Number</span><span class="p">(</span><span class="kt">f64</span><span class="p">),</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">    </span><span class="n">Text</span><span class="p">(</span><span class="nb">String</span><span class="p">),</span>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">    </span><span class="n">Boolean</span><span class="p">(</span><span class="kt">bool</span><span class="p">),</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">    </span><span class="n">Error</span><span class="p">(</span><span class="n">FormulaError</span><span class="p">),</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">    </span><span class="n">DateTime</span><span class="p">(</span><span class="n">chrono</span><span class="p">::</span><span class="n">DateTime</span><span class="o">&lt;</span><span class="n">Utc</span><span class="o">&gt;</span><span class="p">),</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="c1">// Cell formatting</span>
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">CellFormat</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">bold</span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span>
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">italic</span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span>
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">font_size</span><span class="p">:</span><span class="w"> </span><span class="kt">u8</span><span class="p">,</span>
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">text_color</span><span class="p">:</span><span class="w"> </span><span class="nc">Color</span><span class="p">,</span>
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">background_color</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">Color</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">horizontal_align</span><span class="p">:</span><span class="w"> </span><span class="nc">HorizontalAlign</span><span class="p">,</span>
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">vertical_align</span><span class="p">:</span><span class="w"> </span><span class="nc">VerticalAlign</span><span class="p">,</span>
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">number_format</span><span class="p">:</span><span class="w"> </span><span class="nc">NumberFormat</span><span class="p">,</span>
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="p">}</span>
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a><span class="c1">// Sheet with 64x64 chunks</span>
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">Sheet</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-33" name="__codelineno-1-33" href="#__codelineno-1-33"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">name</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">,</span>
+<a id="__codelineno-1-34" name="__codelineno-1-34" href="#__codelineno-1-34"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">chunks</span><span class="p">:</span><span class="w"> </span><span class="nc">HashMap</span><span class="o">&lt;</span><span class="n">ChunkCoord</span><span class="p">,</span><span class="w"> </span><span class="n">Chunk</span><span class="o">&gt;</span><span class="p">,</span><span class="w">  </span><span class="c1">// Sparse storage</span>
+<a id="__codelineno-1-35" name="__codelineno-1-35" href="#__codelineno-1-35"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">row_count</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-1-36" name="__codelineno-1-36" href="#__codelineno-1-36"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">col_count</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-1-37" name="__codelineno-1-37" href="#__codelineno-1-37"></a><span class="p">}</span>
+<a id="__codelineno-1-38" name="__codelineno-1-38" href="#__codelineno-1-38"></a>
+<a id="__codelineno-1-39" name="__codelineno-1-39" href="#__codelineno-1-39"></a><span class="c1">// Workbook (multi-sheet)</span>
+<a id="__codelineno-1-40" name="__codelineno-1-40" href="#__codelineno-1-40"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">Workbook</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-41" name="__codelineno-1-41" href="#__codelineno-1-41"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">sheets</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Sheet</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-1-42" name="__codelineno-1-42" href="#__codelineno-1-42"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">active_sheet</span><span class="p">:</span><span class="w"> </span><span class="kt">usize</span><span class="p">,</span>
+<a id="__codelineno-1-43" name="__codelineno-1-43" href="#__codelineno-1-43"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">metadata</span><span class="p">:</span><span class="w"> </span><span class="nc">WorkbookMetadata</span><span class="p">,</span>
+<a id="__codelineno-1-44" name="__codelineno-1-44" href="#__codelineno-1-44"></a><span class="p">}</span>
+</code></pre></div>
+<h4 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Sparse storage</strong> - Only non-empty cells consume memory</li>
+<li><strong>64x64 chunks</strong> - Cells organized in chunks for locality</li>
+<li><strong>Rich formatting</strong> - Fonts, colors, alignment, number formats</li>
+<li><strong>Multi-sheet support</strong> - Unlimited sheets per workbook</li>
+</ul>
+<hr />
+<h3 id="2-data-bridge-sheet-db">2. data-bridge-sheet-db<a class="headerlink" href="#2-data-bridge-sheet-db" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> Custom database engine with spatial indexing.</p>
+<h4 id="morton-encoding-z-order-curve">Morton Encoding (Z-order Curve)<a class="headerlink" href="#morton-encoding-z-order-curve" title="Permanent link">&para;</a></h4>
+<p>Morton encoding interleaves the bits of row and column coordinates to create a single integer key that preserves spatial locality.</p>
+<p><strong>Why Morton encoding?</strong>
+- <strong>Spatial locality</strong> - Nearby cells have nearby keys
+- <strong>Fast range queries</strong> - Query rectangular ranges with O(log n) complexity
+- <strong>Cache-friendly</strong> - Sequential access to nearby cells
+- <strong>Compact keys</strong> - Single u64 instead of (row, col) tuple</p>
+<p><strong>Example:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Row = 5 (binary: 0101)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Col = 3 (binary: 0011)
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>Morton key:
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>  Row bits:  0 1 0 1
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>  Col bits:  0 0 1 1
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>  Interleaved: 00 01 10 11 = 0x0027 (39 in decimal)
+</code></pre></div>
+<h4 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1">// Morton key (Z-order curve encoding)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">MortonKey</span><span class="p">(</span><span class="kt">u64</span><span class="p">);</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">impl</span><span class="w"> </span><span class="n">MortonKey</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">    </span><span class="c1">// Encode (row, col) into Morton key</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">encode</span><span class="p">(</span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Self</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="k">u64</span><span class="p">;</span>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="o">..</span><span class="mi">32</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="w">            </span><span class="n">key</span><span class="w"> </span><span class="o">|=</span><span class="w"> </span><span class="p">((</span><span class="n">row</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">i</span><span class="p">);</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">            </span><span class="n">key</span><span class="w"> </span><span class="o">|=</span><span class="w"> </span><span class="p">((</span><span class="n">col</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="n">i</span><span class="p">)</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">        </span><span class="n">MortonKey</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">    </span><span class="c1">// Decode Morton key back to (row, col)</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">decode</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="p">(</span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">row</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="k">u32</span><span class="p">;</span>
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">col</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="k">u32</span><span class="p">;</span>
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="mi">0</span><span class="o">..</span><span class="mi">32</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">            </span><span class="n">row</span><span class="w"> </span><span class="o">|=</span><span class="w"> </span><span class="p">((</span><span class="bp">self</span><span class="p">.</span><span class="mi">0</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">i</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">            </span><span class="n">col</span><span class="w"> </span><span class="o">|=</span><span class="w"> </span><span class="p">((</span><span class="bp">self</span><span class="p">.</span><span class="mi">0</span><span class="w"> </span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="p">(</span><span class="mi">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">))</span><span class="w"> </span><span class="o">&amp;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">i</span><span class="p">;</span>
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="w">        </span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">)</span>
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a><span class="w">    </span><span class="c1">// Calculate Morton range for rectangle</span>
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">range_for_rect</span><span class="p">(</span>
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="w">        </span><span class="n">start_row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a><span class="w">        </span><span class="n">start_col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="w">        </span><span class="n">end_row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a><span class="w">        </span><span class="n">end_col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a><span class="w">    </span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="n">MortonKey</span><span class="p">,</span><span class="w"> </span><span class="n">MortonKey</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a><span class="w">        </span><span class="c1">// Returns list of (min, max) ranges that cover the rectangle</span>
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a><span class="w">        </span><span class="c1">// Uses quadtree decomposition</span>
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a><span class="w">        </span><span class="fm">todo!</span><span class="p">()</span>
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a><span class="p">}</span>
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a><span class="c1">// Storage layer</span>
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">CellStore</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a><span class="w">    </span><span class="n">kv_engine</span><span class="p">:</span><span class="w"> </span><span class="nc">KvEngine</span><span class="p">,</span><span class="w">           </span><span class="c1">// Underlying KV store</span>
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a><span class="w">    </span><span class="n">wal</span><span class="p">:</span><span class="w"> </span><span class="nc">WriteAheadLog</span><span class="p">,</span><span class="w">            </span><span class="c1">// Write-ahead log for durability</span>
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a><span class="w">    </span><span class="n">cache</span><span class="p">:</span><span class="w"> </span><span class="nc">LruCache</span><span class="o">&lt;</span><span class="n">MortonKey</span><span class="p">,</span><span class="w"> </span><span class="n">Cell</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="c1">// In-memory cache</span>
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a><span class="p">}</span>
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a><span class="c1">// Write-ahead log</span>
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">WriteAheadLog</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a><span class="w">    </span><span class="n">file</span><span class="p">:</span><span class="w"> </span><span class="nc">File</span><span class="p">,</span>
+<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a><span class="w">    </span><span class="n">entries</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="n">WalEntry</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a><span class="p">}</span>
+<a id="__codelineno-3-51" name="__codelineno-3-51" href="#__codelineno-3-51"></a>
+<a id="__codelineno-3-52" name="__codelineno-3-52" href="#__codelineno-3-52"></a><span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">WalEntry</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-3-53" name="__codelineno-3-53" href="#__codelineno-3-53"></a><span class="w">    </span><span class="n">SetCell</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">key</span><span class="p">:</span><span class="w"> </span><span class="nc">MortonKey</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="nc">Cell</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-54" name="__codelineno-3-54" href="#__codelineno-3-54"></a><span class="w">    </span><span class="n">DeleteCell</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">key</span><span class="p">:</span><span class="w"> </span><span class="nc">MortonKey</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-55" name="__codelineno-3-55" href="#__codelineno-3-55"></a><span class="w">    </span><span class="n">Checkpoint</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">timestamp</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-3-56" name="__codelineno-3-56" href="#__codelineno-3-56"></a><span class="p">}</span>
+</code></pre></div>
+<h4 id="query-layer">Query Layer<a class="headerlink" href="#query-layer" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1">// Range query (rectangular area)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">RangeQuery</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">start_row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">start_col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">end_row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">end_col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">filter</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="n">CellFilter</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">}</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="c1">// Spatial query</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">SpatialQuery</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">    </span><span class="n">NearestNeighbors</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">:</span><span class="w"> </span><span class="kt">usize</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">    </span><span class="n">WithinRadius</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">radius</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">    </span><span class="n">DetectClusters</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">min_points</span><span class="p">:</span><span class="w"> </span><span class="kt">usize</span><span class="p">,</span><span class="w"> </span><span class="n">epsilon</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="p">}</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>
+<a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="c1">// Execute range query</span>
+<a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="k">impl</span><span class="w"> </span><span class="n">CellStore</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">query_range</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">query</span><span class="p">:</span><span class="w"> </span><span class="nc">RangeQuery</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="p">(</span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">Cell</span><span class="p">)</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">ranges</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">MortonKey</span><span class="p">::</span><span class="n">range_for_rect</span><span class="p">(</span>
+<a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a><span class="w">            </span><span class="n">query</span><span class="p">.</span><span class="n">start_row</span><span class="p">,</span>
+<a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a><span class="w">            </span><span class="n">query</span><span class="p">.</span><span class="n">start_col</span><span class="p">,</span>
+<a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a><span class="w">            </span><span class="n">query</span><span class="p">.</span><span class="n">end_row</span><span class="p">,</span>
+<a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a><span class="w">            </span><span class="n">query</span><span class="p">.</span><span class="n">end_col</span><span class="p">,</span>
+<a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a><span class="w">        </span><span class="p">);</span>
+<a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>
+<a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">results</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Vec</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a><span class="w">        </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">min</span><span class="p">,</span><span class="w"> </span><span class="n">max</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="n">ranges</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a><span class="w">            </span><span class="c1">// Query KV store for keys in [min, max]</span>
+<a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a><span class="w">            </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">cell</span><span class="p">)</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">kv_engine</span><span class="p">.</span><span class="n">range</span><span class="p">(</span><span class="n">min</span><span class="o">..=</span><span class="n">max</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">filter</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">query</span><span class="p">.</span><span class="n">filter</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a><span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="n">filter</span><span class="p">.</span><span class="n">matches</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cell</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-4-33" name="__codelineno-4-33" href="#__codelineno-4-33"></a><span class="w">                        </span><span class="k">continue</span><span class="p">;</span>
+<a id="__codelineno-4-34" name="__codelineno-4-34" href="#__codelineno-4-34"></a><span class="w">                    </span><span class="p">}</span>
+<a id="__codelineno-4-35" name="__codelineno-4-35" href="#__codelineno-4-35"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-4-36" name="__codelineno-4-36" href="#__codelineno-4-36"></a><span class="w">                </span><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">key</span><span class="p">.</span><span class="n">decode</span><span class="p">();</span>
+<a id="__codelineno-4-37" name="__codelineno-4-37" href="#__codelineno-4-37"></a><span class="w">                </span><span class="n">results</span><span class="p">.</span><span class="n">push</span><span class="p">((</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">,</span><span class="w"> </span><span class="n">cell</span><span class="p">));</span>
+<a id="__codelineno-4-38" name="__codelineno-4-38" href="#__codelineno-4-38"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-4-39" name="__codelineno-4-39" href="#__codelineno-4-39"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-4-40" name="__codelineno-4-40" href="#__codelineno-4-40"></a><span class="w">        </span><span class="n">results</span>
+<a id="__codelineno-4-41" name="__codelineno-4-41" href="#__codelineno-4-41"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-4-42" name="__codelineno-4-42" href="#__codelineno-4-42"></a><span class="p">}</span>
+</code></pre></div>
+<h4 id="crdt-operations">CRDT Operations<a class="headerlink" href="#crdt-operations" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">// CRDT operation (conflict-free replicated data type)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">CrdtOperation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">timestamp</span><span class="p">:</span><span class="w"> </span><span class="kt">u64</span><span class="p">,</span><span class="w">              </span><span class="c1">// Lamport timestamp</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">actor_id</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">,</span><span class="w">            </span><span class="c1">// User ID</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">operation</span><span class="p">:</span><span class="w"> </span><span class="nc">Operation</span><span class="p">,</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">vector_clock</span><span class="p">:</span><span class="w"> </span><span class="nc">VectorClock</span><span class="p">,</span><span class="w">   </span><span class="c1">// Causality tracking</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">}</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">Operation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">    </span><span class="n">SetCell</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="nc">CellValue</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">    </span><span class="n">DeleteCell</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">    </span><span class="n">SetFormat</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">format</span><span class="p">:</span><span class="w"> </span><span class="nc">CellFormat</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="p">}</span>
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="c1">// Last-Write-Wins resolution</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">merge_operations</span><span class="p">(</span><span class="n">a</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">CrdtOperation</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">CrdtOperation</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">CrdtOperation</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="w">        </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span>
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">b</span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">timestamp</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">        </span><span class="n">b</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span>
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">    </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">        </span><span class="c1">// Tie-break by actor_id</span>
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="n">a</span><span class="p">.</span><span class="n">actor_id</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="n">b</span><span class="p">.</span><span class="n">actor_id</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="w">            </span><span class="n">a</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span>
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="w">            </span><span class="n">b</span><span class="p">.</span><span class="n">clone</span><span class="p">()</span>
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h3 id="3-data-bridge-sheet-formula">3. data-bridge-sheet-formula<a class="headerlink" href="#3-data-bridge-sheet-formula" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> Formula parsing and evaluation.</p>
+<h4 id="parser">Parser<a class="headerlink" href="#parser" title="Permanent link">&para;</a></h4>
+<p>Uses <strong>nom</strong> parser combinators for robust formula parsing.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1">// Formula AST (Abstract Syntax Tree)</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">enum</span><span class="w"> </span><span class="nc">Expr</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span><span class="n">Number</span><span class="p">(</span><span class="kt">f64</span><span class="p">),</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span><span class="n">Text</span><span class="p">(</span><span class="nb">String</span><span class="p">),</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">    </span><span class="n">Boolean</span><span class="p">(</span><span class="kt">bool</span><span class="p">),</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">    </span><span class="n">CellRef</span><span class="p">(</span><span class="n">CellRef</span><span class="p">),</span><span class="w">                     </span><span class="c1">// A1, $B$2</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="n">Range</span><span class="p">(</span><span class="n">CellRef</span><span class="p">,</span><span class="w"> </span><span class="n">CellRef</span><span class="p">),</span><span class="w">              </span><span class="c1">// A1:B10</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="n">Function</span><span class="p">(</span><span class="nb">String</span><span class="p">,</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span><span class="p">),</span><span class="w">          </span><span class="c1">// SUM(A1:A10)</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="n">BinaryOp</span><span class="p">(</span><span class="n">BinaryOp</span><span class="p">,</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span><span class="p">),</span><span class="w"> </span><span class="c1">// A1 + B1</span>
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="w">    </span><span class="n">UnaryOp</span><span class="p">(</span><span class="n">UnaryOp</span><span class="p">,</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="n">Expr</span><span class="o">&gt;</span><span class="p">),</span><span class="w">          </span><span class="c1">// -A1</span>
+<a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="p">}</span>
+<a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
+<a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="c1">// Cell reference</span>
+<a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">CellRef</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">sheet</span><span class="p">:</span><span class="w"> </span><span class="nb">Option</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span><span class="w">  </span><span class="c1">// Sheet2!A1</span>
+<a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">row_absolute</span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span><span class="w">     </span><span class="c1">// $A1</span>
+<a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="n">col_absolute</span><span class="p">:</span><span class="w"> </span><span class="kt">bool</span><span class="p">,</span><span class="w">     </span><span class="c1">// A$1</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="p">}</span>
+<a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>
+<a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="c1">// Parser entry point</span>
+<a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">parse_formula</span><span class="p">(</span><span class="n">input</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="kt">str</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">Expr</span><span class="p">,</span><span class="w"> </span><span class="n">FormulaError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">    </span><span class="c1">// Remove leading &#39;=&#39;</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">input</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">input</span><span class="p">.</span><span class="n">strip_prefix</span><span class="p">(</span><span class="sc">&#39;=&#39;</span><span class="p">).</span><span class="n">unwrap_or</span><span class="p">(</span><span class="n">input</span><span class="p">);</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a>
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">    </span><span class="c1">// Parse with nom</span>
+<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">    </span><span class="n">formula_parser</span><span class="p">(</span><span class="n">input</span><span class="p">)</span>
+<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="w">        </span><span class="p">.</span><span class="n">map</span><span class="p">(</span><span class="o">|</span><span class="p">(</span><span class="n">_</span><span class="p">,</span><span class="w"> </span><span class="n">expr</span><span class="p">)</span><span class="o">|</span><span class="w"> </span><span class="n">expr</span><span class="p">)</span>
+<a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a><span class="w">        </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">FormulaError</span><span class="p">::</span><span class="n">ParseError</span><span class="p">(</span><span class="n">e</span><span class="p">.</span><span class="n">to_string</span><span class="p">()))</span>
+<a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a><span class="p">}</span>
+</code></pre></div>
+<h4 id="evaluator">Evaluator<a class="headerlink" href="#evaluator" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1">// Evaluator with dependency tracking</span>
+<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">FormulaEvaluator</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="nc">Arc</span><span class="o">&lt;</span><span class="n">Workbook</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">dependency_graph</span><span class="p">:</span><span class="w"> </span><span class="nc">DependencyGraph</span><span class="p">,</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">cache</span><span class="p">:</span><span class="w"> </span><span class="nc">HashMap</span><span class="o">&lt;</span><span class="n">CellRef</span><span class="p">,</span><span class="w"> </span><span class="n">CellValue</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="p">}</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="k">impl</span><span class="w"> </span><span class="n">FormulaEvaluator</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="w">    </span><span class="c1">// Evaluate formula</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">eval</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">expr</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">Expr</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">CellValue</span><span class="p">,</span><span class="w"> </span><span class="n">FormulaError</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a><span class="w">        </span><span class="k">match</span><span class="w"> </span><span class="n">expr</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">Number</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">CellValue</span><span class="p">::</span><span class="n">Number</span><span class="p">(</span><span class="o">*</span><span class="n">n</span><span class="p">)),</span>
+<a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">Text</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">CellValue</span><span class="p">::</span><span class="n">Text</span><span class="p">(</span><span class="n">s</span><span class="p">.</span><span class="n">clone</span><span class="p">())),</span>
+<a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">Boolean</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">CellValue</span><span class="p">::</span><span class="n">Boolean</span><span class="p">(</span><span class="o">*</span><span class="n">b</span><span class="p">)),</span>
+<a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>
+<a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">CellRef</span><span class="p">(</span><span class="n">cell_ref</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a><span class="w">                </span><span class="c1">// Check cache first</span>
+<a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">cached</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">cache</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="n">cell_ref</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="w">                    </span><span class="k">return</span><span class="w"> </span><span class="nb">Ok</span><span class="p">(</span><span class="n">cached</span><span class="p">.</span><span class="n">clone</span><span class="p">());</span>
+<a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>
+<a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a><span class="w">                </span><span class="c1">// Get cell value</span>
+<a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a><span class="w">                </span><span class="kd">let</span><span class="w"> </span><span class="n">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">.</span><span class="n">get_cell</span><span class="p">(</span><span class="n">cell_ref</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>
+<a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a><span class="w">                </span><span class="c1">// If cell has formula, evaluate recursively</span>
+<a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a><span class="w">                </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">formula</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">cell</span><span class="p">.</span><span class="n">formula</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a><span class="w">                    </span><span class="kd">let</span><span class="w"> </span><span class="n">expr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">parse_formula</span><span class="p">(</span><span class="n">formula</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a><span class="w">                    </span><span class="bp">self</span><span class="p">.</span><span class="n">eval</span><span class="p">(</span><span class="o">&amp;</span><span class="n">expr</span><span class="p">)</span>
+<a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a><span class="w">                </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a><span class="w">                    </span><span class="nb">Ok</span><span class="p">(</span><span class="n">cell</span><span class="p">.</span><span class="n">value</span><span class="p">.</span><span class="n">clone</span><span class="p">())</span>
+<a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a><span class="w">                </span><span class="p">}</span>
+<a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-7-33" name="__codelineno-7-33" href="#__codelineno-7-33"></a>
+<a id="__codelineno-7-34" name="__codelineno-7-34" href="#__codelineno-7-34"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">Function</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-35" name="__codelineno-7-35" href="#__codelineno-7-35"></a><span class="w">                </span><span class="bp">self</span><span class="p">.</span><span class="n">eval_function</span><span class="p">(</span><span class="n">name</span><span class="p">,</span><span class="w"> </span><span class="n">args</span><span class="p">)</span>
+<a id="__codelineno-7-36" name="__codelineno-7-36" href="#__codelineno-7-36"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-7-37" name="__codelineno-7-37" href="#__codelineno-7-37"></a>
+<a id="__codelineno-7-38" name="__codelineno-7-38" href="#__codelineno-7-38"></a><span class="w">            </span><span class="n">Expr</span><span class="p">::</span><span class="n">BinaryOp</span><span class="p">(</span><span class="n">op</span><span class="p">,</span><span class="w"> </span><span class="n">left</span><span class="p">,</span><span class="w"> </span><span class="n">right</span><span class="p">)</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-7-39" name="__codelineno-7-39" href="#__codelineno-7-39"></a><span class="w">                </span><span class="kd">let</span><span class="w"> </span><span class="n">left_val</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">eval</span><span class="p">(</span><span class="n">left</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-7-40" name="__codelineno-7-40" href="#__codelineno-7-40"></a><span class="w">                </span><span class="kd">let</span><span class="w"> </span><span class="n">right_val</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">eval</span><span class="p">(</span><span class="n">right</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-7-41" name="__codelineno-7-41" href="#__codelineno-7-41"></a><span class="w">                </span><span class="bp">self</span><span class="p">.</span><span class="n">eval_binary_op</span><span class="p">(</span><span class="o">*</span><span class="n">op</span><span class="p">,</span><span class="w"> </span><span class="n">left_val</span><span class="p">,</span><span class="w"> </span><span class="n">right_val</span><span class="p">)</span>
+<a id="__codelineno-7-42" name="__codelineno-7-42" href="#__codelineno-7-42"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-7-43" name="__codelineno-7-43" href="#__codelineno-7-43"></a>
+<a id="__codelineno-7-44" name="__codelineno-7-44" href="#__codelineno-7-44"></a><span class="w">            </span><span class="c1">// ... other cases</span>
+<a id="__codelineno-7-45" name="__codelineno-7-45" href="#__codelineno-7-45"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-7-46" name="__codelineno-7-46" href="#__codelineno-7-46"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-7-47" name="__codelineno-7-47" href="#__codelineno-7-47"></a><span class="p">}</span>
+</code></pre></div>
+<h4 id="built-in-functions">Built-in Functions<a class="headerlink" href="#built-in-functions" title="Permanent link">&para;</a></h4>
+<p><strong>Math Functions:</strong>
+- <code>SUM(range)</code> - Sum of values
+- <code>AVERAGE(range)</code> - Average of values
+- <code>MIN(range)</code>, <code>MAX(range)</code> - Min/max values
+- <code>COUNT(range)</code> - Count of numeric values
+- <code>ABS(value)</code>, <code>ROUND(value, decimals)</code> - Absolute value, rounding
+- <code>SQRT(value)</code>, <code>POWER(base, exp)</code> - Square root, exponentiation</p>
+<p><strong>Text Functions:</strong>
+- <code>CONCATENATE(text1, text2, ...)</code> - Concatenate strings
+- <code>LEFT(text, n)</code>, <code>RIGHT(text, n)</code>, <code>MID(text, start, n)</code> - Substrings
+- <code>LEN(text)</code> - String length
+- <code>UPPER(text)</code>, <code>LOWER(text)</code>, <code>TRIM(text)</code> - Case/whitespace</p>
+<p><strong>Logical Functions:</strong>
+- <code>IF(condition, true_value, false_value)</code> - Conditional
+- <code>AND(condition1, condition2, ...)</code> - Logical AND
+- <code>OR(condition1, condition2, ...)</code> - Logical OR
+- <code>NOT(condition)</code> - Logical NOT</p>
+<p><strong>Date Functions:</strong>
+- <code>TODAY()</code>, <code>NOW()</code> - Current date/time
+- <code>DATE(year, month, day)</code> - Create date
+- <code>DATEDIF(start, end, unit)</code> - Date difference</p>
+<p><strong>Lookup Functions:</strong>
+- <code>VLOOKUP(lookup_value, table_range, col_index, [range_lookup])</code> - Vertical lookup
+- <code>COUNTIF(range, criteria)</code>, <code>SUMIF(range, criteria, [sum_range])</code> - Conditional aggregation
+- <code>AVERAGEIF(range, criteria, [average_range])</code> - Conditional average</p>
+<hr />
+<h3 id="4-data-bridge-sheet-history">4. data-bridge-sheet-history<a class="headerlink" href="#4-data-bridge-sheet-history" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> Undo/Redo system using Command pattern.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1">// Command trait</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">trait</span><span class="w"> </span><span class="n">Command</span><span class="p">:</span><span class="w"> </span><span class="nb">Send</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">Sync</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">undo</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="p">;</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">redo</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="n">workbook</span><span class="p">)</span>
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="p">}</span>
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="c1">// Example: Set cell value command</span>
+<a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">SetCellCommand</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span>
+<a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">    </span><span class="n">new_value</span><span class="p">:</span><span class="w"> </span><span class="nc">CellValue</span><span class="p">,</span>
+<a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="w">    </span><span class="n">old_value</span><span class="p">:</span><span class="w"> </span><span class="nc">CellValue</span><span class="p">,</span>
+<a id="__codelineno-8-16" name="__codelineno-8-16" href="#__codelineno-8-16"></a><span class="p">}</span>
+<a id="__codelineno-8-17" name="__codelineno-8-17" href="#__codelineno-8-17"></a>
+<a id="__codelineno-8-18" name="__codelineno-8-18" href="#__codelineno-8-18"></a><span class="k">impl</span><span class="w"> </span><span class="n">Command</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">SetCellCommand</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-19" name="__codelineno-8-19" href="#__codelineno-8-19"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-20" name="__codelineno-8-20" href="#__codelineno-8-20"></a><span class="w">        </span><span class="n">workbook</span><span class="p">.</span><span class="n">set_cell_value</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">col</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">new_value</span><span class="p">.</span><span class="n">clone</span><span class="p">())</span>
+<a id="__codelineno-8-21" name="__codelineno-8-21" href="#__codelineno-8-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-22" name="__codelineno-8-22" href="#__codelineno-8-22"></a>
+<a id="__codelineno-8-23" name="__codelineno-8-23" href="#__codelineno-8-23"></a><span class="w">    </span><span class="k">fn</span><span class="w"> </span><span class="nf">undo</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-24" name="__codelineno-8-24" href="#__codelineno-8-24"></a><span class="w">        </span><span class="n">workbook</span><span class="p">.</span><span class="n">set_cell_value</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">col</span><span class="p">,</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">old_value</span><span class="p">.</span><span class="n">clone</span><span class="p">())</span>
+<a id="__codelineno-8-25" name="__codelineno-8-25" href="#__codelineno-8-25"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-26" name="__codelineno-8-26" href="#__codelineno-8-26"></a><span class="p">}</span>
+<a id="__codelineno-8-27" name="__codelineno-8-27" href="#__codelineno-8-27"></a>
+<a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a><span class="c1">// History manager</span>
+<a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">HistoryManager</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-30" name="__codelineno-8-30" href="#__codelineno-8-30"></a><span class="w">    </span><span class="n">undo_stack</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">Box</span><span class="o">&lt;</span><span class="k">dyn</span><span class="w"> </span><span class="n">Command</span><span class="o">&gt;&gt;</span><span class="p">,</span>
+<a id="__codelineno-8-31" name="__codelineno-8-31" href="#__codelineno-8-31"></a><span class="w">    </span><span class="n">redo_stack</span><span class="p">:</span><span class="w"> </span><span class="nb">Vec</span><span class="o">&lt;</span><span class="nb">Box</span><span class="o">&lt;</span><span class="k">dyn</span><span class="w"> </span><span class="n">Command</span><span class="o">&gt;&gt;</span><span class="p">,</span>
+<a id="__codelineno-8-32" name="__codelineno-8-32" href="#__codelineno-8-32"></a><span class="w">    </span><span class="n">max_history</span><span class="p">:</span><span class="w"> </span><span class="kt">usize</span><span class="p">,</span>
+<a id="__codelineno-8-33" name="__codelineno-8-33" href="#__codelineno-8-33"></a><span class="p">}</span>
+<a id="__codelineno-8-34" name="__codelineno-8-34" href="#__codelineno-8-34"></a>
+<a id="__codelineno-8-35" name="__codelineno-8-35" href="#__codelineno-8-35"></a><span class="k">impl</span><span class="w"> </span><span class="n">HistoryManager</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-36" name="__codelineno-8-36" href="#__codelineno-8-36"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">execute</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">command</span><span class="p">:</span><span class="w"> </span><span class="nb">Box</span><span class="o">&lt;</span><span class="k">dyn</span><span class="w"> </span><span class="n">Command</span><span class="o">&gt;</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-37" name="__codelineno-8-37" href="#__codelineno-8-37"></a><span class="w">        </span><span class="n">command</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="n">workbook</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-8-38" name="__codelineno-8-38" href="#__codelineno-8-38"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">undo_stack</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+<a id="__codelineno-8-39" name="__codelineno-8-39" href="#__codelineno-8-39"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">redo_stack</span><span class="p">.</span><span class="n">clear</span><span class="p">();</span>
+<a id="__codelineno-8-40" name="__codelineno-8-40" href="#__codelineno-8-40"></a>
+<a id="__codelineno-8-41" name="__codelineno-8-41" href="#__codelineno-8-41"></a><span class="w">        </span><span class="c1">// Limit history size</span>
+<a id="__codelineno-8-42" name="__codelineno-8-42" href="#__codelineno-8-42"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">undo_stack</span><span class="p">.</span><span class="n">len</span><span class="p">()</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">max_history</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-43" name="__codelineno-8-43" href="#__codelineno-8-43"></a><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">undo_stack</span><span class="p">.</span><span class="n">remove</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<a id="__codelineno-8-44" name="__codelineno-8-44" href="#__codelineno-8-44"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-8-45" name="__codelineno-8-45" href="#__codelineno-8-45"></a>
+<a id="__codelineno-8-46" name="__codelineno-8-46" href="#__codelineno-8-46"></a><span class="w">        </span><span class="nb">Ok</span><span class="p">(())</span>
+<a id="__codelineno-8-47" name="__codelineno-8-47" href="#__codelineno-8-47"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-48" name="__codelineno-8-48" href="#__codelineno-8-48"></a>
+<a id="__codelineno-8-49" name="__codelineno-8-49" href="#__codelineno-8-49"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">undo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-50" name="__codelineno-8-50" href="#__codelineno-8-50"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">command</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">undo_stack</span><span class="p">.</span><span class="n">pop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-51" name="__codelineno-8-51" href="#__codelineno-8-51"></a><span class="w">            </span><span class="n">command</span><span class="p">.</span><span class="n">undo</span><span class="p">(</span><span class="n">workbook</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-8-52" name="__codelineno-8-52" href="#__codelineno-8-52"></a><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">redo_stack</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+<a id="__codelineno-8-53" name="__codelineno-8-53" href="#__codelineno-8-53"></a><span class="w">            </span><span class="nb">Ok</span><span class="p">(())</span>
+<a id="__codelineno-8-54" name="__codelineno-8-54" href="#__codelineno-8-54"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-55" name="__codelineno-8-55" href="#__codelineno-8-55"></a><span class="w">            </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">::</span><span class="n">NoHistoryAvailable</span><span class="p">)</span>
+<a id="__codelineno-8-56" name="__codelineno-8-56" href="#__codelineno-8-56"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-8-57" name="__codelineno-8-57" href="#__codelineno-8-57"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-58" name="__codelineno-8-58" href="#__codelineno-8-58"></a>
+<a id="__codelineno-8-59" name="__codelineno-8-59" href="#__codelineno-8-59"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">redo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="kp">&amp;</span><span class="nc">mut</span><span class="w"> </span><span class="n">Workbook</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">Error</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-60" name="__codelineno-8-60" href="#__codelineno-8-60"></a><span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">command</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">redo_stack</span><span class="p">.</span><span class="n">pop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-61" name="__codelineno-8-61" href="#__codelineno-8-61"></a><span class="w">            </span><span class="n">command</span><span class="p">.</span><span class="n">redo</span><span class="p">(</span><span class="n">workbook</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-8-62" name="__codelineno-8-62" href="#__codelineno-8-62"></a><span class="w">            </span><span class="bp">self</span><span class="p">.</span><span class="n">undo_stack</span><span class="p">.</span><span class="n">push</span><span class="p">(</span><span class="n">command</span><span class="p">);</span>
+<a id="__codelineno-8-63" name="__codelineno-8-63" href="#__codelineno-8-63"></a><span class="w">            </span><span class="nb">Ok</span><span class="p">(())</span>
+<a id="__codelineno-8-64" name="__codelineno-8-64" href="#__codelineno-8-64"></a><span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-8-65" name="__codelineno-8-65" href="#__codelineno-8-65"></a><span class="w">            </span><span class="nb">Err</span><span class="p">(</span><span class="n">Error</span><span class="p">::</span><span class="n">NoRedoAvailable</span><span class="p">)</span>
+<a id="__codelineno-8-66" name="__codelineno-8-66" href="#__codelineno-8-66"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-8-67" name="__codelineno-8-67" href="#__codelineno-8-67"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-8-68" name="__codelineno-8-68" href="#__codelineno-8-68"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h3 id="5-data-bridge-sheet-wasm">5. data-bridge-sheet-wasm<a class="headerlink" href="#5-data-bridge-sheet-wasm" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> WebAssembly bindings for browser integration.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="k">use</span><span class="w"> </span><span class="n">wasm_bindgen</span><span class="p">::</span><span class="n">prelude</span><span class="p">::</span><span class="o">*</span><span class="p">;</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="cp">#[wasm_bindgen]</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="k">pub</span><span class="w"> </span><span class="k">struct</span><span class="w"> </span><span class="nc">RuSheet</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">    </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="nc">Workbook</span><span class="p">,</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">    </span><span class="n">evaluator</span><span class="p">:</span><span class="w"> </span><span class="nc">FormulaEvaluator</span><span class="p">,</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">    </span><span class="n">history</span><span class="p">:</span><span class="w"> </span><span class="nc">HistoryManager</span><span class="p">,</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="p">}</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="cp">#[wasm_bindgen]</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="k">impl</span><span class="w"> </span><span class="n">RuSheet</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="w">    </span><span class="cp">#[wasm_bindgen(constructor)]</span>
+<a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">new</span><span class="p">()</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">Self</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-14" name="__codelineno-9-14" href="#__codelineno-9-14"></a><span class="w">        </span><span class="n">console_error_panic_hook</span><span class="p">::</span><span class="n">set_once</span><span class="p">();</span>
+<a id="__codelineno-9-15" name="__codelineno-9-15" href="#__codelineno-9-15"></a>
+<a id="__codelineno-9-16" name="__codelineno-9-16" href="#__codelineno-9-16"></a><span class="w">        </span><span class="bp">Self</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-17" name="__codelineno-9-17" href="#__codelineno-9-17"></a><span class="w">            </span><span class="n">workbook</span><span class="p">:</span><span class="w"> </span><span class="nc">Workbook</span><span class="p">::</span><span class="n">new</span><span class="p">(),</span>
+<a id="__codelineno-9-18" name="__codelineno-9-18" href="#__codelineno-9-18"></a><span class="w">            </span><span class="n">evaluator</span><span class="p">:</span><span class="w"> </span><span class="nc">FormulaEvaluator</span><span class="p">::</span><span class="n">new</span><span class="p">(),</span>
+<a id="__codelineno-9-19" name="__codelineno-9-19" href="#__codelineno-9-19"></a><span class="w">            </span><span class="n">history</span><span class="p">:</span><span class="w"> </span><span class="nc">HistoryManager</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span>
+<a id="__codelineno-9-20" name="__codelineno-9-20" href="#__codelineno-9-20"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-9-21" name="__codelineno-9-21" href="#__codelineno-9-21"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-22" name="__codelineno-9-22" href="#__codelineno-9-22"></a>
+<a id="__codelineno-9-23" name="__codelineno-9-23" href="#__codelineno-9-23"></a><span class="w">    </span><span class="c1">// Set cell value</span>
+<a id="__codelineno-9-24" name="__codelineno-9-24" href="#__codelineno-9-24"></a><span class="w">    </span><span class="cp">#[wasm_bindgen(js_name = setCellValue)]</span>
+<a id="__codelineno-9-25" name="__codelineno-9-25" href="#__codelineno-9-25"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">set_cell_value</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">value</span><span class="p">:</span><span class="w"> </span><span class="nc">JsValue</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">JsValue</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">cell_value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">js_to_cell_value</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-9-27" name="__codelineno-9-27" href="#__codelineno-9-27"></a>
+<a id="__codelineno-9-28" name="__codelineno-9-28" href="#__codelineno-9-28"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">SetCellCommand</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-29" name="__codelineno-9-29" href="#__codelineno-9-29"></a><span class="w">            </span><span class="n">row</span><span class="p">,</span>
+<a id="__codelineno-9-30" name="__codelineno-9-30" href="#__codelineno-9-30"></a><span class="w">            </span><span class="n">col</span><span class="p">,</span>
+<a id="__codelineno-9-31" name="__codelineno-9-31" href="#__codelineno-9-31"></a><span class="w">            </span><span class="n">new_value</span><span class="p">:</span><span class="w"> </span><span class="nc">cell_value</span><span class="p">,</span>
+<a id="__codelineno-9-32" name="__codelineno-9-32" href="#__codelineno-9-32"></a><span class="w">            </span><span class="n">old_value</span><span class="p">:</span><span class="w"> </span><span class="nc">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">.</span><span class="n">get_cell_value</span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">).</span><span class="n">clone</span><span class="p">(),</span>
+<a id="__codelineno-9-33" name="__codelineno-9-33" href="#__codelineno-9-33"></a><span class="w">        </span><span class="p">};</span>
+<a id="__codelineno-9-34" name="__codelineno-9-34" href="#__codelineno-9-34"></a>
+<a id="__codelineno-9-35" name="__codelineno-9-35" href="#__codelineno-9-35"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">history</span><span class="p">.</span><span class="n">execute</span><span class="p">(</span><span class="nb">Box</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">command</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">)</span>
+<a id="__codelineno-9-36" name="__codelineno-9-36" href="#__codelineno-9-36"></a><span class="w">            </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">JsValue</span><span class="p">::</span><span class="n">from_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">.</span><span class="n">to_string</span><span class="p">()))</span>
+<a id="__codelineno-9-37" name="__codelineno-9-37" href="#__codelineno-9-37"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-38" name="__codelineno-9-38" href="#__codelineno-9-38"></a>
+<a id="__codelineno-9-39" name="__codelineno-9-39" href="#__codelineno-9-39"></a><span class="w">    </span><span class="c1">// Get cell data</span>
+<a id="__codelineno-9-40" name="__codelineno-9-40" href="#__codelineno-9-40"></a><span class="w">    </span><span class="cp">#[wasm_bindgen(js_name = getCellData)]</span>
+<a id="__codelineno-9-41" name="__codelineno-9-41" href="#__codelineno-9-41"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">get_cell_data</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="n">JsValue</span><span class="p">,</span><span class="w"> </span><span class="n">JsValue</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-42" name="__codelineno-9-42" href="#__codelineno-9-42"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">cell</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">.</span><span class="n">get_cell</span><span class="p">(</span><span class="n">row</span><span class="p">,</span><span class="w"> </span><span class="n">col</span><span class="p">)</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-9-43" name="__codelineno-9-43" href="#__codelineno-9-43"></a>
+<a id="__codelineno-9-44" name="__codelineno-9-44" href="#__codelineno-9-44"></a><span class="w">        </span><span class="c1">// Convert to JavaScript object</span>
+<a id="__codelineno-9-45" name="__codelineno-9-45" href="#__codelineno-9-45"></a><span class="w">        </span><span class="kd">let</span><span class="w"> </span><span class="n">obj</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">js_sys</span><span class="p">::</span><span class="n">Object</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<a id="__codelineno-9-46" name="__codelineno-9-46" href="#__codelineno-9-46"></a><span class="w">        </span><span class="n">js_sys</span><span class="p">::</span><span class="n">Reflect</span><span class="p">::</span><span class="n">set</span><span class="p">(</span><span class="o">&amp;</span><span class="n">obj</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="s">&quot;value&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">cell_value_to_js</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cell</span><span class="p">.</span><span class="n">value</span><span class="p">))</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-9-47" name="__codelineno-9-47" href="#__codelineno-9-47"></a><span class="w">        </span><span class="n">js_sys</span><span class="p">::</span><span class="n">Reflect</span><span class="p">::</span><span class="n">set</span><span class="p">(</span><span class="o">&amp;</span><span class="n">obj</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="s">&quot;formula&quot;</span><span class="p">.</span><span class="n">into</span><span class="p">(),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">JsValue</span><span class="p">::</span><span class="n">from_str</span><span class="p">(</span><span class="n">cell</span><span class="p">.</span><span class="n">formula</span><span class="p">.</span><span class="n">as_deref</span><span class="p">().</span><span class="n">unwrap_or</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">)))</span><span class="o">?</span><span class="p">;</span>
+<a id="__codelineno-9-48" name="__codelineno-9-48" href="#__codelineno-9-48"></a>
+<a id="__codelineno-9-49" name="__codelineno-9-49" href="#__codelineno-9-49"></a><span class="w">        </span><span class="nb">Ok</span><span class="p">(</span><span class="n">obj</span><span class="p">.</span><span class="n">into</span><span class="p">())</span>
+<a id="__codelineno-9-50" name="__codelineno-9-50" href="#__codelineno-9-50"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-51" name="__codelineno-9-51" href="#__codelineno-9-51"></a>
+<a id="__codelineno-9-52" name="__codelineno-9-52" href="#__codelineno-9-52"></a><span class="w">    </span><span class="c1">// Undo/Redo</span>
+<a id="__codelineno-9-53" name="__codelineno-9-53" href="#__codelineno-9-53"></a><span class="w">    </span><span class="cp">#[wasm_bindgen]</span>
+<a id="__codelineno-9-54" name="__codelineno-9-54" href="#__codelineno-9-54"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">undo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">JsValue</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-55" name="__codelineno-9-55" href="#__codelineno-9-55"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">history</span><span class="p">.</span><span class="n">undo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">)</span>
+<a id="__codelineno-9-56" name="__codelineno-9-56" href="#__codelineno-9-56"></a><span class="w">            </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">JsValue</span><span class="p">::</span><span class="n">from_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">.</span><span class="n">to_string</span><span class="p">()))</span>
+<a id="__codelineno-9-57" name="__codelineno-9-57" href="#__codelineno-9-57"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-58" name="__codelineno-9-58" href="#__codelineno-9-58"></a>
+<a id="__codelineno-9-59" name="__codelineno-9-59" href="#__codelineno-9-59"></a><span class="w">    </span><span class="cp">#[wasm_bindgen]</span>
+<a id="__codelineno-9-60" name="__codelineno-9-60" href="#__codelineno-9-60"></a><span class="w">    </span><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">redo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nb">Result</span><span class="o">&lt;</span><span class="p">(),</span><span class="w"> </span><span class="n">JsValue</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-9-61" name="__codelineno-9-61" href="#__codelineno-9-61"></a><span class="w">        </span><span class="bp">self</span><span class="p">.</span><span class="n">history</span><span class="p">.</span><span class="n">redo</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">workbook</span><span class="p">)</span>
+<a id="__codelineno-9-62" name="__codelineno-9-62" href="#__codelineno-9-62"></a><span class="w">            </span><span class="p">.</span><span class="n">map_err</span><span class="p">(</span><span class="o">|</span><span class="n">e</span><span class="o">|</span><span class="w"> </span><span class="n">JsValue</span><span class="p">::</span><span class="n">from_str</span><span class="p">(</span><span class="o">&amp;</span><span class="n">e</span><span class="p">.</span><span class="n">to_string</span><span class="p">()))</span>
+<a id="__codelineno-9-63" name="__codelineno-9-63" href="#__codelineno-9-63"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-9-64" name="__codelineno-9-64" href="#__codelineno-9-64"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h3 id="6-data-bridge-sheet-server">6. data-bridge-sheet-server<a class="headerlink" href="#6-data-bridge-sheet-server" title="Permanent link">&para;</a></h3>
+<p><strong>Responsibility:</strong> Collaboration server with CRDT sync.</p>
+<h4 id="architecture_1">Architecture<a class="headerlink" href="#architecture_1" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1">// Axum server with WebSocket support</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="cp">#[tokio::main]</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">main</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">app</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Router</span><span class="p">::</span><span class="n">new</span><span class="p">()</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">        </span><span class="p">.</span><span class="n">route</span><span class="p">(</span><span class="s">&quot;/api/workbooks&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">get</span><span class="p">(</span><span class="n">list_workbooks</span><span class="p">).</span><span class="n">post</span><span class="p">(</span><span class="n">create_workbook</span><span class="p">))</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">        </span><span class="p">.</span><span class="n">route</span><span class="p">(</span><span class="s">&quot;/api/workbooks/:id&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">get</span><span class="p">(</span><span class="n">get_workbook</span><span class="p">).</span><span class="n">put</span><span class="p">(</span><span class="n">update_workbook</span><span class="p">).</span><span class="n">delete</span><span class="p">(</span><span class="n">delete_workbook</span><span class="p">))</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">        </span><span class="p">.</span><span class="n">route</span><span class="p">(</span><span class="s">&quot;/ws/:workbook_id&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">get</span><span class="p">(</span><span class="n">websocket_handler</span><span class="p">))</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">        </span><span class="p">.</span><span class="n">layer</span><span class="p">(</span><span class="n">CorsLayer</span><span class="p">::</span><span class="n">permissive</span><span class="p">())</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">        </span><span class="p">.</span><span class="n">layer</span><span class="p">(</span><span class="n">TraceLayer</span><span class="p">::</span><span class="n">new_for_http</span><span class="p">());</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">listener</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">tokio</span><span class="p">::</span><span class="n">net</span><span class="p">::</span><span class="n">TcpListener</span><span class="p">::</span><span class="n">bind</span><span class="p">(</span><span class="s">&quot;0.0.0.0:8080&quot;</span><span class="p">).</span><span class="k">await</span><span class="p">.</span><span class="n">unwrap</span><span class="p">();</span>
+<a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="w">    </span><span class="n">axum</span><span class="p">::</span><span class="n">serve</span><span class="p">(</span><span class="n">listener</span><span class="p">,</span><span class="w"> </span><span class="n">app</span><span class="p">).</span><span class="k">await</span><span class="p">.</span><span class="n">unwrap</span><span class="p">();</span>
+<a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="p">}</span>
+<a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>
+<a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a><span class="c1">// WebSocket handler</span>
+<a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">websocket_handler</span><span class="p">(</span>
+<a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a><span class="w">    </span><span class="n">ws</span><span class="p">:</span><span class="w"> </span><span class="nc">WebSocketUpgrade</span><span class="p">,</span>
+<a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="w">    </span><span class="n">Path</span><span class="p">(</span><span class="n">workbook_id</span><span class="p">):</span><span class="w"> </span><span class="nc">Path</span><span class="o">&lt;</span><span class="nb">String</span><span class="o">&gt;</span><span class="p">,</span>
+<a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">impl</span><span class="w"> </span><span class="n">IntoResponse</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="w">    </span><span class="n">ws</span><span class="p">.</span><span class="n">on_upgrade</span><span class="p">(</span><span class="k">move</span><span class="w"> </span><span class="o">|</span><span class="n">socket</span><span class="o">|</span><span class="w"> </span><span class="n">handle_socket</span><span class="p">(</span><span class="n">socket</span><span class="p">,</span><span class="w"> </span><span class="n">workbook_id</span><span class="p">))</span>
+<a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a><span class="p">}</span>
+<a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>
+<a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a><span class="k">async</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">handle_socket</span><span class="p">(</span><span class="n">socket</span><span class="p">:</span><span class="w"> </span><span class="nc">WebSocket</span><span class="p">,</span><span class="w"> </span><span class="n">workbook_id</span><span class="p">:</span><span class="w"> </span><span class="nb">String</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="p">(</span><span class="k">mut</span><span class="w"> </span><span class="n">sender</span><span class="p">,</span><span class="w"> </span><span class="k">mut</span><span class="w"> </span><span class="n">receiver</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">socket</span><span class="p">.</span><span class="n">split</span><span class="p">();</span>
+<a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a>
+<a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a><span class="w">    </span><span class="c1">// Load Yjs document</span>
+<a id="__codelineno-10-27" name="__codelineno-10-27" href="#__codelineno-10-27"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">doc</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">YDoc</span><span class="p">::</span><span class="n">new</span><span class="p">();</span>
+<a id="__codelineno-10-28" name="__codelineno-10-28" href="#__codelineno-10-28"></a>
+<a id="__codelineno-10-29" name="__codelineno-10-29" href="#__codelineno-10-29"></a><span class="w">    </span><span class="c1">// Subscribe to updates</span>
+<a id="__codelineno-10-30" name="__codelineno-10-30" href="#__codelineno-10-30"></a><span class="w">    </span><span class="kd">let</span><span class="w"> </span><span class="n">subscription</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">doc</span><span class="p">.</span><span class="n">observe_update_v1</span><span class="p">(</span><span class="k">move</span><span class="w"> </span><span class="o">|</span><span class="n">_txn</span><span class="p">,</span><span class="w"> </span><span class="n">update</span><span class="o">|</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-31" name="__codelineno-10-31" href="#__codelineno-10-31"></a><span class="w">        </span><span class="c1">// Broadcast update to all connected clients</span>
+<a id="__codelineno-10-32" name="__codelineno-10-32" href="#__codelineno-10-32"></a><span class="w">        </span><span class="n">broadcast_update</span><span class="p">(</span><span class="o">&amp;</span><span class="n">workbook_id</span><span class="p">,</span><span class="w"> </span><span class="n">update</span><span class="p">);</span>
+<a id="__codelineno-10-33" name="__codelineno-10-33" href="#__codelineno-10-33"></a><span class="w">    </span><span class="p">});</span>
+<a id="__codelineno-10-34" name="__codelineno-10-34" href="#__codelineno-10-34"></a>
+<a id="__codelineno-10-35" name="__codelineno-10-35" href="#__codelineno-10-35"></a><span class="w">    </span><span class="c1">// Handle incoming messages</span>
+<a id="__codelineno-10-36" name="__codelineno-10-36" href="#__codelineno-10-36"></a><span class="w">    </span><span class="k">while</span><span class="w"> </span><span class="kd">let</span><span class="w"> </span><span class="nb">Some</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">receiver</span><span class="p">.</span><span class="n">next</span><span class="p">().</span><span class="k">await</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-37" name="__codelineno-10-37" href="#__codelineno-10-37"></a><span class="w">        </span><span class="k">match</span><span class="w"> </span><span class="n">msg</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-38" name="__codelineno-10-38" href="#__codelineno-10-38"></a><span class="w">            </span><span class="nb">Ok</span><span class="p">(</span><span class="n">Message</span><span class="p">::</span><span class="n">Binary</span><span class="p">(</span><span class="n">data</span><span class="p">))</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-39" name="__codelineno-10-39" href="#__codelineno-10-39"></a><span class="w">                </span><span class="c1">// Apply update to Yjs document</span>
+<a id="__codelineno-10-40" name="__codelineno-10-40" href="#__codelineno-10-40"></a><span class="w">                </span><span class="kd">let</span><span class="w"> </span><span class="n">update</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Update</span><span class="p">::</span><span class="n">decode_v1</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="p">).</span><span class="n">unwrap</span><span class="p">();</span>
+<a id="__codelineno-10-41" name="__codelineno-10-41" href="#__codelineno-10-41"></a><span class="w">                </span><span class="n">doc</span><span class="p">.</span><span class="n">apply_update</span><span class="p">(</span><span class="n">update</span><span class="p">);</span>
+<a id="__codelineno-10-42" name="__codelineno-10-42" href="#__codelineno-10-42"></a><span class="w">            </span><span class="p">}</span>
+<a id="__codelineno-10-43" name="__codelineno-10-43" href="#__codelineno-10-43"></a><span class="w">            </span><span class="n">_</span><span class="w"> </span><span class="o">=&gt;</span><span class="w"> </span><span class="k">break</span><span class="p">,</span>
+<a id="__codelineno-10-44" name="__codelineno-10-44" href="#__codelineno-10-44"></a><span class="w">        </span><span class="p">}</span>
+<a id="__codelineno-10-45" name="__codelineno-10-45" href="#__codelineno-10-45"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-10-46" name="__codelineno-10-46" href="#__codelineno-10-46"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h2 id="performance-optimizations">Performance Optimizations<a class="headerlink" href="#performance-optimizations" title="Permanent link">&para;</a></h2>
+<h3 id="1-morton-encoding-benefits">1. Morton Encoding Benefits<a class="headerlink" href="#1-morton-encoding-benefits" title="Permanent link">&para;</a></h3>
+<p><strong>Spatial Locality:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>Traditional (row, col):
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  (0,0), (0,1), (0,2), (1,0), (1,1), (1,2)
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  Keys: random distribution
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>Morton encoding:
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>  (0,0)=0, (0,1)=1, (1,0)=2, (1,1)=3, (0,2)=4, (1,2)=6
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>  Keys: nearby cells have nearby keys
+<a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>  Cache-friendly: sequential access
+</code></pre></div></p>
+<p><strong>Range Query Performance:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>Without Morton: O(n) scan of all cells
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>With Morton: O(log n) range query on sorted keys
+</code></pre></div></p>
+<h3 id="2-sparse-storage">2. Sparse Storage<a class="headerlink" href="#2-sparse-storage" title="Permanent link">&para;</a></h3>
+<p>Only non-empty cells consume memory:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// 1 million row × 1000 column sheet with 10,000 filled cells</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">Traditional</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="mi">000</span><span class="p">,</span><span class="mi">000</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="mi">000</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">sizeof</span><span class="p">(</span><span class="n">Cell</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">~</span><span class="mi">30</span><span class="w"> </span><span class="n">GB</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">Sparse</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span><span class="mi">000</span><span class="w"> </span><span class="err">×</span><span class="w"> </span><span class="n">sizeof</span><span class="p">(</span><span class="n">Cell</span><span class="p">)</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">~</span><span class="mi">300</span><span class="w"> </span><span class="n">KB</span>
+<a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+<a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="n">Savings</span><span class="p">:</span><span class="w"> </span><span class="mf">99.999</span><span class="o">%</span>
+</code></pre></div>
+<h3 id="3-zero-copy-wasm">3. Zero-copy WASM<a class="headerlink" href="#3-zero-copy-wasm" title="Permanent link">&para;</a></h3>
+<p>Direct memory access from JavaScript:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="cp">#[wasm_bindgen]</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">pub</span><span class="w"> </span><span class="k">fn</span><span class="w"> </span><span class="nf">get_viewport</span><span class="p">(</span><span class="o">&amp;</span><span class="bp">self</span><span class="p">,</span><span class="w"> </span><span class="n">start_row</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">start_col</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">rows</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">,</span><span class="w"> </span><span class="n">cols</span><span class="p">:</span><span class="w"> </span><span class="kt">u32</span><span class="p">)</span><span class="w"> </span><span class="p">-&gt;</span><span class="w"> </span><span class="nc">js_sys</span><span class="p">::</span><span class="n">Uint8Array</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="c1">// Return raw bytes - no copying!</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="k">unsafe</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">        </span><span class="n">js_sys</span><span class="p">::</span><span class="n">Uint8Array</span><span class="p">::</span><span class="n">view</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">viewport_buffer</span><span class="p">.</span><span class="n">as_slice</span><span class="p">())</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="p">}</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="p">}</span>
+</code></pre></div>
+<h3 id="4-formula-caching">4. Formula Caching<a class="headerlink" href="#4-formula-caching" title="Permanent link">&para;</a></h3>
+<p>Lazy evaluation with dependency tracking:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="c1">// Only re-evaluate when dependencies change</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="k">if</span><span class="w"> </span><span class="o">!</span><span class="bp">self</span><span class="p">.</span><span class="n">cache</span><span class="p">.</span><span class="n">is_dirty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cell_ref</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="bp">self</span><span class="p">.</span><span class="n">cache</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="o">&amp;</span><span class="n">cell_ref</span><span class="p">);</span>
+<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h2 id="data-flow">Data Flow<a class="headerlink" href="#data-flow" title="Permanent link">&para;</a></h2>
+<h3 id="cell-edit-flow">Cell Edit Flow<a class="headerlink" href="#cell-edit-flow" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>1. User types in cell → JavaScript event
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>2. JavaScript calls WASM: rusheet.setCellValue(row, col, value)
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>3. WASM creates SetCellCommand
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a>4. Command executes → Workbook updated
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>5. Command pushed to undo stack
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>6. WASM broadcasts change event
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a>7. JavaScript updates canvas
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>8. If collaboration enabled:
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>   - Change sent to Yjs
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>   - Yjs broadcasts to WebSocket
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a>   - Server receives and stores
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a>   - Server broadcasts to other clients
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a>   - Other clients apply change via CRDT
+</code></pre></div>
+<h3 id="formula-evaluation-flow">Formula Evaluation Flow<a class="headerlink" href="#formula-evaluation-flow" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>1. User enters formula: =SUM(A1:A10)
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>2. Parser creates AST: Function(&quot;SUM&quot;, [Range(A1, A10)])
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a>3. Evaluator walks AST:
+<a id="__codelineno-17-4" name="__codelineno-17-4" href="#__codelineno-17-4"></a>   - Range(A1:A10) → [value1, value2, ..., value10]
+<a id="__codelineno-17-5" name="__codelineno-17-5" href="#__codelineno-17-5"></a>   - SUM function reduces: value1 + value2 + ... + value10
+<a id="__codelineno-17-6" name="__codelineno-17-6" href="#__codelineno-17-6"></a>4. Result cached with dependencies: [A1, A2, ..., A10]
+<a id="__codelineno-17-7" name="__codelineno-17-7" href="#__codelineno-17-7"></a>5. If A5 changes:
+<a id="__codelineno-17-8" name="__codelineno-17-8" href="#__codelineno-17-8"></a>   - Dependency tracker detects
+<a id="__codelineno-17-9" name="__codelineno-17-9" href="#__codelineno-17-9"></a>   - Formula re-evaluated
+<a id="__codelineno-17-10" name="__codelineno-17-10" href="#__codelineno-17-10"></a>   - Display value updated
+</code></pre></div>
+<h3 id="collaboration-sync-flow">Collaboration Sync Flow<a class="headerlink" href="#collaboration-sync-flow" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>1. User A edits cell (row=5, col=3, value=&quot;Hello&quot;)
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>2. Yjs creates operation: { type: &quot;set&quot;, path: [5, 3], value: &quot;Hello&quot; }
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>3. Operation sent to server via WebSocket
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>4. Server applies operation to Y.Doc
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>5. Server persists to PostgreSQL
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>6. Server broadcasts to all clients
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a>7. User B receives operation
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>8. Yjs applies operation (CRDT merge)
+<a id="__codelineno-18-9" name="__codelineno-18-9" href="#__codelineno-18-9"></a>9. User B&#39;s workbook updated
+<a id="__codelineno-18-10" name="__codelineno-18-10" href="#__codelineno-18-10"></a>10. User B&#39;s canvas re-rendered
+</code></pre></div>
+<hr />
+<h2 id="future-enhancements">Future Enhancements<a class="headerlink" href="#future-enhancements" title="Permanent link">&para;</a></h2>
+<h3 id="planned-features">Planned Features<a class="headerlink" href="#planned-features" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Array Formulas</strong> - ARRAYFORMULA support</li>
+<li><strong>Named Ranges</strong> - Define named ranges for formulas</li>
+<li><strong>Conditional Formatting</strong> - Highlight cells based on rules</li>
+<li><strong>Data Validation</strong> - Dropdown lists, constraints</li>
+<li><strong>Pivot Tables</strong> - Interactive data summarization</li>
+<li><strong>Charts</strong> - Visualizations integrated with Chart.js</li>
+</ol>
+<h3 id="performance-improvements">Performance Improvements<a class="headerlink" href="#performance-improvements" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Incremental Formula Evaluation</strong> - Only re-evaluate changed cells</li>
+<li><strong>Parallel Formula Evaluation</strong> - Evaluate independent formulas in parallel (Rayon)</li>
+<li><strong>Streaming CRDT Sync</strong> - Reduce memory usage for large documents</li>
+<li><strong>Compression</strong> - Compress cell data in database</li>
+</ol>
+<hr />
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://en.wikipedia.org/wiki/Z-order_curve">Morton Encoding (Z-order curve)</a></li>
+<li><a href="https://crdt.tech/">CRDT (Conflict-free Replicated Data Types)</a></li>
+<li><a href="https://github.com/yjs/yjs">Yjs CRDT Framework</a></li>
+<li><a href="https://github.com/y-crdt/y-crdt">yrs (Rust implementation of Yjs)</a></li>
+<li><a href="https://rustwasm.github.io/wasm-bindgen/">wasm-bindgen</a></li>
+<li><a href="https://github.com/tokio-rs/axum">Axum Web Framework</a></li>
+</ul>
+<hr />
+<p><strong>Last Updated:</strong> 2026-01-08
+<strong>Maintainer:</strong> data-bridge team</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

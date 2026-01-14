@@ -1,0 +1,1129 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/legacy/deploy/TESTING/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>OpenTelemetry Tracing - Local Testing Guide - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#opentelemetry-tracing-local-testing-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              OpenTelemetry Tracing - Local Testing Guide
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#feature-flag-requirement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feature Flag Requirement
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#prerequisites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Prerequisites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#method-1-console-exporter-quick-verification" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 1: Console Exporter (Quick Verification)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#method-2-local-otel-collector-jaeger-full-stack" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Method 2: Local OTel Collector + Jaeger (Full Stack)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verification-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verification Checklist
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Verification Checklist">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace-context-propagation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trace Context Propagation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#span-attributes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Span Attributes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#export-and-visualization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export and Visualization
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#troubleshooting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Troubleshooting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Troubleshooting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#issue-opentelemetry-not-installed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue: "OpenTelemetry not installed"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issue-connection-refused-to-localhost4317" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue: "Connection refused to localhost:4317"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issue-no-traces-visible-in-jaeger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue: "No traces visible in Jaeger"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issue-trace-ids-dont-match-between-rust-and-python" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue: "Trace IDs don't match between Rust and Python"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issue-python-span-has-no-parent_id" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issue: "Python span has no parent_id"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        References
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="opentelemetry-tracing-local-testing-guide">OpenTelemetry Tracing - Local Testing Guide<a class="headerlink" href="#opentelemetry-tracing-local-testing-guide" title="Permanent link">&para;</a></h1>
+<p>This guide explains how to verify OpenTelemetry distributed tracing locally before deploying to GCP.</p>
+<h2 id="feature-flag-requirement">Feature Flag Requirement<a class="headerlink" href="#feature-flag-requirement" title="Permanent link">&para;</a></h2>
+<p>The observability features are <strong>optional</strong> and must be explicitly enabled:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Build Rust with observability</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>cargo<span class="w"> </span>build<span class="w"> </span>-p<span class="w"> </span>data-bridge-api<span class="w"> </span>--features<span class="w"> </span>observability
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Or use maturin for Python package</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>maturin<span class="w"> </span>develop<span class="w"> </span>--features<span class="w"> </span>observability
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Install Python dependencies</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;data-bridge[observability]&quot;</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># or: pip install opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp</span>
+</code></pre></div>
+<p>For more details on the observability feature, see <a href="../OBSERVABILITY/">OBSERVABILITY.md</a>.</p>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>┌─────────────────────────────────────────────────────────────┐
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>│                   PyLoop HTTP Server                        │
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│  ┌──────────────────────────────────────────────────────┐  │
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│  │  Rust Layer (Gateway)                                │  │
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>│  │  - Creates root span: &quot;http.request&quot;                 │  │
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│  │  - Injects trace context into headers               │  │
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│  │  - Span attributes: http.method, http.target, etc.  │  │
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│  └────────────────┬─────────────────────────────────────┘  │
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│                   │ W3C TraceContext Propagation            │
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│                   ▼                                          │
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│  ┌──────────────────────────────────────────────────────┐  │
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>│  │  Python Layer (Handler)                              │  │
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>│  │  - Extracts trace context from headers              │  │
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>│  │  - Creates child span: &quot;pyloop.request&quot;             │  │
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>│  │  - Inherits trace_id from Rust root span            │  │
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>│  └────────────────┬─────────────────────────────────────┘  │
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>└───────────────────┼──────────────────────────────────────────┘
+<a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>                    │ OTLP (gRPC or HTTP)
+<a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>                    ▼
+<a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>      ┌──────────────────────────────┐
+<a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>      │  OpenTelemetry Collector     │
+<a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>      │  - Receives traces via OTLP  │
+<a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>      │  - Batch processing          │
+<a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>      │  - Resource detection        │
+<a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a>      └──────────────┬───────────────┘
+<a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a>                     │
+<a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a>        ┌────────────┴────────────┐
+<a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a>        ▼                         ▼
+<a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a>  ┌──────────┐            ┌──────────┐
+<a id="__codelineno-1-30" name="__codelineno-1-30" href="#__codelineno-1-30"></a>  │  Jaeger  │            │ Console  │
+<a id="__codelineno-1-31" name="__codelineno-1-31" href="#__codelineno-1-31"></a>  │  (UI)    │            │ (Debug)  │
+<a id="__codelineno-1-32" name="__codelineno-1-32" href="#__codelineno-1-32"></a>  └──────────┘            └──────────┘
+</code></pre></div>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>Install Python dependencies:</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span>opentelemetry-api<span class="w"> </span>opentelemetry-sdk<span class="w"> </span>opentelemetry-exporter-otlp<span class="w"> </span>httpx
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Build data-bridge with PyLoop support:</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>maturin<span class="w"> </span>develop<span class="w"> </span>--features<span class="w"> </span>pyloop,api
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install Docker and Docker Compose</strong> (for local OTel Collector)</p>
+</li>
+</ol>
+<h2 id="test-methods">Test Methods<a class="headerlink" href="#test-methods" title="Permanent link">&para;</a></h2>
+<h3 id="method-1-console-exporter-quick-verification">Method 1: Console Exporter (Quick Verification)<a class="headerlink" href="#method-1-console-exporter-quick-verification" title="Permanent link">&para;</a></h3>
+<p>This method uses <code>ConsoleSpanExporter</code> to print spans directly to stdout. No external dependencies required.</p>
+<p><strong>Run:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>tests/verify_tracing.py
+</code></pre></div></p>
+<p><strong>Expected Output:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>Starting PyLoop server in background...
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>Waiting for server to be ready...
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>Sending test requests...
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>[Test 1] GET /
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  Status: 200
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>  Response: {&#39;message&#39;: &#39;PyLoop with distributed tracing&#39;, ...}
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>  ✓ Test 1 passed
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>{
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>  &quot;name&quot;: &quot;http.request&quot;,
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>  &quot;context&quot;: {
+<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>    &quot;trace_id&quot;: &quot;0x1234567890abcdef1234567890abcdef&quot;,
+<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a>    &quot;span_id&quot;: &quot;0x1234567890abcdef&quot;,
+<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>    &quot;trace_state&quot;: &quot;[]&quot;
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a>  },
+<a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>  &quot;kind&quot;: &quot;SpanKind.SERVER&quot;,
+<a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>  &quot;parent_id&quot;: null,
+<a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>  &quot;start_time&quot;: &quot;2024-01-01T12:00:00.000000Z&quot;,
+<a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a>  &quot;end_time&quot;: &quot;2024-01-01T12:00:00.100000Z&quot;,
+<a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a>  &quot;status&quot;: {
+<a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a>    &quot;status_code&quot;: &quot;UNSET&quot;
+<a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a>  },
+<a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a>  &quot;attributes&quot;: {
+<a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a>    &quot;http.method&quot;: &quot;GET&quot;,
+<a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a>    &quot;http.target&quot;: &quot;/&quot;,
+<a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>    &quot;http.scheme&quot;: &quot;http&quot;,
+<a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a>    &quot;otel.kind&quot;: &quot;server&quot;
+<a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>  },
+<a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a>  ...
+<a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a>}
+<a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a>
+<a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a>{
+<a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a>  &quot;name&quot;: &quot;pyloop.request&quot;,
+<a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a>  &quot;context&quot;: {
+<a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a>    &quot;trace_id&quot;: &quot;0x1234567890abcdef1234567890abcdef&quot;,  # ← Same trace_id!
+<a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>    &quot;span_id&quot;: &quot;0xabcdef1234567890&quot;,
+<a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a>    &quot;trace_state&quot;: &quot;[]&quot;
+<a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>  },
+<a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a>  &quot;kind&quot;: &quot;SpanKind.INTERNAL&quot;,
+<a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a>  &quot;parent_id&quot;: &quot;0x1234567890abcdef&quot;,  # ← Points to Rust span!
+<a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a>  &quot;start_time&quot;: &quot;2024-01-01T12:00:00.050000Z&quot;,
+<a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a>  &quot;end_time&quot;: &quot;2024-01-01T12:00:00.090000Z&quot;,
+<a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a>  ...
+<a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a>}
+</code></pre></div></p>
+<p><strong>What to verify:</strong>
+- ✓ Both spans share the same <code>trace_id</code>
+- ✓ Python span's <code>parent_id</code> matches Rust span's <code>span_id</code>
+- ✓ Span names: <code>http.request</code> (Rust) and <code>pyloop.request</code> (Python)
+- ✓ Span attributes include HTTP method, route, status code</p>
+<h3 id="method-2-local-otel-collector-jaeger-full-stack">Method 2: Local OTel Collector + Jaeger (Full Stack)<a class="headerlink" href="#method-2-local-otel-collector-jaeger-full-stack" title="Permanent link">&para;</a></h3>
+<p>This method runs a complete observability stack locally using Docker Compose.</p>
+<p><strong>1. Start OTel Collector and Jaeger:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">cd</span><span class="w"> </span>deploy
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>docker-compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.otel.yml<span class="w"> </span>up<span class="w"> </span>-d
+</code></pre></div></p>
+<p><strong>2. Verify containers are running:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>docker<span class="w"> </span>ps
+</code></pre></div></p>
+<p>Expected output:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>CONTAINER ID   IMAGE                                      PORTS
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>abc123def456   otel/opentelemetry-collector-contrib:...   4317-4318,8888,13133,55679
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>def789ghi012   jaegertracing/all-in-one:1.51              14250,14268,16686
+</code></pre></div></p>
+<p><strong>3. Update verify_tracing.py to use OTLP exporter:</strong></p>
+<p>Edit <code>tests/verify_tracing.py</code>, replace <code>ConsoleSpanExporter</code> with <code>OTLPSpanExporter</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.exporter.otlp.proto.grpc.trace_exporter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OTLPSpanExporter</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="c1"># Replace this:</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">console_exporter</span> <span class="o">=</span> <span class="n">ConsoleSpanExporter</span><span class="p">()</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="n">span_processor</span> <span class="o">=</span> <span class="n">BatchSpanProcessor</span><span class="p">(</span><span class="n">console_exporter</span><span class="p">)</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="c1"># With this:</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="n">otlp_exporter</span> <span class="o">=</span> <span class="n">OTLPSpanExporter</span><span class="p">(</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">endpoint</span><span class="o">=</span><span class="s2">&quot;http://localhost:4317&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">insecure</span><span class="o">=</span><span class="kc">True</span>
+<a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a><span class="p">)</span>
+<a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a><span class="n">span_processor</span> <span class="o">=</span> <span class="n">BatchSpanProcessor</span><span class="p">(</span><span class="n">otlp_exporter</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>4. Run the verification script:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>python<span class="w"> </span>tests/verify_tracing.py
+</code></pre></div></p>
+<p><strong>5. Open Jaeger UI:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>http://localhost:16686
+</code></pre></div></p>
+<p><strong>6. View traces in Jaeger:</strong>
+- Select service: <code>data-bridge-api</code>
+- Click "Find Traces"
+- Click on a trace to see the full span hierarchy</p>
+<p><strong>Expected Jaeger visualization:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>http.request (Rust) ───┐  Duration: 100ms
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>                       │
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>                       └─► pyloop.request (Python)  Duration: 40ms
+</code></pre></div></p>
+<p><strong>7. Check OTel Collector logs:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>docker<span class="w"> </span>logs<span class="w"> </span>otel-collector
+</code></pre></div></p>
+<p>Expected output:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>2024-01-01T12:00:00.000Z  info  TracesExporter  {&quot;kind&quot;: &quot;exporter&quot;, &quot;data_type&quot;: &quot;traces&quot;, &quot;name&quot;: &quot;otlp/jaeger&quot;, &quot;traces_sent&quot;: 10, &quot;spans_sent&quot;: 20}
+</code></pre></div></p>
+<p><strong>8. Stop the stack:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>docker-compose<span class="w"> </span>-f<span class="w"> </span>docker-compose.otel.yml<span class="w"> </span>down
+</code></pre></div></p>
+<h2 id="verification-checklist">Verification Checklist<a class="headerlink" href="#verification-checklist" title="Permanent link">&para;</a></h2>
+<p>Use this checklist to verify distributed tracing works correctly:</p>
+<h3 id="trace-context-propagation">Trace Context Propagation<a class="headerlink" href="#trace-context-propagation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Rust creates root span with trace_id</li>
+<li>[ ] Rust injects trace context into HTTP headers (traceparent, tracestate)</li>
+<li>[ ] Python extracts trace context from headers</li>
+<li>[ ] Python creates child span with same trace_id</li>
+<li>[ ] Python span's parent_id matches Rust span's span_id</li>
+</ul>
+<h3 id="span-attributes">Span Attributes<a class="headerlink" href="#span-attributes" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Rust span includes: http.method, http.target, http.scheme, otel.kind</li>
+<li>[ ] Python span includes: http.method, http.route, http.status_code</li>
+<li>[ ] Both spans include resource attributes: service.name, service.version</li>
+</ul>
+<h3 id="export-and-visualization">Export and Visualization<a class="headerlink" href="#export-and-visualization" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Spans are exported to OTel Collector via OTLP</li>
+<li>[ ] OTel Collector forwards spans to Jaeger</li>
+<li>[ ] Traces visible in Jaeger UI with correct parent-child relationship</li>
+<li>[ ] Span timing makes sense (parent &gt;= child duration)</li>
+</ul>
+<h3 id="error-handling">Error Handling<a class="headerlink" href="#error-handling" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Failed requests (4xx, 5xx) create spans with error status</li>
+<li>[ ] Exception details captured in span events</li>
+<li>[ ] Error spans properly linked to parent spans</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h2>
+<h3 id="issue-opentelemetry-not-installed">Issue: "OpenTelemetry not installed"<a class="headerlink" href="#issue-opentelemetry-not-installed" title="Permanent link">&para;</a></h3>
+<p><strong>Solution:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>pip<span class="w"> </span>install<span class="w"> </span>opentelemetry-api<span class="w"> </span>opentelemetry-sdk<span class="w"> </span>opentelemetry-exporter-otlp
+</code></pre></div></p>
+<h3 id="issue-connection-refused-to-localhost4317">Issue: "Connection refused to localhost:4317"<a class="headerlink" href="#issue-connection-refused-to-localhost4317" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> OTel Collector not running</p>
+<p><strong>Solution:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>docker-compose<span class="w"> </span>-f<span class="w"> </span>deploy/docker-compose.otel.yml<span class="w"> </span>up<span class="w"> </span>-d
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>docker<span class="w"> </span>ps<span class="w">  </span><span class="c1"># Verify containers are running</span>
+</code></pre></div></p>
+<h3 id="issue-no-traces-visible-in-jaeger">Issue: "No traces visible in Jaeger"<a class="headerlink" href="#issue-no-traces-visible-in-jaeger" title="Permanent link">&para;</a></h3>
+<p><strong>Possible causes:</strong>
+1. OTel Collector not receiving traces
+2. Jaeger not receiving traces from collector
+3. Service name mismatch</p>
+<p><strong>Debug steps:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="c1"># Check OTel Collector logs</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>docker<span class="w"> </span>logs<span class="w"> </span>otel-collector
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="c1"># Check Jaeger logs</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>docker<span class="w"> </span>logs<span class="w"> </span>jaeger
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="c1"># Verify OTel Collector health</span>
+<a id="__codelineno-18-8" name="__codelineno-18-8" href="#__codelineno-18-8"></a>curl<span class="w"> </span>http://localhost:13133
+</code></pre></div></p>
+<h3 id="issue-trace-ids-dont-match-between-rust-and-python">Issue: "Trace IDs don't match between Rust and Python"<a class="headerlink" href="#issue-trace-ids-dont-match-between-rust-and-python" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> Trace context not properly propagated</p>
+<p><strong>Debug:</strong>
+1. Check that <code>inject_trace_context()</code> is called in Rust server.rs
+2. Verify Python middleware uses <code>TraceContextTextMapPropagator</code>
+3. Check HTTP headers contain <code>traceparent</code> header</p>
+<p><strong>Solution:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="c1"># Enable debug logging to see headers</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="nv">RUST_LOG</span><span class="o">=</span>debug<span class="w"> </span>python<span class="w"> </span>tests/verify_tracing.py
+</code></pre></div></p>
+<h3 id="issue-python-span-has-no-parent_id">Issue: "Python span has no parent_id"<a class="headerlink" href="#issue-python-span-has-no-parent_id" title="Permanent link">&para;</a></h3>
+<p><strong>Cause:</strong> Context extraction failed in Python</p>
+<p><strong>Debug:</strong>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="c1"># Add debug logging in OpenTelemetryMiddleware</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="n">carrier</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">headers</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Extracted carrier: </span><span class="si">{</span><span class="n">carrier</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a>
+<a id="__codelineno-20-5" name="__codelineno-20-5" href="#__codelineno-20-5"></a><span class="n">ctx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator</span><span class="o">.</span><span class="n">extract</span><span class="p">(</span><span class="n">carrier</span><span class="o">=</span><span class="n">carrier</span><span class="p">)</span>
+<a id="__codelineno-20-6" name="__codelineno-20-6" href="#__codelineno-20-6"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Extracted context: </span><span class="si">{</span><span class="n">ctx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</code></pre></div></p>
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<p>After local verification succeeds:</p>
+<ol>
+<li>
+<p><strong>Deploy to GKE:</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>kubectl<span class="w"> </span>apply<span class="w"> </span>-f<span class="w"> </span>deploy/gcp/k8s-manifests.yaml
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>View traces in Google Cloud Trace:</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a>https://console.cloud.google.com/traces
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Monitor with Cloud Monitoring:</strong>
+   <div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>https://console.cloud.google.com/monitoring
+</code></pre></div></p>
+</li>
+</ol>
+<h2 id="references">References<a class="headerlink" href="#references" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://opentelemetry.io/docs/instrumentation/python/">OpenTelemetry Python Docs</a></li>
+<li><a href="https://www.w3.org/TR/trace-context/">W3C Trace Context Specification</a></li>
+<li><a href="https://www.jaegertracing.io/docs/">Jaeger Documentation</a></li>
+<li><a href="https://opentelemetry.io/docs/collector/configuration/">OTel Collector Configuration</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

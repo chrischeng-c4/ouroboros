@@ -1,0 +1,1625 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/POSTGRESQL_EXTENSIONS/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>PostgreSQL Extensions Quick Reference - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#postgresql-extensions-quick-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PostgreSQL Extensions Quick Reference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#table-of-contents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Table of Contents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-text-search" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full-Text Search
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full-Text Search">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#to_tsvectorcolumn-configenglish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_tsvector(column, config="english")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#to_tsqueryquery-configenglish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_tsquery(query, config="english")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plainto_tsqueryquery-configenglish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plainto_tsquery(query, config="english")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#matchcolumn-query-configenglish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        match(column, query, config="english")
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rankcolumn-query-configenglish" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rank(column, query, config="english")
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-fts-indexes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating FTS Indexes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postgis-spatial-queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PostGIS Spatial Queries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="PostGIS Spatial Queries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#point-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Point Class
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Point Class">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#creating-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating Points
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#converting-to-sql" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Converting to SQL
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-well-known-text-wkt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From Well-Known Text (WKT)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geoquery-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GeoQuery Class
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GeoQuery Class">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#distancegeom1-geom2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        distance(geom1, geom2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dwithingeom1-geom2-distance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dwithin(geom1, geom2, distance)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#containsgeom1-geom2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        contains(geom1, geom2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#withingeom1-geom2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        within(geom1, geom2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#intersectsgeom1-geom2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        intersects(geom1, geom2)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#installing-postgis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installing PostGIS
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#array-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Array Operators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Array Operators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#available-methods_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Available Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Available Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#containscolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        contains(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#contained_bycolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        contained_by(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#overlapcolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        overlap(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#anycolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        any(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lengthcolumn" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        length(column)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-array-columns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating Array Columns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#jsonb-operators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        JSONB Operators
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="JSONB Operators">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#querybuilder-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        QueryBuilder Methods
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="QueryBuilder Methods">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#jsonb_containscolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jsonb_contains(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jsonb_contained_bycolumn-value" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jsonb_contained_by(column, value)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jsonb_has_keycolumn-key" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jsonb_has_key(column, key)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jsonb_has_any_keycolumn-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jsonb_has_any_key(column, keys)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#jsonb_has_all_keyscolumn-keys" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        jsonb_has_all_keys(column, keys)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chaining-jsonb-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chaining JSONB Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#creating-jsonb-indexes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Creating JSONB Indexes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#raiseload-n1-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RaiseLoad (N+1 Detection)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="RaiseLoad (N+1 Detection)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#import_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#basic-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#detecting-n1-queries-in-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Detecting N+1 Queries in Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#error-message" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error Message
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-use-raiseload" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use RaiseLoad
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixing-n1-queries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixing N+1 Queries
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#postgresql-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PostgreSQL Requirements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-tips" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Tips
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#additional-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Additional Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="postgresql-extensions-quick-reference">PostgreSQL Extensions Quick Reference<a class="headerlink" href="#postgresql-extensions-quick-reference" title="Permanent link">&para;</a></h1>
+<p>This guide covers advanced PostgreSQL-specific features available in data-bridge.</p>
+<h2 id="table-of-contents">Table of Contents<a class="headerlink" href="#table-of-contents" title="Permanent link">&para;</a></h2>
+<ol>
+<li><a href="#full-text-search">Full-Text Search</a></li>
+<li><a href="#postgis-spatial-queries">PostGIS Spatial Queries</a></li>
+<li><a href="#array-operators">Array Operators</a></li>
+<li><a href="#jsonb-operators">JSONB Operators</a></li>
+<li><a href="#raiseload-n1-detection">RaiseLoad (N+1 Detection)</a></li>
+</ol>
+<hr />
+<h2 id="full-text-search">Full-Text Search<a class="headerlink" href="#full-text-search" title="Permanent link">&para;</a></h2>
+<p>PostgreSQL's full-text search provides linguistic search capabilities.</p>
+<h3 id="import">Import<a class="headerlink" href="#import" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">FullTextSearch</span><span class="p">,</span> <span class="n">fts</span>
+</code></pre></div>
+<h3 id="available-methods">Available Methods<a class="headerlink" href="#available-methods" title="Permanent link">&para;</a></h3>
+<h4 id="to_tsvectorcolumn-configenglish"><code>to_tsvector(column, config="english")</code><a class="headerlink" href="#to_tsvectorcolumn-configenglish" title="Permanent link">&para;</a></h4>
+<p>Create a tsvector for full-text indexing.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">FullTextSearch</span><span class="o">.</span><span class="n">to_tsvector</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="c1"># Result: &quot;to_tsvector(&#39;english&#39;, content)&quot;</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># With custom language</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">FullTextSearch</span><span class="o">.</span><span class="n">to_tsvector</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="s2">&quot;spanish&quot;</span><span class="p">)</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Result: &quot;to_tsvector(&#39;spanish&#39;, content)&quot;</span>
+</code></pre></div>
+<h4 id="to_tsqueryquery-configenglish"><code>to_tsquery(query, config="english")</code><a class="headerlink" href="#to_tsqueryquery-configenglish" title="Permanent link">&para;</a></h4>
+<p>Create a tsquery for full-text search.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">FullTextSearch</span><span class="o">.</span><span class="n">to_tsquery</span><span class="p">(</span><span class="s2">&quot;python &amp; database&quot;</span><span class="p">)</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="c1"># Result: &quot;to_tsquery(&#39;english&#39;, &#39;python &amp; database&#39;)&quot;</span>
+</code></pre></div>
+<h4 id="plainto_tsqueryquery-configenglish"><code>plainto_tsquery(query, config="english")</code><a class="headerlink" href="#plainto_tsqueryquery-configenglish" title="Permanent link">&para;</a></h4>
+<p>Convert plain text to tsquery (automatically handles operators).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">FullTextSearch</span><span class="o">.</span><span class="n">plainto_tsquery</span><span class="p">(</span><span class="s2">&quot;python database&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="c1"># Result: &quot;plainto_tsquery(&#39;english&#39;, &#39;python database&#39;)&quot;</span>
+</code></pre></div>
+<h4 id="matchcolumn-query-configenglish"><code>match(column, query, config="english")</code><a class="headerlink" href="#matchcolumn-query-configenglish" title="Permanent link">&para;</a></h4>
+<p>Generate a complete match expression.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">fts</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;python programming&quot;</span><span class="p">)</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="c1"># Result: &quot;to_tsvector(&#39;english&#39;, content) @@ plainto_tsquery(&#39;english&#39;, &#39;python programming&#39;)&quot;</span>
+</code></pre></div>
+<h4 id="rankcolumn-query-configenglish"><code>rank(column, query, config="english")</code><a class="headerlink" href="#rankcolumn-query-configenglish" title="Permanent link">&para;</a></h4>
+<p>Generate a ranking expression for sorting results.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">fts</span><span class="o">.</span><span class="n">rank</span><span class="p">(</span><span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;python programming&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="c1"># Result: &quot;ts_rank(to_tsvector(&#39;english&#39;, content), plainto_tsquery(&#39;english&#39;, &#39;python programming&#39;))&quot;</span>
+</code></pre></div>
+<h3 id="creating-fts-indexes">Creating FTS Indexes<a class="headerlink" href="#creating-fts-indexes" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1">-- Create a GIN index for fast full-text search</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">articles_content_fts_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">articles</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">USING</span><span class="w"> </span><span class="n">GIN</span><span class="w"> </span><span class="p">(</span><span class="n">to_tsvector</span><span class="p">(</span><span class="s1">&#39;english&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">content</span><span class="p">));</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="c1">-- Query using the index</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">SELECT</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">FROM</span><span class="w"> </span><span class="n">articles</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="k">WHERE</span><span class="w"> </span><span class="n">to_tsvector</span><span class="p">(</span><span class="s1">&#39;english&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">content</span><span class="p">)</span><span class="w"> </span><span class="o">@@</span><span class="w"> </span><span class="n">plainto_tsquery</span><span class="p">(</span><span class="s1">&#39;english&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;python database&#39;</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="postgis-spatial-queries">PostGIS Spatial Queries<a class="headerlink" href="#postgis-spatial-queries" title="Permanent link">&para;</a></h2>
+<p>PostGIS adds support for geographic objects in PostgreSQL.</p>
+<h3 id="import_1">Import<a class="headerlink" href="#import_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">Point</span><span class="p">,</span> <span class="n">GeoQuery</span>
+</code></pre></div>
+<h3 id="point-class">Point Class<a class="headerlink" href="#point-class" title="Permanent link">&para;</a></h3>
+<h4 id="creating-points">Creating Points<a class="headerlink" href="#creating-points" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Create a point (longitude, latitude)</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">point</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="mf">121.5</span><span class="p">,</span> <span class="mf">25.0</span><span class="p">)</span>  <span class="c1"># Taipei coordinates</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># Custom SRID</span>
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">point</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="mf">121.5</span><span class="p">,</span> <span class="mf">25.0</span><span class="p">,</span> <span class="n">srid</span><span class="o">=</span><span class="mi">3857</span><span class="p">)</span>  <span class="c1"># Web Mercator</span>
+</code></pre></div>
+<h4 id="converting-to-sql">Converting to SQL<a class="headerlink" href="#converting-to-sql" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">to_sql</span><span class="p">()</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="c1"># Result: &quot;ST_SetSRID(ST_MakePoint(121.5, 25.0), 4326)&quot;</span>
+</code></pre></div>
+<h4 id="from-well-known-text-wkt">From Well-Known Text (WKT)<a class="headerlink" href="#from-well-known-text-wkt" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">sql</span> <span class="o">=</span> <span class="n">Point</span><span class="o">.</span><span class="n">from_wkt</span><span class="p">(</span><span class="s2">&quot;POINT(121.5 25.0)&quot;</span><span class="p">)</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="c1"># Result: &quot;ST_GeomFromText(&#39;POINT(121.5 25.0)&#39;, 4326)&quot;</span>
+</code></pre></div>
+<h3 id="geoquery-class">GeoQuery Class<a class="headerlink" href="#geoquery-class" title="Permanent link">&para;</a></h3>
+<h4 id="distancegeom1-geom2"><code>distance(geom1, geom2)</code><a class="headerlink" href="#distancegeom1-geom2" title="Permanent link">&para;</a></h4>
+<p>Calculate distance between geometries.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">GeoQuery</span><span class="o">.</span><span class="n">distance</span><span class="p">(</span><span class="s2">&quot;coordinates&quot;</span><span class="p">,</span> <span class="s2">&quot;ST_MakePoint(121.5, 25.0)&quot;</span><span class="p">)</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="c1"># Result: &quot;ST_Distance(coordinates, ST_MakePoint(121.5, 25.0))&quot;</span>
+</code></pre></div>
+<h4 id="dwithingeom1-geom2-distance"><code>dwithin(geom1, geom2, distance)</code><a class="headerlink" href="#dwithingeom1-geom2-distance" title="Permanent link">&para;</a></h4>
+<p>Check if geometries are within a specified distance.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">point</span> <span class="o">=</span> <span class="n">Point</span><span class="p">(</span><span class="mf">121.5</span><span class="p">,</span> <span class="mf">25.0</span><span class="p">)</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">GeoQuery</span><span class="o">.</span><span class="n">dwithin</span><span class="p">(</span><span class="s2">&quot;coordinates&quot;</span><span class="p">,</span> <span class="n">point</span><span class="o">.</span><span class="n">to_sql</span><span class="p">(),</span> <span class="mi">1000</span><span class="p">)</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="c1"># Result: &quot;ST_DWithin(coordinates, ST_SetSRID(ST_MakePoint(121.5, 25.0), 4326), 1000)&quot;</span>
+</code></pre></div>
+<h4 id="containsgeom1-geom2"><code>contains(geom1, geom2)</code><a class="headerlink" href="#containsgeom1-geom2" title="Permanent link">&para;</a></h4>
+<p>Check if geom1 contains geom2.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">GeoQuery</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="s2">&quot;polygon&quot;</span><span class="p">,</span> <span class="s2">&quot;point&quot;</span><span class="p">)</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># Result: &quot;ST_Contains(polygon, point)&quot;</span>
+</code></pre></div>
+<h4 id="withingeom1-geom2"><code>within(geom1, geom2)</code><a class="headerlink" href="#withingeom1-geom2" title="Permanent link">&para;</a></h4>
+<p>Check if geom1 is within geom2.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">GeoQuery</span><span class="o">.</span><span class="n">within</span><span class="p">(</span><span class="s2">&quot;point&quot;</span><span class="p">,</span> <span class="s2">&quot;polygon&quot;</span><span class="p">)</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="c1"># Result: &quot;ST_Within(point, polygon)&quot;</span>
+</code></pre></div>
+<h4 id="intersectsgeom1-geom2"><code>intersects(geom1, geom2)</code><a class="headerlink" href="#intersectsgeom1-geom2" title="Permanent link">&para;</a></h4>
+<p>Check if geometries intersect.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">GeoQuery</span><span class="o">.</span><span class="n">intersects</span><span class="p">(</span><span class="s2">&quot;geom1&quot;</span><span class="p">,</span> <span class="s2">&quot;geom2&quot;</span><span class="p">)</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="c1"># Result: &quot;ST_Intersects(geom1, geom2)&quot;</span>
+</code></pre></div>
+<h3 id="installing-postgis">Installing PostGIS<a class="headerlink" href="#installing-postgis" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1">-- Enable PostGIS extension</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="n">EXTENSION</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">postgis</span><span class="p">;</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1">-- Create a table with geometry column</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">locations</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">SERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">    </span><span class="n">name</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">255</span><span class="p">),</span>
+<a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="n">coordinates</span><span class="w"> </span><span class="n">GEOMETRY</span><span class="p">(</span><span class="n">Point</span><span class="p">,</span><span class="w"> </span><span class="mi">4326</span><span class="p">)</span>
+<a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="p">);</span>
+<a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a>
+<a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="c1">-- Create spatial index</span>
+<a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">locations_coordinates_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">locations</span>
+<a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="k">USING</span><span class="w"> </span><span class="n">GIST</span><span class="w"> </span><span class="p">(</span><span class="n">coordinates</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="array-operators">Array Operators<a class="headerlink" href="#array-operators" title="Permanent link">&para;</a></h2>
+<p>PostgreSQL array operators for working with array columns.</p>
+<h3 id="import_2">Import<a class="headerlink" href="#import_2" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">ArrayOps</span>
+</code></pre></div>
+<h3 id="available-methods_1">Available Methods<a class="headerlink" href="#available-methods_1" title="Permanent link">&para;</a></h3>
+<h4 id="containscolumn-value"><code>contains(column, value)</code><a class="headerlink" href="#containscolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if array contains all elements (@&gt; operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">,</span> <span class="s2">&quot;database&quot;</span><span class="p">])</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1"># Result: &quot;tags @&gt; ARRAY[&#39;python&#39;, &#39;database&#39;]&quot;</span>
+</code></pre></div>
+<h4 id="contained_bycolumn-value"><code>contained_by(column, value)</code><a class="headerlink" href="#contained_bycolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if array is contained by (&lt;@ operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">contained_by</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">,</span> <span class="s2">&quot;rust&quot;</span><span class="p">,</span> <span class="s2">&quot;go&quot;</span><span class="p">])</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="c1"># Result: &quot;tags &lt;@ ARRAY[&#39;python&#39;, &#39;rust&#39;, &#39;go&#39;]&quot;</span>
+</code></pre></div>
+<h4 id="overlapcolumn-value"><code>overlap(column, value)</code><a class="headerlink" href="#overlapcolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if arrays have any common elements (&amp;&amp; operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">overlap</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;python&quot;</span><span class="p">,</span> <span class="s2">&quot;rust&quot;</span><span class="p">])</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="c1"># Result: &quot;tags &amp;&amp; ARRAY[&#39;python&#39;, &#39;rust&#39;]&quot;</span>
+</code></pre></div>
+<h4 id="anycolumn-value"><code>any(column, value)</code><a class="headerlink" href="#anycolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if value is in array (ANY operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="c1"># String value</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">,</span> <span class="s2">&quot;python&quot;</span><span class="p">)</span>
+<a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="c1"># Result: &quot;&#39;python&#39; = ANY(tags)&quot;</span>
+<a id="__codelineno-21-4" name="__codelineno-21-4" href="#__codelineno-21-4"></a>
+<a id="__codelineno-21-5" name="__codelineno-21-5" href="#__codelineno-21-5"></a><span class="c1"># Numeric value</span>
+<a id="__codelineno-21-6" name="__codelineno-21-6" href="#__codelineno-21-6"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="s2">&quot;scores&quot;</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+<a id="__codelineno-21-7" name="__codelineno-21-7" href="#__codelineno-21-7"></a><span class="c1"># Result: &quot;100 = ANY(scores)&quot;</span>
+</code></pre></div>
+<h4 id="lengthcolumn"><code>length(column)</code><a class="headerlink" href="#lengthcolumn" title="Permanent link">&para;</a></h4>
+<p>Get array length.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">expr</span> <span class="o">=</span> <span class="n">ArrayOps</span><span class="o">.</span><span class="n">length</span><span class="p">(</span><span class="s2">&quot;tags&quot;</span><span class="p">)</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="c1"># Result: &quot;array_length(tags, 1)&quot;</span>
+</code></pre></div>
+<h3 id="creating-array-columns">Creating Array Columns<a class="headerlink" href="#creating-array-columns" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a><span class="c1">-- Create table with array column</span>
+<a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">posts</span><span class="w"> </span><span class="p">(</span>
+<a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">SERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
+<a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">    </span><span class="n">title</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">255</span><span class="p">),</span>
+<a id="__codelineno-23-5" name="__codelineno-23-5" href="#__codelineno-23-5"></a><span class="w">    </span><span class="n">tags</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">[]</span>
+<a id="__codelineno-23-6" name="__codelineno-23-6" href="#__codelineno-23-6"></a><span class="p">);</span>
+<a id="__codelineno-23-7" name="__codelineno-23-7" href="#__codelineno-23-7"></a>
+<a id="__codelineno-23-8" name="__codelineno-23-8" href="#__codelineno-23-8"></a><span class="c1">-- Create GIN index for array containment queries</span>
+<a id="__codelineno-23-9" name="__codelineno-23-9" href="#__codelineno-23-9"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">posts_tags_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">posts</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="n">GIN</span><span class="w"> </span><span class="p">(</span><span class="n">tags</span><span class="p">);</span>
+<a id="__codelineno-23-10" name="__codelineno-23-10" href="#__codelineno-23-10"></a>
+<a id="__codelineno-23-11" name="__codelineno-23-11" href="#__codelineno-23-11"></a><span class="c1">-- Insert data</span>
+<a id="__codelineno-23-12" name="__codelineno-23-12" href="#__codelineno-23-12"></a><span class="k">INSERT</span><span class="w"> </span><span class="k">INTO</span><span class="w"> </span><span class="n">posts</span><span class="w"> </span><span class="p">(</span><span class="n">title</span><span class="p">,</span><span class="w"> </span><span class="n">tags</span><span class="p">)</span>
+<a id="__codelineno-23-13" name="__codelineno-23-13" href="#__codelineno-23-13"></a><span class="k">VALUES</span><span class="w"> </span><span class="p">(</span><span class="s1">&#39;My Post&#39;</span><span class="p">,</span><span class="w"> </span><span class="nb">ARRAY</span><span class="p">[</span><span class="s1">&#39;python&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;database&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;orm&#39;</span><span class="p">]);</span>
+</code></pre></div>
+<hr />
+<h2 id="jsonb-operators">JSONB Operators<a class="headerlink" href="#jsonb-operators" title="Permanent link">&para;</a></h2>
+<p>Enhanced JSONB operators integrated into QueryBuilder.</p>
+<h3 id="import_3">Import<a class="headerlink" href="#import_3" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">Column</span>
+</code></pre></div>
+<h3 id="querybuilder-methods">QueryBuilder Methods<a class="headerlink" href="#querybuilder-methods" title="Permanent link">&para;</a></h3>
+<h4 id="jsonb_containscolumn-value"><code>jsonb_contains(column, value)</code><a class="headerlink" href="#jsonb_containscolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if JSONB column contains the given JSON (@&gt; operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">User</span><span class="p">(</span><span class="n">Table</span><span class="p">):</span>
+<a id="__codelineno-25-2" name="__codelineno-25-2" href="#__codelineno-25-2"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-25-3" name="__codelineno-25-3" href="#__codelineno-25-3"></a>    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span>
+<a id="__codelineno-25-4" name="__codelineno-25-4" href="#__codelineno-25-4"></a>
+<a id="__codelineno-25-5" name="__codelineno-25-5" href="#__codelineno-25-5"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">:</span>
+<a id="__codelineno-25-6" name="__codelineno-25-6" href="#__codelineno-25-6"></a>        <span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;users&quot;</span>
+<a id="__codelineno-25-7" name="__codelineno-25-7" href="#__codelineno-25-7"></a>
+<a id="__codelineno-25-8" name="__codelineno-25-8" href="#__codelineno-25-8"></a><span class="c1"># Find users with admin role</span>
+<a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="n">admins</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">jsonb_contains</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;admin&quot;</span><span class="p">})</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h4 id="jsonb_contained_bycolumn-value"><code>jsonb_contained_by(column, value)</code><a class="headerlink" href="#jsonb_contained_bycolumn-value" title="Permanent link">&para;</a></h4>
+<p>Check if JSONB column is contained by the given JSON (&lt;@ operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">jsonb_contained_by</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;role&quot;</span><span class="p">:</span> <span class="s2">&quot;admin&quot;</span><span class="p">,</span> <span class="s2">&quot;active&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h4 id="jsonb_has_keycolumn-key"><code>jsonb_has_key(column, key)</code><a class="headerlink" href="#jsonb_has_keycolumn-key" title="Permanent link">&para;</a></h4>
+<p>Check if JSONB column has a specific key (? operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">jsonb_has_key</span><span class="p">(</span><span class="s2">&quot;settings&quot;</span><span class="p">,</span> <span class="s2">&quot;theme&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h4 id="jsonb_has_any_keycolumn-keys"><code>jsonb_has_any_key(column, keys)</code><a class="headerlink" href="#jsonb_has_any_keycolumn-keys" title="Permanent link">&para;</a></h4>
+<p>Check if JSONB column has any of the specified keys (?| operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">jsonb_has_any_key</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;email&quot;</span><span class="p">,</span> <span class="s2">&quot;phone&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h4 id="jsonb_has_all_keyscolumn-keys"><code>jsonb_has_all_keys(column, keys)</code><a class="headerlink" href="#jsonb_has_all_keyscolumn-keys" title="Permanent link">&para;</a></h4>
+<p>Check if JSONB column has all specified keys (?&amp; operator).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-29-1" name="__codelineno-29-1" href="#__codelineno-29-1"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">jsonb_has_all_keys</span><span class="p">(</span><span class="s2">&quot;settings&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;theme&quot;</span><span class="p">,</span> <span class="s2">&quot;language&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h3 id="chaining-jsonb-methods">Chaining JSONB Methods<a class="headerlink" href="#chaining-jsonb-methods" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># Complex query with multiple JSONB conditions</span>
+<a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="n">users</span> <span class="o">=</span> <span class="k">await</span> <span class="n">User</span><span class="o">.</span><span class="n">find</span><span class="p">()</span>
+<a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>    <span class="o">.</span><span class="n">jsonb_contains</span><span class="p">(</span><span class="s2">&quot;metadata&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;active&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+<a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="o">.</span><span class="n">jsonb_has_key</span><span class="p">(</span><span class="s2">&quot;settings&quot;</span><span class="p">,</span> <span class="s2">&quot;theme&quot;</span><span class="p">)</span>
+<a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>    <span class="o">.</span><span class="n">jsonb_has_all_keys</span><span class="p">(</span><span class="s2">&quot;profile&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;email&quot;</span><span class="p">])</span>
+<a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>    <span class="o">.</span><span class="n">order_by</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+<a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>    <span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+</code></pre></div>
+<h3 id="creating-jsonb-indexes">Creating JSONB Indexes<a class="headerlink" href="#creating-jsonb-indexes" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1">-- Create GIN index for JSONB containment</span>
+<a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">users_metadata_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="n">GIN</span><span class="w"> </span><span class="p">(</span><span class="n">metadata</span><span class="p">);</span>
+<a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>
+<a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="c1">-- Create GIN index for key existence</span>
+<a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">users_settings_idx</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="k">USING</span><span class="w"> </span><span class="n">GIN</span><span class="w"> </span><span class="p">(</span><span class="n">settings</span><span class="w"> </span><span class="n">jsonb_path_ops</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="raiseload-n1-detection">RaiseLoad (N+1 Detection)<a class="headerlink" href="#raiseload-n1-detection" title="Permanent link">&para;</a></h2>
+<p>RaiseLoad is a testing utility that raises an error if a relationship is accessed without being eager-loaded, helping detect N+1 query problems.</p>
+<h3 id="import_4">Import<a class="headerlink" href="#import_4" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">raiseload</span><span class="p">,</span> <span class="n">selectinload</span>
+</code></pre></div>
+<h3 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">data_bridge.postgres</span><span class="w"> </span><span class="kn">import</span> <span class="n">Table</span><span class="p">,</span> <span class="n">Column</span><span class="p">,</span> <span class="n">relationship</span>
+<a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>
+<a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">Author</span><span class="p">(</span><span class="n">Table</span><span class="p">):</span>
+<a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+<a id="__codelineno-33-6" name="__codelineno-33-6" href="#__codelineno-33-6"></a>
+<a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">:</span>
+<a id="__codelineno-33-8" name="__codelineno-33-8" href="#__codelineno-33-8"></a>        <span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;authors&quot;</span>
+<a id="__codelineno-33-9" name="__codelineno-33-9" href="#__codelineno-33-9"></a>
+<a id="__codelineno-33-10" name="__codelineno-33-10" href="#__codelineno-33-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Book</span><span class="p">(</span><span class="n">Table</span><span class="p">):</span>
+<a id="__codelineno-33-11" name="__codelineno-33-11" href="#__codelineno-33-11"></a>    <span class="nb">id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-33-12" name="__codelineno-33-12" href="#__codelineno-33-12"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
+<a id="__codelineno-33-13" name="__codelineno-33-13" href="#__codelineno-33-13"></a>    <span class="n">author_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">foreign_key</span><span class="o">=</span><span class="s2">&quot;authors.id&quot;</span><span class="p">)</span>
+<a id="__codelineno-33-14" name="__codelineno-33-14" href="#__codelineno-33-14"></a>
+<a id="__codelineno-33-15" name="__codelineno-33-15" href="#__codelineno-33-15"></a>    <span class="n">author</span><span class="p">:</span> <span class="n">Author</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="n">Author</span><span class="p">,</span> <span class="n">foreign_key_column</span><span class="o">=</span><span class="s2">&quot;author_id&quot;</span><span class="p">)</span>
+<a id="__codelineno-33-16" name="__codelineno-33-16" href="#__codelineno-33-16"></a>
+<a id="__codelineno-33-17" name="__codelineno-33-17" href="#__codelineno-33-17"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">:</span>
+<a id="__codelineno-33-18" name="__codelineno-33-18" href="#__codelineno-33-18"></a>        <span class="n">table_name</span> <span class="o">=</span> <span class="s2">&quot;books&quot;</span>
+</code></pre></div>
+<h3 id="detecting-n1-queries-in-tests">Detecting N+1 Queries in Tests<a class="headerlink" href="#detecting-n1-queries-in-tests" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>
+<a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">asyncio</span>
+<a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">test_no_n_plus_one</span><span class="p">():</span>
+<a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that code doesn&#39;t have N+1 queries.&quot;&quot;&quot;</span>
+<a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>    <span class="c1"># Load books with raiseload - will raise if relationship is accessed</span>
+<a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>    <span class="n">books</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Book</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">raiseload</span><span class="p">(</span><span class="s2">&quot;author&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>
+<a id="__codelineno-34-9" name="__codelineno-34-9" href="#__codelineno-34-9"></a>    <span class="c1"># This would raise RuntimeError</span>
+<a id="__codelineno-34-10" name="__codelineno-34-10" href="#__codelineno-34-10"></a>    <span class="c1"># author = await books[0].author  # ❌ N+1 detected!</span>
+<a id="__codelineno-34-11" name="__codelineno-34-11" href="#__codelineno-34-11"></a>
+<a id="__codelineno-34-12" name="__codelineno-34-12" href="#__codelineno-34-12"></a>    <span class="c1"># Fix: Use selectinload instead</span>
+<a id="__codelineno-34-13" name="__codelineno-34-13" href="#__codelineno-34-13"></a>    <span class="n">books</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Book</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">selectinload</span><span class="p">(</span><span class="s2">&quot;author&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<a id="__codelineno-34-14" name="__codelineno-34-14" href="#__codelineno-34-14"></a>    <span class="n">author</span> <span class="o">=</span> <span class="k">await</span> <span class="n">books</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">author</span>  <span class="c1"># ✅ OK! Already loaded</span>
+</code></pre></div>
+<h3 id="error-message">Error Message<a class="headerlink" href="#error-message" title="Permanent link">&para;</a></h3>
+<p>When raiseload detects an unloaded relationship access:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>RuntimeError: Attempted to access unloaded relationship &#39;author&#39;.
+<a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>Use selectinload() to eagerly load this relationship.
+</code></pre></div>
+<h3 id="when-to-use-raiseload">When to Use RaiseLoad<a class="headerlink" href="#when-to-use-raiseload" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>DO</strong> use in test environments to catch N+1 queries</li>
+<li><strong>DO</strong> use during code review to verify proper eager loading</li>
+<li><strong>DON'T</strong> use in production (performance overhead and errors)</li>
+<li><strong>DON'T</strong> use with relationships that are intentionally lazy-loaded</li>
+</ul>
+<h3 id="fixing-n1-queries">Fixing N+1 Queries<a class="headerlink" href="#fixing-n1-queries" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="c1"># ❌ BAD: N+1 queries (1 + N queries)</span>
+<a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a><span class="n">books</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Book</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a><span class="k">for</span> <span class="n">book</span> <span class="ow">in</span> <span class="n">books</span><span class="p">:</span>
+<a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>    <span class="n">author</span> <span class="o">=</span> <span class="k">await</span> <span class="n">book</span><span class="o">.</span><span class="n">author</span>  <span class="c1"># N queries</span>
+<a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>
+<a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a><span class="c1"># ✅ GOOD: Batch loading (1 + 1 queries)</span>
+<a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a><span class="n">books</span> <span class="o">=</span> <span class="k">await</span> <span class="n">Book</span><span class="o">.</span><span class="n">find</span><span class="p">()</span><span class="o">.</span><span class="n">options</span><span class="p">(</span><span class="n">selectinload</span><span class="p">(</span><span class="s2">&quot;author&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+<a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a><span class="k">for</span> <span class="n">book</span> <span class="ow">in</span> <span class="n">books</span><span class="p">:</span>
+<a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a>    <span class="n">author</span> <span class="o">=</span> <span class="k">await</span> <span class="n">book</span><span class="o">.</span><span class="n">author</span>  <span class="c1"># No query, already loaded</span>
+</code></pre></div>
+<hr />
+<h2 id="postgresql-requirements">PostgreSQL Requirements<a class="headerlink" href="#postgresql-requirements" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>PostgreSQL Version</th>
+<th>Extension Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Full-Text Search</td>
+<td>8.3+</td>
+<td>Built-in</td>
+</tr>
+<tr>
+<td>JSONB</td>
+<td>9.4+</td>
+<td>Built-in</td>
+</tr>
+<tr>
+<td>Array Operations</td>
+<td>8.1+</td>
+<td>Built-in</td>
+</tr>
+<tr>
+<td>PostGIS</td>
+<td>9.1+</td>
+<td><code>CREATE EXTENSION postgis</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="performance-tips">Performance Tips<a class="headerlink" href="#performance-tips" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Full-Text Search</strong></li>
+<li>Create GIN indexes on tsvector columns</li>
+<li>Use materialized views for complex searches</li>
+<li>
+<p>Consider language-specific configurations</p>
+</li>
+<li>
+<p><strong>PostGIS</strong></p>
+</li>
+<li>Create GIST indexes on geometry columns</li>
+<li>Keep SRID consistent across queries</li>
+<li>
+<p>Use ST_DWithin instead of ST_Distance for range queries</p>
+</li>
+<li>
+<p><strong>Arrays</strong></p>
+</li>
+<li>Create GIN indexes for containment queries</li>
+<li>Consider PostgreSQL version for best performance</li>
+<li>
+<p>Use <code>ANY</code> operator for single element checks</p>
+</li>
+<li>
+<p><strong>JSONB</strong></p>
+</li>
+<li>Create GIN indexes for containment and key queries</li>
+<li>Use <code>jsonb_path_ops</code> for key-only queries</li>
+<li>
+<p>Normalize frequently queried JSON fields to columns</p>
+</li>
+<li>
+<p><strong>RaiseLoad</strong></p>
+</li>
+<li>Only use in test environments</li>
+<li>Combine with selectinload for proper eager loading</li>
+<li>Monitor query counts with database logging</li>
+</ol>
+<hr />
+<h2 id="additional-resources">Additional Resources<a class="headerlink" href="#additional-resources" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="https://www.postgresql.org/docs/current/textsearch.html">PostgreSQL Full-Text Search Documentation</a></li>
+<li><a href="https://postgis.net/documentation/">PostGIS Documentation</a></li>
+<li><a href="https://www.postgresql.org/docs/current/functions-array.html">PostgreSQL Array Functions</a></li>
+<li><a href="https://www.postgresql.org/docs/current/functions-json.html">PostgreSQL JSON Functions</a></li>
+<li><a href="https://stackoverflow.com/questions/97197/what-is-the-n1-selects-problem">Avoiding N+1 Queries</a></li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

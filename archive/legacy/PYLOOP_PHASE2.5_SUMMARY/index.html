@@ -1,0 +1,1079 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/legacy/PYLOOP_PHASE2.5_SUMMARY/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>PyLoop Phase 2.5 Implementation Summary - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyloop-phase-25-implementation-summary" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PyLoop Phase 2.5 Implementation Summary
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-was-implemented" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Was Implemented
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What Was Implemented">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-stop-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. stop() Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-run_forever-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. run_forever() Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-run_until_complete-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. run_until_complete() Method
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-architectural-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Architectural Changes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Architectural Changes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#atomic-state-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Atomic State Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-processing-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task Processing Improvements
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#task-public-api-extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Task Public API Extensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#test-coverage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test Coverage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Test Coverage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#passing-tests-14-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Passing Tests (14 tests)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skipped-tests-3-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skipped Tests (3 tests)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-modified" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files Modified
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-characteristics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Characteristics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Characteristics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gil-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIL Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cpu-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CPU Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#known-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Known Limitations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps-phase-3" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps (Phase 3)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-test-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build &amp; Test Commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compatibility" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compatibility
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pyloop-phase-25-implementation-summary">PyLoop Phase 2.5 Implementation Summary<a class="headerlink" href="#pyloop-phase-25-implementation-summary" title="Permanent link">&para;</a></h1>
+<h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
+<p>Phase 2.5 implements the core event loop execution methods: <code>run_forever()</code>, <code>run_until_complete()</code>, and <code>stop()</code>. These methods form the foundation for actually running the event loop and processing scheduled tasks.</p>
+<h2 id="what-was-implemented">What Was Implemented<a class="headerlink" href="#what-was-implemented" title="Permanent link">&para;</a></h2>
+<h3 id="1-stop-method">1. <code>stop()</code> Method<a class="headerlink" href="#1-stop-method" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Purpose</strong>: Signal the event loop to stop after the current iteration</li>
+<li><strong>Implementation</strong>: Uses atomic boolean flag (<code>stopped</code>) to signal termination</li>
+<li><strong>Thread Safety</strong>: Can be safely called from any thread</li>
+<li><strong>Usage</strong>: Typically called from within a callback or from another thread</li>
+</ul>
+<h3 id="2-run_forever-method">2. <code>run_forever()</code> Method<a class="headerlink" href="#2-run_forever-method" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Purpose</strong>: Run the event loop continuously until <code>stop()</code> is called</li>
+<li><strong>Key Features</strong>:</li>
+<li>Releases GIL during loop execution for better concurrency</li>
+<li>Reacquires GIL only when executing Python callbacks</li>
+<li>Sleeps briefly (1ms) when no tasks to avoid busy-waiting</li>
+<li>Handles exceptions in callbacks gracefully (prints but doesn't crash)</li>
+<li>Checks for both <code>stop()</code> signal and <code>closed</code> state</li>
+<li><strong>State Management</strong>:</li>
+<li>Sets <code>running = true</code> at start</li>
+<li>Resets <code>stopped = false</code> at start</li>
+<li>Sets <code>running = false</code> at end</li>
+</ul>
+<h3 id="3-run_until_complete-method">3. <code>run_until_complete()</code> Method<a class="headerlink" href="#3-run_until_complete-method" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Purpose</strong>: Run the event loop until a specific future/task completes</li>
+<li><strong>Accepts</strong>: Coroutines or Task objects</li>
+<li><strong>Validation</strong>: Type checks and proper error messages</li>
+<li><strong>Current Limitations</strong>:</li>
+<li>Coroutine execution not fully implemented yet (requires proper async task scheduler)</li>
+<li>Tests for coroutine execution are skipped</li>
+<li>Framework is in place for future completion</li>
+</ul>
+<h3 id="4-architectural-changes">4. Architectural Changes<a class="headerlink" href="#4-architectural-changes" title="Permanent link">&para;</a></h3>
+<h4 id="atomic-state-management">Atomic State Management<a class="headerlink" href="#atomic-state-management" title="Permanent link">&para;</a></h4>
+<p>Changed from simple booleans to atomic flags for thread safety:
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">running</span><span class="p">:</span><span class="w"> </span><span class="nc">Arc</span><span class="o">&lt;</span><span class="n">AtomicBool</span><span class="o">&gt;</span><span class="w">  </span><span class="c1">// Was: bool</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">closed</span><span class="p">:</span><span class="w"> </span><span class="nc">Arc</span><span class="o">&lt;</span><span class="n">AtomicBool</span><span class="o">&gt;</span><span class="w">   </span><span class="c1">// Was: bool</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">stopped</span><span class="p">:</span><span class="w"> </span><span class="nc">Arc</span><span class="o">&lt;</span><span class="n">AtomicBool</span><span class="o">&gt;</span><span class="w">  </span><span class="c1">// New</span>
+</code></pre></div></p>
+<h4 id="task-processing-improvements">Task Processing Improvements<a class="headerlink" href="#task-processing-improvements" title="Permanent link">&para;</a></h4>
+<ul>
+<li><code>process_tasks()</code> now returns <code>bool</code> (whether any tasks were processed)</li>
+<li>Added static <code>process_tasks_internal()</code> for use without <code>&amp;self</code> reference</li>
+<li>Exception handling: prints errors but doesn't crash the loop</li>
+</ul>
+<h4 id="task-public-api-extensions">Task Public API Extensions<a class="headerlink" href="#task-public-api-extensions" title="Permanent link">&para;</a></h4>
+<p>Added public methods to Task for internal Rust use:
+- <code>is_done()</code> - Check if task completed
+- <code>get_result(py)</code> - Get task result (handles errors and cancellation)</p>
+<h2 id="test-coverage">Test Coverage<a class="headerlink" href="#test-coverage" title="Permanent link">&para;</a></h2>
+<h3 id="passing-tests-14-tests">Passing Tests (14 tests)<a class="headerlink" href="#passing-tests-14-tests" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>run_forever tests</strong> (6 tests):</li>
+<li>Stop when stop() called</li>
+<li>Fail on closed loop</li>
+<li>Fail when already running</li>
+<li>Process multiple callbacks</li>
+<li>Delayed stop with call_later</li>
+<li>
+<p>Exception handling in callbacks</p>
+</li>
+<li>
+<p><strong>run_until_complete tests</strong> (3 tests):</p>
+</li>
+<li>Type validation (must be coroutine or Task)</li>
+<li>Fail on closed loop</li>
+<li>
+<p>Fail when already running</p>
+</li>
+<li>
+<p><strong>stop tests</strong> (3 tests):</p>
+</li>
+<li>Safe when not running</li>
+<li>From callback</li>
+<li>
+<p>From delayed callback</p>
+</li>
+<li>
+<p><strong>Integration tests</strong> (2 tests):</p>
+</li>
+<li>call_soon during run_forever</li>
+<li>call_later during run_forever</li>
+</ol>
+<h3 id="skipped-tests-3-tests">Skipped Tests (3 tests)<a class="headerlink" href="#skipped-tests-3-tests" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Coroutine execution tests skipped (marked for Phase 3 implementation)</li>
+<li>Framework is in place, needs proper async task scheduler</li>
+</ul>
+<h2 id="files-modified">Files Modified<a class="headerlink" href="#files-modified" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>crates/data-bridge-pyloop/src/loop_impl.rs</strong></li>
+<li>Changed state management to atomic booleans</li>
+<li>Added <code>stop()</code>, <code>run_forever()</code>, <code>run_until_complete()</code> methods</li>
+<li>Updated <code>process_tasks()</code> to return bool</li>
+<li>Added <code>process_tasks_internal()</code> static helper</li>
+<li>
+<p>Fixed all references to <code>running</code> and <code>closed</code> to use atomic operations</p>
+</li>
+<li>
+<p><strong>crates/data-bridge-pyloop/src/task.rs</strong></p>
+</li>
+<li>Added <code>#[derive(Clone)]</code> to Task</li>
+<li>Added <code>is_done()</code> public method</li>
+<li>
+<p>Added <code>get_result(py)</code> public method</p>
+</li>
+<li>
+<p><strong>tests/test_pyloop_execution.py</strong> (NEW)</p>
+</li>
+<li>17 test cases covering all new functionality</li>
+<li>14 passing, 3 skipped</li>
+</ol>
+<h2 id="performance-characteristics">Performance Characteristics<a class="headerlink" href="#performance-characteristics" title="Permanent link">&para;</a></h2>
+<h3 id="gil-management">GIL Management<a class="headerlink" href="#gil-management" title="Permanent link">&para;</a></h3>
+<ul>
+<li>GIL released during main event loop</li>
+<li>GIL reacquired only for:</li>
+<li>Processing Python callbacks</li>
+<li>Checking task completion status</li>
+<li>Minimizes Python thread contention</li>
+</ul>
+<h3 id="cpu-usage">CPU Usage<a class="headerlink" href="#cpu-usage" title="Permanent link">&para;</a></h3>
+<ul>
+<li>1ms sleep when no tasks (prevents busy-waiting)</li>
+<li>Efficient task queue processing (try_recv, non-blocking)</li>
+</ul>
+<h2 id="known-limitations">Known Limitations<a class="headerlink" href="#known-limitations" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Coroutine Execution</strong>: Not fully implemented</li>
+<li><code>run_until_complete()</code> with coroutines will hang</li>
+<li>Requires proper integration with Tokio async executor</li>
+<li>
+<p>Planned for Phase 3</p>
+</li>
+<li>
+<p><strong>Event Loop Nesting</strong>: Not supported</p>
+</li>
+<li>Cannot call <code>run_forever()</code> from within <code>run_forever()</code></li>
+<li>
+<p>Proper error raised</p>
+</li>
+<li>
+<p><strong>Graceful Shutdown</strong>: Basic implementation</p>
+</li>
+<li>Callbacks are interrupted immediately when <code>stop()</code> called</li>
+<li>No waiting for in-progress callbacks to complete</li>
+</ol>
+<h2 id="next-steps-phase-3">Next Steps (Phase 3)<a class="headerlink" href="#next-steps-phase-3" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Async/Await Integration</strong></li>
+<li>Proper coroutine scheduling and execution</li>
+<li>Integration with Tokio's async executor</li>
+<li>
+<p>Support for <code>await</code> within tasks</p>
+</li>
+<li>
+<p><strong>Future/Task Management</strong></p>
+</li>
+<li>Task scheduling and prioritization</li>
+<li>Future chaining and composition</li>
+<li>
+<p>Proper task lifecycle management</p>
+</li>
+<li>
+<p><strong>I/O Integration</strong></p>
+</li>
+<li>File descriptor monitoring</li>
+<li>Socket operations</li>
+<li>Timer wheel for efficient timer management</li>
+</ol>
+<h2 id="build-test-commands">Build &amp; Test Commands<a class="headerlink" href="#build-test-commands" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Build</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>maturin<span class="w"> </span>develop<span class="w"> </span>--features<span class="w"> </span>pyloop
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Run tests</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_pyloop_execution.py<span class="w"> </span>-v
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_pyloop.py<span class="w"> </span>-v
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="c1"># Run all pyloop tests</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/test_pyloop*.py<span class="w"> </span>-v
+</code></pre></div>
+<h2 id="compatibility">Compatibility<a class="headerlink" href="#compatibility" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Python Version</strong>: 3.12+</li>
+<li><strong>asyncio API</strong>: Partial (run_forever, stop implemented)</li>
+<li><strong>Thread Safety</strong>: Yes (atomic flags, Arc for sharing)</li>
+<li><strong>GIL Release</strong>: Yes (during loop execution)</li>
+</ul>
+<h2 id="summary">Summary<a class="headerlink" href="#summary" title="Permanent link">&para;</a></h2>
+<p>Phase 2.5 successfully implements the core event loop execution mechanism with proper:
+- Thread-safe state management
+- GIL release strategy
+- Exception handling
+- Stop signal propagation
+- Test coverage for all implemented features</p>
+<p>The foundation is now in place for more advanced async/await functionality in future phases.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
