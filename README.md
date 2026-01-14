@@ -1,73 +1,127 @@
-# data-bridge
+# ouroboros
 
-A unified **high-performance data platform** built with Rust, combining:
-- **MongoDB ORM** with zero Python byte handling (1.4-5.4x faster than Beanie)
-- **High-Performance Spreadsheet Engine** with WebAssembly and real-time collaboration
-- **HTTP Client**, **Task Queue**, and **KV Store** - All powered by Rust
+A unified **high-performance Python platform** built entirely in Rust, combining:
+
+- **API Framework** - FastAPI alternative with Rust-powered routing and validation
+- **Validation** - Pydantic-compatible BaseModel with zero dependencies
+- **MongoDB ORM** - Zero Python byte handling (1.4-5.4x faster than Beanie)
+- **Spreadsheet Engine** - WebAssembly-powered with real-time collaboration
+- **HTTP Client**, **Task Queue**, **KV Store** - All powered by Rust
+
+## Why Ouroboros?
+
+**The Problem**: Python's flexibility comes at a cost - runtime overhead, GIL contention, and memory pressure from data processing.
+
+**The Solution**: Ouroboros moves all heavy lifting to Rust while keeping Python's ergonomic API. You write Python, Rust does the work.
+
+```
+Traditional Stack          Ouroboros Stack
+─────────────────          ───────────────
+FastAPI                    ouroboros.api (Rust routing)
+Pydantic                   ouroboros.validation (Rust validation)
+PyMongo/Beanie            ouroboros.mongodb (Rust BSON)
+requests/httpx            ouroboros.http (Rust HTTP)
+```
 
 ## Overview
 
-`data-bridge` is a comprehensive data platform that provides:
+`ouroboros` provides a complete platform for building high-performance Python applications:
 
-1. **MongoDB ORM** - Beanie-compatible ORM with all BSON processing in Rust
-2. **Spreadsheet Engine** - High-performance spreadsheet with formula evaluation, WASM support, and CRDT-based collaboration
-3. **Data Infrastructure** - HTTP client, PostgreSQL support, task queue, and key-value store
-
-### Key Features
-
-#### MongoDB ORM
-- **Beanie-Compatible API**: Drop-in replacement for most Beanie operations
-- **Zero Python Byte Handling**: All BSON serialization/deserialization happens in Rust
-- **2.8-3.2x Faster Inserts**: Measured benchmarks show significant insert performance gains
-- **Async/Await Support**: Full asyncio integration via PyO3 + Tokio
-- **Type Safe**: Query expressions with compile-time (Rust) and runtime (Pydantic) type checking
-- **Full CRUD Support**: insert, find, update, delete with bulk operations
-- **Query Builder**: Chainable API with sort, skip, limit, projection
-- **Security**: RUSTSEC-2025-0020 fixed (PyO3 0.24+)
-
-#### Spreadsheet Engine (data-bridge-sheet)
-- **High Performance**: Rust-powered formula engine compiled to WebAssembly
-- **Real-time Collaboration**: Multi-user editing with CRDT-based sync (Yjs/yrs)
-- **Full Formula Support**: 24+ built-in functions (SUM, IF, VLOOKUP, etc.)
-- **Undo/Redo**: Complete history with unlimited undo
-- **Event-driven API**: Subscribe to cell changes, selections, and more
-- **Zero-copy Rendering**: Direct memory access for optimal performance
-- **Custom Database**: Morton-encoded spatial indexing for fast range queries
-- **Canvas Rendering**: Smooth scrolling with virtual grid
+| Module | Description | Status |
+|--------|-------------|--------|
+| `ouroboros.api` | FastAPI-compatible web framework | Stable |
+| `ouroboros.validation` | Pydantic v2 style BaseModel | Stable |
+| `ouroboros.mongodb` | Beanie-compatible MongoDB ORM | Stable |
+| `ouroboros.http` | High-performance HTTP client | Stable |
+| `ouroboros.test` | Native test framework | Stable |
+| `ouroboros.postgres` | PostgreSQL support | Beta |
+| `ouroboros.kv` | Key-Value store | Beta |
+| `ouroboros.tasks` | Task queue (NATS/Redis) | Planned |
 
 ## Performance
 
-### Benchmarks (1000 documents, 3 iterations)
+### MongoDB ORM Benchmarks (1000 documents, 3 iterations)
 
 | Operation | Library | Avg (ms) | ops/sec | Comparison |
 |-----------|---------|----------|---------|------------|
-| INSERT_MANY | **data-bridge** | 17.76 | 56,309 | **fastest** |
+| INSERT_MANY | **ouroboros** | 17.76 | 56,309 | **fastest** |
 | INSERT_MANY | PyMongo Async+DC | 49.26 | 20,302 | 2.8x slower |
 | INSERT_MANY | Beanie | 57.53 | 17,381 | 3.2x slower |
-| FIND | **data-bridge** | 6.32 | 158,247 | **fastest** |
+| FIND | **ouroboros** | 6.32 | 158,247 | **fastest** |
 | FIND | PyMongo Async+DC | 6.42 | 155,654 | ~same |
 | FIND | Beanie | 8.58 | 116,517 | 1.4x slower |
 
+### Why Rust is Faster
+
+```
+MongoDB → BSON bytes → Python bytes → PyMongo → Beanie models  (Traditional)
+          ↑ Memory pressure in Python heap ↑
+
+MongoDB → BSON bytes → Rust structs → Python objects  (Ouroboros)
+          ↑ Processed in Rust, minimal Python heap ↑
+```
+
 Run benchmarks yourself:
 ```bash
-MONGODB_URI="mongodb://localhost:27017/bench" uv run python benchmarks/bench_comparison.py
+MONGODB_URI="mongodb://localhost:27017/bench" uv run python python/benchmarks/bench_comparison.py
 ```
 
 ## Installation
 
 ```bash
 # Install with uv (recommended)
-uv add data-bridge
+uv add ouroboros-kit
 
 # Install from source (requires Rust toolchain)
 pip install maturin
-cd data-bridge && maturin develop --release
+cd ouroboros && maturin develop --release
 ```
 
 ## Quick Start
 
+### API Framework (ouroboros.api)
+
 ```python
-from data_bridge import Document, init
+from typing import Annotated
+from ouroboros.api import App, Path, Query, Body, JSONResponse
+from ouroboros.validation import BaseModel, Field
+
+app = App(title="My API", version="1.0.0")
+
+# Define models with Pydantic v2 style syntax
+class UserCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    email: Annotated[str, Field(pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")]
+    age: Annotated[int, Field(ge=0, le=150)] = 0
+
+class UserResponse(BaseModel):
+    id: str
+    name: str
+    email: str
+
+# Route handlers with automatic validation
+@app.post("/users", response_model=UserResponse)
+async def create_user(user: Annotated[UserCreate, Body()]) -> dict:
+    # user is already validated by Rust
+    return {"id": "123", "name": user.name, "email": user.email}
+
+@app.get("/users/{user_id}")
+async def get_user(
+    user_id: Annotated[str, Path()],
+    include_details: Annotated[bool, Query()] = False
+) -> dict:
+    return {"id": user_id, "name": "Alice"}
+
+# Run with: uv run python app.py
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(app.serve(host="0.0.0.0", port=8000))
+```
+
+### MongoDB ORM (ouroboros.mongodb)
+
+```python
+from ouroboros.mongodb import Document, init
 
 # Initialize connection
 await init("mongodb://localhost:27017/mydb")
@@ -99,12 +153,323 @@ await alice.save()
 await alice.delete()
 ```
 
-## API Reference
-
-### Document Base Class
+### Validation (ouroboros.validation)
 
 ```python
-from data_bridge import Document
+from typing import Annotated, List, Optional
+from ouroboros.validation import BaseModel, Field, ValidationError
+
+# Pydantic v2 style with Annotated syntax
+class Address(BaseModel):
+    street: Annotated[str, Field(min_length=1)]
+    city: Annotated[str, Field(min_length=1)]
+    country: str = "USA"
+
+class User(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+    email: Annotated[str, Field(pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$")]
+    age: Annotated[int, Field(ge=0, le=150)]
+    address: Address
+    tags: List[str] = []
+
+# Create with validation (happens in Rust!)
+user = User(
+    name="Alice",
+    email="alice@example.com",
+    age=30,
+    address={"street": "123 Main St", "city": "NYC"}
+)
+
+# Nested models work too
+print(user.address.city)  # "NYC"
+
+# Convert to dict
+data = user.model_dump()
+
+# Get JSON schema (for OpenAPI)
+schema = User.model_json_schema()
+
+# Validation errors are structured
+try:
+    invalid = User(name="", email="invalid", age=-1, address={"street": "", "city": ""})
+except ValidationError as e:
+    print(e.errors)  # [{"loc": ["name"], "msg": "...", "type": "..."}]
+```
+
+**Key Feature**: Zero pydantic dependency! `ouroboros.validation` provides Pydantic-compatible API without requiring pydantic installation.
+
+---
+
+## API Reference
+
+### ouroboros.api - Web Framework
+
+#### App Class
+
+```python
+from ouroboros.api import App
+
+app = App(
+    title="My API",
+    version="1.0.0",
+    description="API description",
+    docs_url="/docs",       # Swagger UI
+    redoc_url="/redoc",     # ReDoc
+    openapi_url="/openapi.json"
+)
+```
+
+#### Route Decorators
+
+```python
+@app.get("/path")           # GET request
+@app.post("/path")          # POST request
+@app.put("/path")           # PUT request
+@app.patch("/path")         # PATCH request
+@app.delete("/path")        # DELETE request
+
+# With response model (filters output)
+@app.get("/users/{id}", response_model=UserPublic)
+async def get_user(id: str) -> UserInternal:
+    # UserInternal has password_hash, but response only has UserPublic fields
+    return await fetch_user(id)
+```
+
+#### Parameter Types
+
+```python
+from typing import Annotated
+from ouroboros.api import Path, Query, Body, Header
+
+@app.get("/users/{user_id}")
+async def get_user(
+    user_id: Annotated[str, Path(description="User ID")],
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+    x_token: Annotated[str, Header()] = None
+) -> dict:
+    return {"id": user_id}
+
+@app.post("/users")
+async def create_user(
+    user: Annotated[UserCreate, Body()]
+) -> dict:
+    return user.model_dump()
+```
+
+#### Dependency Injection
+
+```python
+from ouroboros.api import Depends
+
+async def get_db():
+    db = await connect_db()
+    try:
+        yield db
+    finally:
+        await db.close()
+
+async def get_current_user(db: Annotated[Database, Depends(get_db)]):
+    return await db.get_user()
+
+@app.get("/me")
+async def get_me(user: Annotated[User, Depends(get_current_user)]):
+    return user
+```
+
+#### Middleware
+
+```python
+from ouroboros.api import CORSMiddleware, CORSConfig, TimingMiddleware
+
+# CORS support
+app.add_middleware(CORSMiddleware(CORSConfig(
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization"],
+    allow_credentials=True
+)))
+
+# Request timing
+app.add_middleware(TimingMiddleware())
+
+# Custom middleware
+from ouroboros.api import BaseMiddleware
+
+class AuthMiddleware(BaseMiddleware):
+    async def __call__(self, request, call_next):
+        token = request.headers.get("Authorization")
+        if not token:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+```
+
+#### WebSocket Support
+
+```python
+from ouroboros.api import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws")
+async def websocket_handler(ws: WebSocket):
+    await ws.accept()
+    try:
+        while True:
+            data = await ws.receive_text()
+            await ws.send_text(f"Echo: {data}")
+    except WebSocketDisconnect:
+        print("Client disconnected")
+```
+
+#### Server-Sent Events
+
+```python
+from ouroboros.api import EventSourceResponse, ServerSentEvent
+import asyncio
+
+@app.get("/events")
+async def events():
+    async def generate():
+        for i in range(10):
+            yield ServerSentEvent(data=f"Event {i}", event="update")
+            await asyncio.sleep(1)
+    return EventSourceResponse(generate())
+```
+
+#### Background Tasks
+
+```python
+from ouroboros.api import BackgroundTasks
+
+@app.post("/send-email")
+async def send_email(
+    email: str,
+    background: BackgroundTasks
+):
+    background.add_task(send_email_async, email)
+    return {"status": "queued"}
+```
+
+#### Health Checks
+
+```python
+from ouroboros.api import HealthManager, HealthCheck, HealthStatus
+
+health = HealthManager()
+
+@health.check("database")
+async def check_db():
+    try:
+        await db.ping()
+        return HealthStatus.HEALTHY
+    except:
+        return HealthStatus.UNHEALTHY
+
+app.include_health(health, path="/health")
+```
+
+---
+
+### ouroboros.validation - Data Validation
+
+#### BaseModel
+
+```python
+from ouroboros.validation import BaseModel, Field
+from typing import Annotated, Optional, List
+
+class User(BaseModel):
+    # Required field with constraints
+    name: Annotated[str, Field(min_length=1, max_length=100)]
+
+    # Optional field with default
+    bio: Annotated[Optional[str], Field(max_length=500)] = None
+
+    # Numeric constraints
+    age: Annotated[int, Field(ge=0, le=150)] = 0
+
+    # List field
+    tags: List[str] = []
+
+# Instance methods
+user = User(name="Alice")
+user.model_dump()           # Convert to dict
+User.model_json_schema()    # Get JSON schema
+```
+
+#### Field Constraints
+
+```python
+from ouroboros.validation import Field
+
+# String constraints
+Field(min_length=1)         # Minimum length
+Field(max_length=100)       # Maximum length
+Field(pattern=r"^\d+$")     # Regex pattern
+
+# Numeric constraints
+Field(gt=0)                 # Greater than
+Field(ge=0)                 # Greater than or equal
+Field(lt=100)               # Less than
+Field(le=100)               # Less than or equal
+Field(multiple_of=5)        # Must be multiple of
+
+# Collection constraints
+Field(min_items=1)          # Minimum items
+Field(max_items=10)         # Maximum items
+
+# Metadata
+Field(description="User's name")
+Field(example="Alice")
+Field(title="Full Name")
+```
+
+#### Nested Models
+
+```python
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str = "USA"
+
+class Company(BaseModel):
+    name: str
+    address: Address
+
+class User(BaseModel):
+    name: str
+    company: Company
+    addresses: List[Address] = []
+
+# Nested dict is automatically converted
+user = User(
+    name="Alice",
+    company={"name": "Acme", "address": {"street": "123 Main", "city": "NYC"}},
+    addresses=[{"street": "456 Oak", "city": "LA"}]
+)
+```
+
+#### Validation Errors
+
+```python
+from ouroboros.validation import ValidationError
+
+try:
+    user = User(name="", age=-1)
+except ValidationError as e:
+    print(e.errors)
+    # [
+    #   {"loc": ["name"], "msg": "String too short", "type": "string_too_short"},
+    #   {"loc": ["age"], "msg": "Value must be >= 0", "type": "value_error"}
+    # ]
+```
+
+---
+
+### ouroboros.mongodb - MongoDB ORM
+
+#### Document Base Class
+
+```python
+from ouroboros.mongodb import Document
 
 class User(Document):
     email: str
@@ -114,10 +479,9 @@ class User(Document):
 
     class Settings:
         name = "users"           # Collection name
-        # validate_on_save = True  # Coming soon
 ```
 
-### Class Methods (CRUD)
+#### Class Methods (CRUD)
 
 ```python
 # Create
@@ -146,7 +510,7 @@ await User.delete_one(User.email == "test@example.com")
 deleted_count = await User.delete_many(User.status == "deleted")
 ```
 
-### Instance Methods
+#### Instance Methods
 
 ```python
 user = User(email="bob@example.com", name="Bob", age=25)
@@ -166,7 +530,7 @@ if user.id:
     print("Document saved to MongoDB")
 ```
 
-### Query Expressions
+#### Query Expressions
 
 ```python
 # Comparison operators
@@ -196,21 +560,21 @@ User.deleted_at.exists(False)
 (User.role == "admin") | (User.role == "superuser")
 ```
 
-### Text Search
+#### Text Search
 
 ```python
-from data_bridge import text_search
+from ouroboros.mongodb import text_search
 
 # Full-text search (requires text index)
 users = await User.find(text_search("python rust")).to_list()
 
 # With language and case sensitivity
 users = await User.find(
-    text_search("développeur", language="fr", case_sensitive=False)
+    text_search("developpeur", language="fr", case_sensitive=False)
 ).to_list()
 ```
 
-### Geospatial Queries
+#### Geospatial Queries
 
 ```python
 # Find near a point
@@ -235,7 +599,7 @@ User.location.geo_within_box(
 )
 ```
 
-### QueryBuilder
+#### QueryBuilder
 
 ```python
 # Chainable query builder
@@ -265,10 +629,10 @@ deleted = await User.find(User.status == "deleted").delete()
 user = await User.find(User.email == "test@example.com").first()
 ```
 
-### Bulk Operations
+#### Bulk Operations
 
 ```python
-from data_bridge import (
+from ouroboros.mongodb import (
     BulkOperation, UpdateOne, UpdateMany,
     InsertOne, DeleteOne, DeleteMany, ReplaceOne
 )
@@ -302,10 +666,10 @@ print(f"Deleted: {result.deleted_count}")
 print(f"Upserted IDs: {result.upserted_ids}")
 ```
 
-### Aggregation
+#### Aggregation
 
 ```python
-from data_bridge import AggregationBuilder
+from ouroboros.mongodb import AggregationBuilder
 
 # Build aggregation pipeline
 pipeline = AggregationBuilder(User) \
@@ -317,15 +681,7 @@ pipeline = AggregationBuilder(User) \
 results = await pipeline.to_list()
 ```
 
-### Distinct Values
-
-```python
-# Get distinct values
-emails = await User.distinct("email")
-departments = await User.distinct("department", User.status == "active")
-```
-
-### Index Management
+#### Index Management
 
 ```python
 # Create indexes
@@ -342,60 +698,10 @@ for idx in indexes:
 await User.drop_index("email_1")
 ```
 
-### Types and Helpers
+#### Lifecycle Hooks
 
 ```python
-from data_bridge import (
-    PydanticObjectId,  # ObjectId type for Pydantic
-    Indexed,           # Mark field for indexing
-    escape_regex,      # Escape regex special chars
-)
-
-class User(Document):
-    id: PydanticObjectId = None
-    email: Indexed(str, unique=True)  # Creates unique index
-    name: Indexed(str)                # Creates regular index
-
-    class Settings:
-        name = "users"
-
-# Safe regex queries
-pattern = escape_regex("user+test@example.com")  # Escapes the +
-users = await User.find(User.email.regex(pattern)).to_list()
-```
-
-### Document Relations (Links)
-
-```python
-from data_bridge import Link, BackLink
-
-class Author(Document):
-    name: str
-
-    class Settings:
-        name = "authors"
-
-class Book(Document):
-    title: str
-    author: Link[Author]  # Reference to Author
-
-    class Settings:
-        name = "books"
-
-class Publisher(Document):
-    name: str
-    books: BackLink[Book]  # Reverse reference
-
-    class Settings:
-        name = "publishers"
-
-# Note: Link fetching requires Rust implementation (coming soon)
-```
-
-### Lifecycle Hooks (Actions)
-
-```python
-from data_bridge import before_event, after_event, Insert, Save, Delete
+from ouroboros.mongodb import before_event, after_event, Insert, Save, Delete
 
 class User(Document):
     email: str
@@ -418,50 +724,82 @@ class User(Document):
         pass
 ```
 
-### Connection Management
+---
+
+### ouroboros.http - HTTP Client
 
 ```python
-from data_bridge import init, is_connected, close
+from ouroboros.http import HttpClient
 
-# Initialize with URI
-await init("mongodb://localhost:27017/mydb")
+async with HttpClient() as client:
+    # GET request
+    response = await client.get("https://api.example.com/users")
 
-# Check connection status
-if is_connected():
-    print("Connected to MongoDB")
+    # POST with JSON body
+    response = await client.post(
+        "https://api.example.com/users",
+        json={"name": "Alice", "email": "alice@example.com"}
+    )
 
-# Close connection (optional, for cleanup)
-await close()
+    # With headers
+    response = await client.get(
+        "https://api.example.com/protected",
+        headers={"Authorization": "Bearer token"}
+    )
 ```
+
+---
+
+### ouroboros.test - Test Framework
+
+**ouroboros includes a native test framework** built in Rust for superior performance.
+
+```python
+from ouroboros.test import TestSuite, test, expect
+
+class TestUser(TestSuite):
+    @test
+    def test_create_user(self):
+        user = User(name="Alice", age=30)
+        expect(user.name).to_equal("Alice")
+        expect(user.age).to_be_greater_than(0)
+
+    @test
+    async def test_async_operation(self):
+        result = await async_function()
+        expect(result).to_be_truthy()
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(TestUser().run())
+```
+
+Run tests:
+```bash
+uv run python python/tests/unit/test_*.py
+```
+
+---
 
 ## Migration from Beanie
 
-data-bridge provides a Beanie-compatible API for easy migration:
+ouroboros provides a Beanie-compatible API for easy migration:
 
 ### Compatible APIs
 
-| Feature | Beanie | data-bridge | Notes |
-|---------|--------|-------------|-------|
-| Document base class | ✅ | ✅ | Same API |
-| Query expressions | ✅ | ✅ | `User.field == value` |
-| find/find_one | ✅ | ✅ | Same API |
-| save/insert/delete | ✅ | ✅ | Same API |
-| QueryBuilder | ✅ | ✅ | sort/skip/limit/to_list |
-| Bulk operations | ✅ | ✅ | Same API |
-| Aggregation | ✅ | ✅ | Same API |
-| Lifecycle hooks | ✅ | ✅ | @before_event/@after_event |
-| Index management | ✅ | ✅ | create_index/list_indexes |
-| Text search | ✅ | ✅ | text_search() |
-| Geo queries | ✅ | ✅ | near/geo_within |
-
-### Not Yet Implemented
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Transactions | Stub | Raises TransactionNotSupportedError |
-| Link fetching | Stub | Link/BackLink types defined |
-| ValidateOnSave | Planned | Use Pydantic validation for now |
-| Revision IDs | Planned | For optimistic concurrency |
+| Feature | Beanie | ouroboros | Notes |
+|---------|--------|-----------|-------|
+| Document base class | yes | yes | Same API |
+| Query expressions | yes | yes | `User.field == value` |
+| find/find_one | yes | yes | Same API |
+| save/insert/delete | yes | yes | Same API |
+| QueryBuilder | yes | yes | sort/skip/limit/to_list |
+| Bulk operations | yes | yes | Same API |
+| Aggregation | yes | yes | Same API |
+| Lifecycle hooks | yes | yes | @before_event/@after_event |
+| Index management | yes | yes | create_index/list_indexes |
+| Text search | yes | yes | text_search() |
+| Geo queries | yes | yes | near/geo_within |
 
 ### Migration Steps
 
@@ -470,8 +808,8 @@ data-bridge provides a Beanie-compatible API for easy migration:
    # Before (Beanie)
    from beanie import Document, init_beanie
 
-   # After (data-bridge)
-   from data_bridge import Document, init
+   # After (ouroboros)
+   from ouroboros.mongodb import Document, init
    ```
 
 2. **Update init call**:
@@ -479,13 +817,39 @@ data-bridge provides a Beanie-compatible API for easy migration:
    # Before (Beanie)
    await init_beanie(database=db, document_models=[User, Post])
 
-   # After (data-bridge) - models auto-registered
+   # After (ouroboros) - models auto-registered
    await init("mongodb://localhost:27017/mydb")
    ```
 
 3. **Run tests** - Most code should work without changes!
 
-## Spreadsheet Engine Quick Start
+---
+
+## Migration from Pydantic
+
+ouroboros.validation provides Pydantic-compatible API without the pydantic dependency:
+
+```python
+# Before (Pydantic)
+from pydantic import BaseModel, Field
+from typing import Annotated
+
+class User(BaseModel):
+    name: Annotated[str, Field(min_length=1)]
+    age: Annotated[int, Field(ge=0)]
+
+# After (ouroboros) - Same syntax!
+from ouroboros.validation import BaseModel, Field
+from typing import Annotated
+
+class User(BaseModel):
+    name: Annotated[str, Field(min_length=1)]
+    age: Annotated[int, Field(ge=0)]
+```
+
+---
+
+## Spreadsheet Engine
 
 ### Installation (Frontend)
 
@@ -548,16 +912,27 @@ function App() {
 }
 ```
 
-See [docs/SHEET_README.md](docs/SHEET_README.md) for complete documentation.
+### Features
+
+- **High Performance**: Rust-powered formula engine compiled to WebAssembly
+- **Real-time Collaboration**: Multi-user editing with CRDT-based sync (Yjs/yrs)
+- **Full Formula Support**: 24+ built-in functions (SUM, IF, VLOOKUP, etc.)
+- **Undo/Redo**: Complete history with unlimited undo
+- **Event-driven API**: Subscribe to cell changes, selections, and more
+- **Zero-copy Rendering**: Direct memory access for optimal performance
+
+See [docs/archive/SHEET_README.md](docs/archive/SHEET_README.md) for complete documentation.
+
+---
 
 ## Architecture
 
-### Unified Platform Overview
+### Platform Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                   Python Application Layer                   │
-│              (MongoDB ORM, HTTP Client, Tasks)               │
+│         (ouroboros.api, mongodb, http, validation)           │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                    PyO3 Rust Bridge
@@ -565,8 +940,8 @@ See [docs/SHEET_README.md](docs/SHEET_README.md) for complete documentation.
 ┌──────────────────────────▼──────────────────────────────────┐
 │                    Rust Core Layer                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │  MongoDB ORM │  │  HTTP Client │  │   Task Queue     │   │
-│  │  (BSON/CRUD) │  │  (Reqwest)   │  │   (NATS/Redis)   │   │
+│  │  MongoDB ORM │  │  HTTP Client │  │   Validation     │   │
+│  │  (BSON/CRUD) │  │  (Reqwest)   │  │   (Type checks)  │   │
 │  └──────────────┘  └──────────────┘  └──────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 
@@ -586,20 +961,6 @@ See [docs/SHEET_README.md](docs/SHEET_README.md) for complete documentation.
 │  │ sheet-core   │  │sheet-formula │  │ sheet-history    │   │
 │  │ (cells/grid) │  │  (parser)    │  │  (undo/redo)     │   │
 │  └──────────────┘  └──────────────┘  └──────────────────┘   │
-│  ┌──────────────┐                                            │
-│  │  sheet-db    │  ← Custom Database (Morton encoding)      │
-│  │ (KV storage) │                                            │
-│  └──────────────┘                                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                      Axum Server
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│             Spreadsheet Collaboration Server                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐   │
-│  │  Axum HTTP   │  │  yrs (CRDT)  │  │   PostgreSQL     │   │
-│  │  WebSocket   │  │              │  │   (workbooks)    │   │
-│  └──────────────┘  └──────────────┘  └──────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -608,7 +969,7 @@ See [docs/SHEET_README.md](docs/SHEET_README.md) for complete documentation.
 ```
 Python Application Layer
         ↓
-data-bridge (Beanie-compatible API)
+ouroboros.mongodb (Beanie-compatible API)
         ↓
 PyO3 Rust Extension (PyO3 0.24)
         ↓
@@ -619,49 +980,24 @@ MongoDB Server
 
 **Key Principle**: All BSON serialization/deserialization happens in Rust - Python receives only typed, validated objects.
 
-### Why Rust?
-
-**Current Problem (Python-based):**
-```
-MongoDB → BSON bytes → Python bytes → PyMongo objects → Beanie models
-          ↑ Large datasets create memory pressure in Python heap ↑
-```
-
-**data-bridge Solution:**
-```
-MongoDB → BSON bytes → Rust structs → Python objects
-          ↑ Processed in Rust, minimal Python heap usage ↑
-```
-
-**Benefits:**
-- Direct BSON → Rust struct → Python object (no intermediate bytes in Python heap)
-- Parallel processing without GIL contention
-- Memory-mapped operations where possible
-- Zero-copy deserialization for large documents
-
 ### Validation Architecture
 
-**data-bridge uses Rust-only validation for performance and security:**
+**ouroboros uses Rust-only validation for performance and security:**
 
 1. **Python layer**: Type hints for IDE support (NOT runtime validation)
 2. **Rust layer**: All runtime validation happens here
 3. **Zero Python validation overhead**: No Pydantic, no runtime type checking in Python
-
-**Key Innovation:**
-- Python does less: Just type hints for model definition
-- Rust does more: All runtime validation (type checking, security, BSON conversion)
-- Same developer experience as Pydantic, but 10x faster
 
 **Validation Flow:**
 ```
 User.save() → PyO3 Bridge → Rust Validation → MongoDB
                               ↓
                        - Type checking
-                       - Security validation
+                       - Constraint validation
                        - BSON conversion (GIL-free)
 ```
 
-See [docs/architecture/validation-flow.md](docs/architecture/validation-flow.md) for detailed documentation.
+---
 
 ## Development
 
@@ -682,12 +1018,9 @@ maturin develop
 maturin develop --release
 
 # Run tests
-cargo test                          # Rust tests
-uv run python tests/unit/ -v        # Python tests (data-bridge-test)
-uv run python tests/integration/ -v # Integration tests (requires MongoDB)
-
-# Coverage
-uv run python -m data_bridge.test tests/ --coverage --format=html
+cargo test                                           # Rust tests
+uv run python python/tests/unit/test_*.py           # Unit tests
+uv run python python/tests/integration/test_*.py   # Integration tests
 
 # Security audit
 cargo audit
@@ -696,21 +1029,18 @@ cargo audit
 ### Project Structure
 
 ```
-data-bridge/
-├── crates/                    # Rust workspace
-│   ├── data-bridge/           # PyO3 Python bindings (main entry)
-│   ├── data-bridge-mongodb/   # Pure Rust MongoDB ORM
-│   ├── data-bridge-postgres/  # PostgreSQL support
-│   ├── data-bridge-http/      # HTTP client
-│   ├── data-bridge-test/      # Benchmarking & testing framework
-│   ├── data-bridge-common/    # Shared types and errors
-│   ├── data-bridge-kv/        # Key-Value store
-│   ├── data-bridge-kv-server/ # KV server
-│   ├── data-bridge-kv-client/ # KV client
-│   ├── data-bridge-api/       # API framework
-│   ├── data-bridge-tasks/     # Task queue
+ouroboros/
+├── crates/                         # Rust workspace
+│   ├── data-bridge/                # PyO3 Python bindings (main entry)
+│   ├── data-bridge-mongodb/        # Pure Rust MongoDB ORM
+│   ├── data-bridge-api/            # API framework core
+│   ├── data-bridge-http/           # HTTP client
+│   ├── data-bridge-postgres/       # PostgreSQL support
+│   ├── data-bridge-test/           # Test framework
+│   ├── data-bridge-kv/             # Key-Value store
+│   ├── data-bridge-common/         # Shared types and errors
 │   │
-│   ├── data-bridge-sheet-core/     # Spreadsheet core (cells, grid)
+│   ├── data-bridge-sheet-core/     # Spreadsheet core
 │   ├── data-bridge-sheet-db/       # Custom database (Morton encoding)
 │   ├── data-bridge-sheet-formula/  # Formula parser & evaluator
 │   ├── data-bridge-sheet-history/  # Undo/redo system
@@ -718,95 +1048,76 @@ data-bridge/
 │   └── data-bridge-sheet-wasm/     # WebAssembly bindings
 │
 ├── python/
-│   └── data_bridge/           # Beanie-compatible Python API
-│       ├── __init__.py        # Public API exports
-│       ├── document.py        # Document base class
-│       ├── fields.py          # FieldProxy, QueryExpr
-│       ├── query.py           # QueryBuilder
-│       ├── bulk.py            # Bulk operations
-│       └── ...
+│   └── ouroboros/                  # Python API
+│       ├── __init__.py             # Public API exports
+│       ├── api/                    # Web framework
+│       ├── validation/             # BaseModel & Field
+│       ├── mongodb/                # MongoDB ORM
+│       ├── http/                   # HTTP client
+│       └── test/                   # Test framework
 │
-├── frontend/                  # Spreadsheet frontend
-│   ├── src/                   # TypeScript source
-│   │   ├── core/              # API and state
-│   │   ├── canvas/            # Canvas rendering
-│   │   ├── ui/                # UI components
-│   │   ├── collab/            # Collaboration client
-│   │   └── worker/            # Web Worker
-│   ├── pkg/                   # Built WASM package
-│   └── examples/              # Example apps
+├── frontend/                       # Spreadsheet frontend
+│   ├── src/                        # TypeScript source
+│   └── pkg/                        # Built WASM package
 │
-├── tests/                     # Python tests (313 tests)
-├── benchmarks/                # Performance benchmarks
-└── docs/                      # Documentation
-    ├── SHEET_README.md        # Spreadsheet documentation
-    ├── SHEET_ARCHITECTURE.md  # Technical architecture
-    └── sheet-specs/           # Specifications
+└── docs/                           # Documentation
 ```
 
-### Crate Overview
-
-| Crate | Description | Type |
-|-------|-------------|------|
-| **MongoDB ORM** | | |
-| `data-bridge` | PyO3 bindings for Python | cdylib |
-| `data-bridge-mongodb` | Pure Rust MongoDB ORM | lib |
-| **Infrastructure** | | |
-| `data-bridge-http` | HTTP client with connection pooling | lib |
-| `data-bridge-postgres` | PostgreSQL support | lib |
-| `data-bridge-test` | Benchmarking & testing framework | lib |
-| `data-bridge-common` | Shared types and errors | lib |
-| `data-bridge-kv` | Key-Value store | lib |
-| `data-bridge-kv-server` | KV server | bin |
-| `data-bridge-kv-client` | KV client | lib |
-| `data-bridge-api` | API framework | lib |
-| `data-bridge-tasks` | Task queue (NATS/Redis) | lib |
-| **Spreadsheet Engine** | | |
-| `data-bridge-sheet-core` | Core data structures (cells, sheets, formatting) | lib |
-| `data-bridge-sheet-db` | Custom database with Morton encoding | lib |
-| `data-bridge-sheet-formula` | Formula parser and evaluator (24+ functions) | lib |
-| `data-bridge-sheet-history` | Undo/redo command system | lib |
-| `data-bridge-sheet-server` | Collaboration server (Axum + Yjs) | bin |
-| `data-bridge-sheet-wasm` | WebAssembly bindings | cdylib |
+---
 
 ## Testing
 
-**data-bridge uses its native test framework** (data-bridge-test) built in Rust for superior performance.
-
 ```bash
-# Run all tests
-uv run python -m data_bridge.test tests/ -v
+# Run all Python tests
+uv run python python/tests/unit/test_*.py
+uv run python python/tests/integration/test_*.py
 
-# Run specific directory
-uv run python tests/unit/ -v                    # Unit tests
-uv run python tests/integration/ -v             # Integration tests (requires MongoDB)
+# Run Rust tests
+cargo test
 
 # Run benchmarks
-uv run python benchmarks/bench_comparison.py --rounds 5 --warmup 2
+uv run python python/benchmarks/bench_comparison.py --rounds 5 --warmup 2
 
-# With coverage
-uv run python -m data_bridge.test tests/ --coverage --format=html
-
-# Specific test file
-uv run python tests/unit/test_validation.py
+# Run specific test file
+uv run python python/tests/unit/test_validation.py
 ```
 
-**Note**: pytest is kept only for framework comparison benchmarks (`benchmarks/framework_comparison/`)
+---
 
 ## License
 
 MIT License - see LICENSE file for details.
 
+---
+
 ## Roadmap
 
-### MongoDB ORM
-- [x] MongoDB ORM with Beanie compatibility
+### API Framework (ouroboros.api)
+- [x] Route decorators (GET, POST, PUT, DELETE, PATCH)
+- [x] Path, Query, Body, Header parameters
+- [x] Dependency injection
+- [x] Middleware support (CORS, timing, logging)
+- [x] WebSocket support
+- [x] Server-Sent Events
+- [x] Background tasks
+- [x] OpenAPI documentation (Swagger, ReDoc)
+- [x] response_model filtering
+
+### Validation (ouroboros.validation)
+- [x] Pydantic v2 Annotated syntax
+- [x] Nested model validation
+- [x] Rust-powered validation (zero Python overhead)
+- [x] JSON schema generation
+- [ ] Custom validators
+
+### MongoDB ORM (ouroboros.mongodb)
+- [x] Beanie-compatible API
 - [x] Bulk operations
 - [x] Aggregation pipeline
 - [x] Text search and geo queries
 - [x] Lifecycle hooks
 - [x] Index management
-- [ ] Transaction support (Rust implementation)
+- [ ] Transaction support
 - [ ] Link fetching (eager/lazy loading)
 
 ### Spreadsheet Engine
@@ -816,18 +1127,12 @@ MIT License - see LICENSE file for details.
 - [x] CSV/XLSX import/export
 - [x] WebAssembly bindings
 - [x] React component wrapper
-- [ ] Authentication & permissions
-- [ ] Data validation (dropdowns, constraints)
-- [ ] Conditional formatting
-- [ ] Named ranges
 - [ ] Vue component wrapper
+- [ ] Conditional formatting
 
 ### Infrastructure
 - [x] HTTP client
-- [x] Native test framework (data-bridge-test) - **faster than pytest**
+- [x] Native test framework
 - [x] PostgreSQL support (partial)
 - [ ] Task queue (NATS/Redis)
 - [ ] Key-Value store
-- [ ] Redis client
-
-See [docs/SHEET_README.md](docs/SHEET_README.md) for detailed spreadsheet roadmap.

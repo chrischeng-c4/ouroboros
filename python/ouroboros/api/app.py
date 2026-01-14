@@ -26,6 +26,12 @@ from .health import HealthManager
 from .middleware import MiddlewareStack, BaseMiddleware
 from .forms import FormMarker, FileMarker, UploadFile
 
+# Import BaseModel for response filtering
+try:
+    from ouroboros.validation import BaseModel
+except ImportError:
+    BaseModel = None  # type: ignore
+
 # Import Rust bindings
 try:
     # Import the Rust module (ouroboros is the compiled .so file)
@@ -35,6 +41,105 @@ except ImportError:
     _api = None
 
 T = TypeVar('T')
+
+
+def _filter_response(data: Any, response_model: Type) -> Any:
+    """Filter a response through a response model.
+
+    Takes a response value (dict, BaseModel instance, or list) and filters it
+    to only include fields defined in the response_model. This is useful for
+    hiding internal fields when returning data to clients.
+
+    Args:
+        data: The response data to filter. Can be:
+            - dict: Will be validated and filtered
+            - BaseModel instance: Will be converted and filtered
+            - list: Each item will be recursively filtered
+            - None: Returns None
+        response_model: A BaseModel subclass defining which fields to include
+
+    Returns:
+        Filtered dictionary containing only fields from response_model
+
+    Example:
+        class UserInternal(BaseModel):
+            id: str
+            name: str
+            email: str
+            password_hash: str  # internal field
+
+        class UserPublic(BaseModel):
+            id: str
+            name: str
+            email: str
+
+        # Returns {"id": "1", "name": "John", "email": "john@example.com"}
+        # password_hash is filtered out
+        _filter_response(user_internal, UserPublic)
+    """
+    if data is None:
+        return None
+
+    # Handle list of items
+    if isinstance(data, list):
+        return [_filter_response(item, response_model) for item in data]
+
+    # Convert BaseModel to dict
+    if BaseModel is not None and isinstance(data, BaseModel):
+        data = data.model_dump()
+
+    # If not a dict at this point, return as-is
+    if not isinstance(data, dict):
+        return data
+
+    # Get fields from response_model
+    if BaseModel is not None and hasattr(response_model, "__fields__"):
+        model_fields = response_model.__fields__
+        field_types = getattr(response_model, "__field_types__", {})
+    else:
+        return data
+
+    # Filter to only include response_model fields
+    filtered = {}
+    for field_name in model_fields:
+        if field_name in data:
+            value = data[field_name]
+
+            # Handle nested models
+            field_type = field_types.get(field_name)
+            if field_type is not None:
+                # Unwrap Optional[T]
+                origin = get_origin(field_type)
+                if origin is Union:
+                    args = get_args(field_type)
+                    non_none = [a for a in args if a is not type(None)]
+                    if len(non_none) == 1:
+                        field_type = non_none[0]
+                    else:
+                        field_type = None
+                elif origin is list:
+                    args = get_args(field_type)
+                    if args and BaseModel is not None:
+                        item_type = args[0]
+                        if isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                            # Filter each list item through the nested model
+                            value = [_filter_response(item, item_type) for item in value] if isinstance(value, list) else value
+                            filtered[field_name] = value
+                            continue
+
+                # Handle nested BaseModel
+                if (
+                    field_type is not None
+                    and isinstance(field_type, type)
+                    and BaseModel is not None
+                    and issubclass(field_type, BaseModel)
+                ):
+                    value = _filter_response(value, field_type)
+
+            filtered[field_name] = value
+
+    return filtered
+
 
 class AppState:
     """Simple state container for lifespan-scoped data.
@@ -69,6 +174,7 @@ class RouteInfo:
     deprecated: bool
     status_code: int
     dependencies: List[str] = field(default_factory=list)
+    response_model: Optional[Type] = None
 
 class App:
     """API Application.
@@ -143,13 +249,34 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a route handler.
+
+        Args:
+            path: URL path pattern
+            methods: HTTP methods to handle
+            name: Handler name for OpenAPI
+            summary: Short description for OpenAPI
+            description: Full description for OpenAPI
+            tags: Tags for grouping in OpenAPI
+            deprecated: Mark as deprecated
+            status_code: Default HTTP status code
+            response_model: Response model for validation and filtering.
+                If provided, the handler's return value will be validated
+                and filtered through this model, hiding any fields not
+                defined in the model.
 
         Example:
             @app.route("/users", methods=["GET", "POST"])
             async def users(request: Request) -> Response:
                 ...
+
+            # With response_model for filtering:
+            @app.route("/users/{user_id}", response_model=UserPublic)
+            async def get_user(user_id: str) -> User:
+                # Returns full User but only UserPublic fields are sent
+                return await User.get(user_id)
         """
         methods = methods or ["GET"]
         tags = tags or []
@@ -173,6 +300,7 @@ class App:
                     tags=tags,
                     deprecated=deprecated,
                     status_code=status_code,
+                    response_model=response_model,
                 )
 
             return func
@@ -189,6 +317,7 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a GET route handler."""
         return self.route(
@@ -200,6 +329,7 @@ class App:
             tags=tags,
             deprecated=deprecated,
             status_code=status_code,
+            response_model=response_model,
         )
 
     def post(
@@ -212,6 +342,7 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 201,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a POST route handler."""
         return self.route(
@@ -223,6 +354,7 @@ class App:
             tags=tags,
             deprecated=deprecated,
             status_code=status_code,
+            response_model=response_model,
         )
 
     def put(
@@ -235,6 +367,7 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a PUT route handler."""
         return self.route(
@@ -246,6 +379,7 @@ class App:
             tags=tags,
             deprecated=deprecated,
             status_code=status_code,
+            response_model=response_model,
         )
 
     def patch(
@@ -258,6 +392,7 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 200,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a PATCH route handler."""
         return self.route(
@@ -269,6 +404,7 @@ class App:
             tags=tags,
             deprecated=deprecated,
             status_code=status_code,
+            response_model=response_model,
         )
 
     def delete(
@@ -281,6 +417,7 @@ class App:
         tags: Optional[List[str]] = None,
         deprecated: bool = False,
         status_code: int = 204,
+        response_model: Optional[Type] = None,
     ) -> Callable[[T], T]:
         """Register a DELETE route handler."""
         return self.route(
@@ -292,6 +429,7 @@ class App:
             tags=tags,
             deprecated=deprecated,
             status_code=status_code,
+            response_model=response_model,
         )
 
     def websocket(
@@ -342,6 +480,7 @@ class App:
         tags: List[str],
         deprecated: bool,
         status_code: int,
+        response_model: Optional[Type] = None,
     ) -> None:
         """Internal route registration."""
         # Build dependency graph for handler using global deps tracker
@@ -363,6 +502,7 @@ class App:
             deprecated=deprecated,
             status_code=status_code,
             dependencies=handler_deps,
+            response_model=response_model,
         )
         self._routes.append(route_info)
         self._handlers[f"{method}:{path}"] = handler
@@ -1080,12 +1220,25 @@ class App:
             # Call handler
             result = await handler(**kwargs) if asyncio.iscoroutinefunction(handler) else handler(**kwargs)
 
+            # Apply response_model filtering if specified
+            if route_info and route_info.response_model is not None:
+                result = _filter_response(result, route_info.response_model)
+
             # Convert result to response
             if isinstance(result, Response):
                 response_body = result.body
                 status_code = result.status_code
                 response_headers = [[k.encode(), v.encode()] for k, v in result.headers.items()]
+            elif BaseModel is not None and isinstance(result, BaseModel):
+                # Handle BaseModel instances
+                response_body = json.dumps(result.model_dump()).encode()
+                status_code = route_info.status_code if route_info else 200
+                response_headers = [[b"content-type", b"application/json"]]
             elif isinstance(result, dict):
+                response_body = json.dumps(result).encode()
+                status_code = route_info.status_code if route_info else 200
+                response_headers = [[b"content-type", b"application/json"]]
+            elif isinstance(result, list):
                 response_body = json.dumps(result).encode()
                 status_code = route_info.status_code if route_info else 200
                 response_headers = [[b"content-type", b"application/json"]]

@@ -734,6 +734,208 @@ impl PyResponse {
 }
 
 // ============================================================================
+// Standalone Validation Function
+// ============================================================================
+
+/// Validate a Python value against a type descriptor
+///
+/// This is the core validation function exposed for `ouroboros.validation.BaseModel`.
+/// It takes a Python dict (data) and a type descriptor dict, validates the data,
+/// and returns the validated/coerced data or raises a ValidationError.
+///
+/// # Arguments
+/// * `data` - Python dict containing the data to validate
+/// * `type_descriptor` - Python dict describing the expected type structure
+///
+/// # Returns
+/// * `Ok(PyObject)` - The validated data (possibly coerced)
+/// * `Err(PyErr)` - ValidationError with details
+#[pyfunction]
+#[pyo3(name = "validate_value")]
+pub fn py_validate_value(
+    py: Python<'_>,
+    data: &Bound<'_, PyDict>,
+    type_descriptor: &Bound<'_, PyDict>,
+) -> PyResult<PyObject> {
+    use data_bridge_api::validation::{validate_type, FieldDescriptor};
+    use data_bridge_api::error::ValidationErrors;
+
+    // Convert Python data to SerializableValue
+    let value = py_to_serializable(py, data.as_any())?;
+
+    // Convert Python type descriptor to Rust TypeDescriptor
+    let type_desc = extract_object_type_descriptor(py, type_descriptor)?;
+
+    // Validate
+    let mut errors = ValidationErrors::new();
+    validate_type(&value, &type_desc, "body", "", &mut errors);
+
+    if errors.is_empty() {
+        // Return the validated data
+        serializable_to_py(py, &value)
+    } else {
+        // Build error details as a Python list of dicts
+        let error_list = PyList::empty(py);
+        for err in &errors.errors {
+            let err_dict = PyDict::new(py);
+            err_dict.set_item("loc", PyList::new(py, &[&err.location, &err.field])?)?;
+            err_dict.set_item("msg", &err.message)?;
+            err_dict.set_item("type", &err.error_type)?;
+            error_list.append(err_dict)?;
+        }
+
+        // Raise a ValueError with the error details
+        // In Python, this will be caught and re-raised as ValidationError
+        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("Validation failed: {}", errors)
+        ))
+    }
+}
+
+/// Extract TypeDescriptor for an object type from Python dict
+///
+/// This handles the full object type with nested fields, supporting:
+/// - Basic types: string, int, float, bool
+/// - Nested objects (recursive)
+/// - Lists with item types
+/// - Optional types
+fn extract_object_type_descriptor(
+    py: Python<'_>,
+    dict: &Bound<'_, PyDict>,
+) -> PyResult<TypeDescriptor> {
+    use data_bridge_api::validation::FieldDescriptor;
+    #[allow(unused_imports)]
+    use data_bridge_api::error::ValidationErrors;
+
+    // Check if this is an object type with properties
+    if let Some(properties) = dict.get_item("properties")? {
+        if let Ok(props_dict) = properties.downcast::<PyDict>() {
+            let required_list: Vec<String> = dict
+                .get_item("required")?
+                .map(|r| r.extract().unwrap_or_default())
+                .unwrap_or_default();
+
+            let mut fields = Vec::new();
+            for (key, value) in props_dict.iter() {
+                let field_name: String = key.extract()?;
+                let field_dict = value.downcast::<PyDict>()?;
+                let field_type = extract_type_descriptor_recursive(py, field_dict)?;
+
+                fields.push(FieldDescriptor {
+                    name: field_name.clone(),
+                    type_desc: field_type,
+                    required: required_list.contains(&field_name),
+                    default: None,
+                    description: None,
+                });
+            }
+
+            return Ok(TypeDescriptor::Object {
+                fields,
+                additional_properties: None,
+            });
+        }
+    }
+
+    // Fallback to simple type extraction
+    extract_type_descriptor(py, dict)
+}
+
+/// Recursively extract TypeDescriptor from Python dict
+fn extract_type_descriptor_recursive(
+    py: Python<'_>,
+    dict: &Bound<'_, PyDict>,
+) -> PyResult<TypeDescriptor> {
+    use data_bridge_api::validation::FieldDescriptor;
+
+    // Check for nullable/optional wrapper
+    if let Some(any_of) = dict.get_item("anyOf")? {
+        if let Ok(any_of_list) = any_of.downcast::<PyList>() {
+            let mut variants = Vec::new();
+            let mut nullable = false;
+
+            for item in any_of_list.iter() {
+                if let Ok(item_dict) = item.downcast::<PyDict>() {
+                    if let Some(type_val) = item_dict.get_item("type")? {
+                        let type_str: String = type_val.extract().unwrap_or_default();
+                        if type_str == "null" {
+                            nullable = true;
+                            continue;
+                        }
+                    }
+                    variants.push(extract_type_descriptor_recursive(py, item_dict)?);
+                }
+            }
+
+            // If only one non-null variant, wrap in Optional
+            if variants.len() == 1 && nullable {
+                return Ok(TypeDescriptor::Optional(Box::new(variants.remove(0))));
+            } else if !variants.is_empty() {
+                return Ok(TypeDescriptor::Union { variants, nullable });
+            }
+        }
+    }
+
+    // Check for nested object
+    if let Some(properties) = dict.get_item("properties")? {
+        if let Ok(props_dict) = properties.downcast::<PyDict>() {
+            let required_list: Vec<String> = dict
+                .get_item("required")?
+                .map(|r| r.extract().unwrap_or_default())
+                .unwrap_or_default();
+
+            let mut fields = Vec::new();
+            for (key, value) in props_dict.iter() {
+                let field_name: String = key.extract()?;
+                let field_dict = value.downcast::<PyDict>()?;
+                let field_type = extract_type_descriptor_recursive(py, field_dict)?;
+
+                fields.push(FieldDescriptor {
+                    name: field_name.clone(),
+                    type_desc: field_type,
+                    required: required_list.contains(&field_name),
+                    default: None,
+                    description: None,
+                });
+            }
+
+            return Ok(TypeDescriptor::Object {
+                fields,
+                additional_properties: None,
+            });
+        }
+    }
+
+    // Check for array type
+    if let Some(type_val) = dict.get_item("type")? {
+        let type_str: String = type_val.extract().unwrap_or_default();
+        if type_str == "array" {
+            let items_type = if let Some(items) = dict.get_item("items")? {
+                if let Ok(items_dict) = items.downcast::<PyDict>() {
+                    extract_type_descriptor_recursive(py, items_dict)?
+                } else {
+                    TypeDescriptor::Any
+                }
+            } else {
+                TypeDescriptor::Any
+            };
+
+            let min_items = dict.get_item("minItems")?.map(|v| v.extract().ok()).flatten();
+            let max_items = dict.get_item("maxItems")?.map(|v| v.extract().ok()).flatten();
+
+            return Ok(TypeDescriptor::List {
+                items: Box::new(items_type),
+                min_items,
+                max_items,
+            });
+        }
+    }
+
+    // Fall back to simple type extraction
+    extract_type_descriptor(py, dict)
+}
+
+// ============================================================================
 // Module Registration
 // ============================================================================
 
@@ -742,6 +944,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyApiApp>()?;
     m.add_class::<PyRequest>()?;
     m.add_class::<PyResponse>()?;
+    m.add_function(wrap_pyfunction!(py_validate_value, m)?)?;
     Ok(())
 }
 

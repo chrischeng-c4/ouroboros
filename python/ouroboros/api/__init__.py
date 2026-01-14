@@ -28,6 +28,16 @@ from .forms import Form, File, UploadFile, FormMarker, FileMarker
 from .websocket import WebSocket, WebSocketDisconnect, WebSocketState
 from .sse import ServerSentEvent, EventSourceResponse
 
+# Import Rust validation function from the native module
+try:
+    from ouroboros.ouroboros.api import validate_value as _rust_validate_value
+    validate_value = _rust_validate_value
+except ImportError:
+    # Fallback placeholder if Rust module not available
+    def validate_value(data: dict, type_descriptor: dict) -> dict:  # type: ignore
+        """Placeholder for Rust validation - returns data unvalidated."""
+        return data
+
 __all__ = [
     # Core
     "App",
@@ -82,4 +92,6 @@ __all__ = [
     # Server-Sent Events
     "ServerSentEvent",
     "EventSourceResponse",
+    # Validation
+    "validate_value",
 ]
