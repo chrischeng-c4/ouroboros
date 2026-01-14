@@ -408,12 +408,18 @@ class Table(metaclass=TableMeta):
         self._data = data
 
     @classmethod
-    def find(cls: Type[T], *filters: SqlExpr | dict) -> QueryBuilder[T]:
+    def find(
+        cls: Type[T],
+        *filters: SqlExpr | dict,
+        fetch_links: bool = False,
+    ) -> QueryBuilder[T]:
         """
         Create a query to find rows matching filters.
 
         Args:
             *filters: Query expressions or filter dictionaries
+            fetch_links: If True, automatically eager-load all relationships
+                        using selectinload to prevent N+1 queries
 
         Returns:
             QueryBuilder for chaining operations
@@ -430,19 +436,35 @@ class Table(metaclass=TableMeta):
             ...     User.age > 25,
             ...     User.email.like("%@example.com")
             ... ).to_list()
+            >>>
+            >>> # Eager-load all relationships (prevents N+1 queries)
+            >>> users = await User.find(fetch_links=True).to_list()
+            >>> # Equivalent to:
+            >>> # User.find().options(selectinload("posts"), selectinload("profile"))
         """
-        return QueryBuilder(cls, filters)
+        query = QueryBuilder(cls, filters)
+
+        # If fetch_links=True, automatically apply selectinload for all relationships
+        if fetch_links and cls._relationships:
+            from .options import selectinload
+            options = [selectinload(rel_name) for rel_name in cls._relationships.keys()]
+            query = query.options(*options)
+
+        return query
 
     @classmethod
     async def find_one(
         cls: Type[T],
         *filters: SqlExpr | dict,
+        fetch_links: bool = False,
     ) -> Optional[T]:
         """
         Find one row matching filters.
 
         Args:
             *filters: Query expressions or filter dictionaries
+            fetch_links: If True, automatically eager-load all relationships
+                        using selectinload to prevent N+1 queries
 
         Returns:
             Table instance or None if not found
@@ -451,8 +473,12 @@ class Table(metaclass=TableMeta):
             >>> user = await User.find_one(User.email == "alice@example.com")
             >>> if user:
             ...     print(user.name)
+            >>>
+            >>> # With eager-loaded relationships
+            >>> user = await User.find_one(User.id == 1, fetch_links=True)
+            >>> posts = await user.posts  # Already loaded, no extra query
         """
-        return await cls.find(*filters).first()
+        return await cls.find(*filters, fetch_links=fetch_links).first()
 
     @classmethod
     async def get(cls: Type[T], row_id: int) -> Optional[T]:
