@@ -1141,6 +1141,93 @@ impl PyExpectation {
             Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
         }
     }
+
+    /// Assert that calling a callable raises a specific exception type.
+    ///
+    /// Usage: `expect(lambda: some_func()).to_raise(ValueError)`
+    ///
+    /// The value should be a callable (typically a lambda) that when called
+    /// should raise the specified exception type.
+    fn to_raise(&self, py: Python<'_>, exception_type: PyObject) -> PyResult<()> {
+        let bound_callable = self.value.bind(py);
+
+        // Verify the value is callable
+        if !bound_callable.is_callable() {
+            return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "to_raise() expects a callable (e.g., lambda: func())",
+            ));
+        }
+
+        // Call the callable and see what happens
+        let call_result = bound_callable.call0();
+
+        match call_result {
+            Ok(_) => {
+                // No exception was raised
+                if self.negated {
+                    // expect(...).not().to_raise(E) - we expected NO exception, and none was raised
+                    Ok(())
+                } else {
+                    // expect(...).to_raise(E) - we expected an exception, but none was raised
+                    let exc_name = exception_type
+                        .bind(py)
+                        .getattr("__name__")
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|_| format!("{:?}", exception_type));
+                    Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(format!(
+                        "Expected {} to be raised, but no exception was raised",
+                        exc_name
+                    )))
+                }
+            }
+            Err(err) => {
+                // An exception was raised - check if it's the right type
+                let raised_type = err.get_type(py);
+                let expected_type = exception_type.bind(py);
+
+                // Check if the raised exception is an instance of the expected type
+                // Using PyAny::is_instance to handle inheritance properly
+                let is_expected_type = raised_type.is_subclass(expected_type).unwrap_or(false);
+
+                if self.negated {
+                    // expect(...).not().to_raise(E) - we expected NO exception of type E
+                    if is_expected_type {
+                        let exc_name = expected_type
+                            .getattr("__name__")
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|_| format!("{:?}", exception_type));
+                        Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(format!(
+                            "Expected {} NOT to be raised, but it was: {}",
+                            exc_name,
+                            err
+                        )))
+                    } else {
+                        // A different exception was raised, which is fine for negated case
+                        // But we should re-raise it since it's unexpected
+                        Err(err)
+                    }
+                } else {
+                    // expect(...).to_raise(E) - we expected exception of type E
+                    if is_expected_type {
+                        Ok(())
+                    } else {
+                        let expected_name = expected_type
+                            .getattr("__name__")
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|_| format!("{:?}", exception_type));
+                        let raised_name = raised_type
+                            .getattr("__name__")
+                            .map(|n| n.to_string())
+                            .unwrap_or_else(|_| "Unknown".to_string());
+                        Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(format!(
+                            "Expected {} to be raised, but got {}: {}",
+                            expected_name, raised_name, err
+                        )))
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Create an expectation from a value
