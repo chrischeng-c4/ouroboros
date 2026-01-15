@@ -15,5 +15,9 @@ clap.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 
+# PyO3 for embedding Python (NOT using workspace - need to link against libpython)
+# Workspace pyo3 has extension-module which prevents linking, but we need to embed Python
+pyo3 = { version = "0.24", features = ["auto-initialize"] }
+
 # Internal crates
 ouroboros-qc = { path = "../ouroboros-qc" }

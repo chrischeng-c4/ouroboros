@@ -3152,6 +3152,7 @@ dependencies = [
  "anyhow",
  "clap",
  "ouroboros-qc",
+ "pyo3",
  "tokio",
 ]
 
