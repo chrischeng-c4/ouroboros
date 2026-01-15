@@ -1,7 +1,7 @@
 ## 1. Refactor & Rename
-- [ ] 1.1 Rename crate `crates/ouroboros-test` to `crates/ouroboros-qc`.
-- [ ] 1.2 Update `Cargo.toml` members and dependencies in other crates to point to `ouroboros-qc`.
-- [ ] 1.3 Rename Python module usages from `ouroboros.test` to `ouroboros.qc`.
+- [x] 1.1 Rename crate `crates/ouroboros-test` to `crates/ouroboros-qc`.
+- [x] 1.2 Update `Cargo.toml` members and dependencies in other crates to point to `ouroboros-qc`.
+- [x] 1.3 Rename Python module usages from `ouroboros.test` to `ouroboros.qc`.
 
 ## 2. CLI Implementation
 - [ ] 2.1 Create new crate `crates/ouroboros-cli` with `clap`.

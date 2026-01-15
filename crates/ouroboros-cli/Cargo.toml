@@ -1,0 +1,19 @@
+[package]
+name = "ouroboros-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Unified CLI for ouroboros - ob command"
+
+[[bin]]
+name = "ob"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+
+# Internal crates
+ouroboros-qc = { path = "../ouroboros-qc" }

@@ -3146,6 +3146,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ouroboros-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ouroboros-qc",
+ "tokio",
+]
+
+[[package]]
 name = "ouroboros-common"
 version = "0.1.0"
 dependencies = [

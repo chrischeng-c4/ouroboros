@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/ouroboros",
+    "crates/ouroboros-cli",
     "crates/ouroboros-mongodb",
     "crates/ouroboros-postgres",
     "crates/ouroboros-http",
