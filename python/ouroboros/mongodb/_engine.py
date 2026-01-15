@@ -1,7 +1,7 @@
 """
 Internal module that bridges Python layer to Rust backend.
 
-This module wraps the Rust data_bridge module and provides a clean
+This module wraps the Rust ouroboros module and provides a clean
 async interface for the Document class and QueryBuilder.
 
 NOTE: This is an internal module. Do not import directly.
@@ -17,7 +17,7 @@ try:
     from ..ouroboros import mongodb as _rust
 except ImportError as e:
     raise ImportError(
-        "data_bridge Rust extension not found. "
+        "ouroboros Rust extension not found. "
         "Make sure you've built it with: maturin develop"
     ) from e
 

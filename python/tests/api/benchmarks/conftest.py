@@ -83,7 +83,7 @@ class ServerProcess:
 # =====================
 
 @pytest.fixture(scope="session")
-def data_bridge_server():
+def ouroboros_server():
     """Start data-bridge-api server (session-scoped)."""
     # Create server script
     server_script = f"""

@@ -10,22 +10,22 @@ from typing import Optional
 from ouroboros.http import HttpClient
 
 # Global URL storage
-_data_bridge_url: Optional[str] = None
+_ouroboros_url: Optional[str] = None
 _fastapi_url: Optional[str] = None
 
 
-def init_session(data_bridge_url: str, fastapi_url: str):
+def init_session(ouroboros_url: str, fastapi_url: str):
     """Initialize global URLs."""
-    global _data_bridge_url, _fastapi_url
-    _data_bridge_url = data_bridge_url
+    global _ouroboros_url, _fastapi_url
+    _ouroboros_url = ouroboros_url
     _fastapi_url = fastapi_url
 
 
-def get_data_bridge_url() -> str:
+def get_ouroboros_url() -> str:
     """Get data-bridge-api base URL."""
-    if _data_bridge_url is None:
+    if _ouroboros_url is None:
         raise RuntimeError("data-bridge URL not initialized")
-    return _data_bridge_url
+    return _ouroboros_url
 
 
 def get_fastapi_url() -> str:
@@ -48,7 +48,7 @@ async def make_request(framework: str, endpoint: str, method: str = "GET", **kwa
     Returns:
         HttpResponse object
     """
-    base_url = get_data_bridge_url() if framework == "data-bridge" else get_fastapi_url()
+    base_url = get_ouroboros_url() if framework == "data-bridge" else get_fastapi_url()
     client = HttpClient(base_url=base_url)
 
     if method == "GET":

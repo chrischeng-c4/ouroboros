@@ -10,7 +10,7 @@ This benchmark measures:
 5. Memory usage (if psutil available)
 
 Usage:
-    python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+    python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 
 Requirements:
     - pytest

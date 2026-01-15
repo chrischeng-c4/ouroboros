@@ -54,7 +54,7 @@ comparison = [
 [tool.maturin]
 module-name = "ouroboros"
 python-source = "python"
-manifest-path = "crates/data-bridge/Cargo.toml"
+manifest-path = "crates/ouroboros/Cargo.toml"
 # Build with all features by default
 # To enable observability: maturin develop --features observability
 features = ["mongodb", "postgres", "http", "test", "kv", "api", "pyloop"]

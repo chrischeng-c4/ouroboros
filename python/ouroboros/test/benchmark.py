@@ -512,7 +512,7 @@ async def _cleanup_postgres_tables():
 
     postgres_uri = os.environ.get(
         "POSTGRES_URI",
-        "postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark"
+        "postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark"
     )
 
     # Only cleanup if PostgreSQL is being used
@@ -531,7 +531,7 @@ async def _cleanup_postgres_tables():
             port=parsed.port or 5432,
             user=parsed.username or "postgres",
             password=parsed.password or "postgres",
-            database=parsed.path.lstrip("/") or "data_bridge_benchmark",
+            database=parsed.path.lstrip("/") or "ouroboros_benchmark",
         )
 
         try:

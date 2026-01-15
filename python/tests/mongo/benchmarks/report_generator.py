@@ -42,7 +42,7 @@ class BenchmarkReportGenerator:
 
         for bench in self.benchmarks:
             # Parse test name: test_{framework}_{operation}[batch_size]
-            # Example: test_data_bridge_insert_many[10]
+            # Example: test_ouroboros_insert_many[10]
             name = bench["name"]
             group = bench.get("group", "unknown")
 
@@ -91,7 +91,7 @@ class BenchmarkReportGenerator:
 
         Args:
             operation: Operation group name (e.g., "bulk-insert")
-            baseline: Framework to use as baseline (default: data_bridge)
+            baseline: Framework to use as baseline (default: ouroboros)
             stat: Statistic to compare (mean, median, min, max, stddev)
 
         Returns:
@@ -126,7 +126,7 @@ class BenchmarkReportGenerator:
                 continue  # Skip if no baseline
 
             # Compare other frameworks
-            for fw in frameworks[1:]:  # Skip data_bridge (already added)
+            for fw in frameworks[1:]:  # Skip ouroboros (already added)
                 if fw in op_data and batch_size in op_data[fw]:
                     fw_time = op_data[fw][batch_size][stat]
                     speedup = fw_time / baseline_time

@@ -1,23 +1,23 @@
 [workspace]
 members = [
-    "crates/data-bridge",
-    "crates/data-bridge-mongodb",
-    "crates/data-bridge-postgres",
-    "crates/data-bridge-http",
-    "crates/data-bridge-test",
-    "crates/data-bridge-common",
-    "crates/data-bridge-kv",
-    "crates/data-bridge-kv-server",
-    "crates/data-bridge-kv-client",
-    "crates/data-bridge-api",
-    "crates/data-bridge-tasks",
-    "crates/data-bridge-pyloop",
-    "crates/data-bridge-sheet-core",
-    "crates/data-bridge-sheet-db",
-    "crates/data-bridge-sheet-formula",
-    "crates/data-bridge-sheet-history",
-    "crates/data-bridge-sheet-server",
-    "crates/data-bridge-sheet-wasm",
+    "crates/ouroboros",
+    "crates/ouroboros-mongodb",
+    "crates/ouroboros-postgres",
+    "crates/ouroboros-http",
+    "crates/ouroboros-test",
+    "crates/ouroboros-common",
+    "crates/ouroboros-kv",
+    "crates/ouroboros-kv-server",
+    "crates/ouroboros-kv-client",
+    "crates/ouroboros-api",
+    "crates/ouroboros-tasks",
+    "crates/ouroboros-pyloop",
+    "crates/ouroboros-sheet-core",
+    "crates/ouroboros-sheet-db",
+    "crates/ouroboros-sheet-formula",
+    "crates/ouroboros-sheet-history",
+    "crates/ouroboros-sheet-server",
+    "crates/ouroboros-sheet-wasm",
 ]
 resolver = "2"
 
@@ -47,17 +47,17 @@ serde_yaml = "0.9"
 anyhow = "1.0"
 thiserror = "2.0"
 
-# MongoDB (for data-bridge-mongodb crate)
+# MongoDB (for ouroboros-mongodb crate)
 mongodb = { version = "3.1" }
 bson = { version = "2.13", features = ["chrono-0_4"] }
 
-# HTTP (for data-bridge-http crate)
+# HTTP (for ouroboros-http crate)
 reqwest = { version = "0.12", features = ["json", "cookies", "gzip", "brotli", "multipart"] }
 http = "1.2"
 url = "2.5"
 bytes = "1.9"
 
-# HTTP Server (for test server and data-bridge-api)
+# HTTP Server (for test server and ouroboros-api)
 axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
 tower-http = { version = "0.5", features = ["cors", "compression-gzip", "trace"] }
@@ -91,7 +91,7 @@ multer = "3.1"
 urlencoding = "2"
 futures-util = "0.3"
 
-# Task queue (for data-bridge-tasks crate)
+# Task queue (for ouroboros-tasks crate)
 dashmap = "6.1"
 async-nats = "0.38"
 deadpool-redis = "0.18"

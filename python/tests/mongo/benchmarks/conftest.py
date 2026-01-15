@@ -63,7 +63,7 @@ async def benchmark_db():
 
 # Alias for backward compatibility
 @pytest.fixture(scope="session")
-async def data_bridge_db(benchmark_db):
+async def ouroboros_db(benchmark_db):
     """Alias for benchmark_db."""
     yield
 

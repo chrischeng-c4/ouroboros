@@ -25,7 +25,7 @@ BATCH_SIZES = [1, 10, 100, 1000]
 WARMUP_TASKS = 100
 
 
-async def benchmark_data_bridge():
+async def benchmark_ouroboros():
     """Benchmark data-bridge-tasks"""
     from ouroboros.tasks import task, init, AsyncResult
 
@@ -141,7 +141,7 @@ async def main():
 
     if args.backend in ["data-bridge", "both"]:
         print("\nRunning data-bridge-tasks benchmark...")
-        db_results = await benchmark_data_bridge()
+        db_results = await benchmark_ouroboros()
         print_results("data-bridge-tasks", db_results)
 
     if args.backend in ["celery", "both"]:

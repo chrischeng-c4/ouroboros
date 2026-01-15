@@ -1,0 +1,56 @@
+[package]
+name = "ouroboros-postgres"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High-performance async PostgreSQL ORM for Python with Rust backend"
+repository.workspace = true
+keywords = ["postgres", "postgresql", "orm", "async", "database"]
+categories = ["database", "asynchronous"]
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# PostgreSQL
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "json", "rust_decimal"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Types
+uuid = { version = "1.0", features = ["v4", "serde"] }
+chrono = { workspace = true }
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Shared
+ouroboros-common = { path = "../ouroboros-common", features = ["postgres-errors"] }
+
+# Parallel processing
+rayon = "1.10"
+
+# Tracing
+tracing = { workspace = true }
+
+# Hashing for migration checksums
+sha2 = "0.10"
+
+# Unicode normalization for security
+unicode-normalization = "0.1"
+
+[dev-dependencies]
+tokio-test = "0.4"
+ouroboros-test = { path = "../ouroboros-test" }
+criterion = "0.5"
+tempfile = "3.8"
+
+[[bench]]
+name = "main"
+harness = false

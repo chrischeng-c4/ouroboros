@@ -4,12 +4,12 @@ Integration tests for raw SQL execution.
 These tests require a running PostgreSQL instance.
 
 Set POSTGRES_URI environment variable to override default:
-    export POSTGRES_URI="postgresql://user:pass@localhost:5432/data_bridge_test"
+    export POSTGRES_URI="postgresql://user:pass@localhost:5432/ouroboros_test"
 
 Run with:
     bash scripts/run_integration_tests.sh
     # or
-    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
         pytest tests/postgres/integration/test_execute_integration.py -v -m integration
 """
 

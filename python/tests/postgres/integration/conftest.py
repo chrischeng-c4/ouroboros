@@ -16,7 +16,7 @@ from ouroboros.postgres import init, close, execute
 # PostgreSQL connection URI for tests
 POSTGRES_TEST_URI = os.getenv(
     "POSTGRES_URI",
-    "postgresql://rstn:rstn@localhost:5432/data_bridge_test"
+    "postgresql://rstn:rstn@localhost:5432/ouroboros_test"
 )
 
 

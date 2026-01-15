@@ -51,7 +51,7 @@ class TestValidationResult(TestSuite):
             file_path="test.py",
             pytest_available=True,
             pytest_stats=TestStats(total=5, passed=5),
-            data_bridge_stats=TestStats(total=5, passed=5),
+            ouroboros_stats=TestStats(total=5, passed=5),
             tests_match=True,
             issues=[]
         )
@@ -67,7 +67,7 @@ class TestValidationResult(TestSuite):
             file_path="test.py",
             pytest_available=True,
             pytest_stats=TestStats(total=5, passed=5),
-            data_bridge_stats=TestStats(total=5, passed=4),
+            ouroboros_stats=TestStats(total=5, passed=4),
             tests_match=False,
             issues=["Passed count mismatch"]
         )
@@ -96,7 +96,7 @@ class TestValidationReport(TestSuite):
             file_path="test1.py",
             pytest_available=True,
             pytest_stats=TestStats(total=5, passed=5),
-            data_bridge_stats=TestStats(total=5, passed=5),
+            ouroboros_stats=TestStats(total=5, passed=5),
             tests_match=True,
             issues=[]
         )
@@ -105,7 +105,7 @@ class TestValidationReport(TestSuite):
             file_path="test2.py",
             pytest_available=True,
             pytest_stats=TestStats(total=3, passed=3),
-            data_bridge_stats=TestStats(total=3, passed=2),
+            ouroboros_stats=TestStats(total=3, passed=2),
             tests_match=False,
             issues=["Passed count mismatch"]
         )
@@ -127,7 +127,7 @@ class TestValidationReport(TestSuite):
             file_path="test.py",
             pytest_available=True,
             pytest_stats=TestStats(total=5, passed=5),
-            data_bridge_stats=TestStats(total=5, passed=5),
+            ouroboros_stats=TestStats(total=5, passed=5),
             tests_match=True,
             issues=[]
         )
@@ -150,7 +150,7 @@ class TestValidationReport(TestSuite):
             file_path="test.py",
             pytest_available=True,
             pytest_stats=TestStats(total=5, passed=5),
-            data_bridge_stats=TestStats(total=5, passed=5),
+            ouroboros_stats=TestStats(total=5, passed=5),
             tests_match=True,
             issues=[]
         )

@@ -10,7 +10,7 @@ from ouroboros.test import TestSuite, test, expect
 # Import the migration tool
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
-from migrate_to_data_bridge_test import PytestToDataBridgeTransformer, transform_file
+from migrate_to_ouroboros_test import PytestToDataBridgeTransformer, transform_file
 
 
 class TestPytestToDataBridgeTransformer(TestSuite):

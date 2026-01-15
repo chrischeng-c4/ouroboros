@@ -714,7 +714,7 @@ def run_suite_with_coverage(
 
         report = run_suite_with_coverage(
             MyTests,
-            source_dirs=["python/data_bridge"],
+            source_dirs=["python/ouroboros"],
             output_format=ReportFormat.Html,
             output_file="coverage_report.html"
         )

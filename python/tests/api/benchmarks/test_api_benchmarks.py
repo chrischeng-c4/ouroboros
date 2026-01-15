@@ -17,10 +17,10 @@ from tests.api.benchmarks import bench_gil
 
 
 @pytest.fixture(scope="module", autouse=True)
-def setup_benchmarks(data_bridge_server, fastapi_server):
+def setup_benchmarks(ouroboros_server, fastapi_server):
     """Initialize benchmark setup with fixtures."""
     benchmark_setup.init_session(
-        data_bridge_url=data_bridge_server,
+        ouroboros_url=ouroboros_server,
         fastapi_url=fastapi_server
     )
 

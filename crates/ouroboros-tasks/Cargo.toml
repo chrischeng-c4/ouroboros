@@ -1,0 +1,95 @@
+[package]
+name = "ouroboros-tasks"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "High-performance distributed task queue for Python"
+
+[lib]
+name = "ouroboros_tasks"
+
+[dependencies]
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+ouroboros-common = { path = "../ouroboros-common" }
+
+# Scheduling
+chrono = { workspace = true }
+
+# Utilities
+uuid = { version = "1.11", features = ["v7", "serde"] }
+async-trait = { workspace = true }
+dashmap = "6.1"
+tracing = { workspace = true }
+num_cpus = "1.16"
+regex = "1.10"
+
+# Optional: NATS broker
+async-nats = { version = "0.38", optional = true }
+
+# Optional: Redis backend
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"], optional = true }
+deadpool-redis = { version = "0.18", optional = true }
+
+# Optional: Google Cloud Pub/Sub broker
+google-cloud-pubsub = { version = "0.30", optional = true }
+google-cloud-googleapis = { version = "0.16", optional = true }
+
+# HTTP server (for push brokers)
+axum = { version = "0.7", optional = true, features = ["tokio"] }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", optional = true, features = ["trace", "cors", "timeout"] }
+
+# Cloud Tasks (will add later, placeholder for now)
+# google-cloud-tasks = { version = "0.9", optional = true }
+
+# Optional: Cron scheduling
+cron = { version = "0.12", optional = true }
+
+# Cancellation
+tokio-util = { version = "0.7", features = ["rt"] }
+
+# Optional: Metrics
+prometheus = { version = "0.13", optional = true }
+once_cell = { version = "1.19", optional = true }
+
+# Optional: Tracing
+opentelemetry = { version = "0.21", optional = true }
+opentelemetry-otlp = { version = "0.14", features = ["tonic"], optional = true }
+opentelemetry_sdk = { version = "0.21", features = ["rt-tokio"], optional = true }
+
+# Optional: JSON Schema generation
+schemars = { version = "0.8", optional = true, features = ["chrono", "uuid1"] }
+
+[features]
+default = ["nats", "redis"]
+nats = ["dep:async-nats"]
+redis = ["dep:redis", "dep:deadpool-redis"]
+pubsub = ["dep:google-cloud-pubsub", "dep:google-cloud-googleapis"]
+scheduler = ["dep:cron"]
+metrics = ["dep:prometheus", "dep:once_cell"]
+tracing-otel = ["dep:opentelemetry", "dep:opentelemetry-otlp", "dep:opentelemetry_sdk"]
+schema = ["dep:schemars"]
+
+# HTTP server for push brokers
+http-server = ["dep:axum", "dep:tower", "dep:tower-http"]
+
+# Push-based brokers
+pubsub-push = ["pubsub", "http-server"]
+# cloudtasks = ["dep:google-cloud-tasks", "http-server"]  # Placeholder for later
+
+# Convenience
+# gcp = ["pubsub", "cloudtasks"]  # Placeholder for later
+
+[dev-dependencies]
+tokio-test = "0.4"
+tracing-subscriber = { workspace = true }

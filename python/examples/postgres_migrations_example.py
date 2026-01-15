@@ -22,7 +22,7 @@ async def main():
     import os
     connection_string = os.environ.get(
         "POSTGRES_URI",
-        "postgresql://rstn:rstn@localhost:5432/data_bridge_test"
+        "postgresql://rstn:rstn@localhost:5432/ouroboros_test"
     )
 
     await postgres.init(

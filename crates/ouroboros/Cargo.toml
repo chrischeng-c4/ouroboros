@@ -1,0 +1,65 @@
+[package]
+name = "ouroboros"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "ouroboros"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3.workspace = true
+pyo3-async-runtimes.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+futures.workspace = true
+bson.workspace = true
+mongodb.workspace = true
+regex.workspace = true
+rayon.workspace = true
+once_cell.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+pythonize.workspace = true
+rust_decimal.workspace = true
+
+# Optional feature-gated dependencies
+ouroboros-mongodb = { path = "../ouroboros-mongodb", optional = true }
+ouroboros-http = { path = "../ouroboros-http", optional = true }
+ouroboros-test = { path = "../ouroboros-test", optional = true }
+ouroboros-postgres = { path = "../ouroboros-postgres", optional = true }
+ouroboros-kv-client = { path = "../ouroboros-kv-client", optional = true }
+ouroboros-api = { path = "../ouroboros-api", optional = true }
+ouroboros-tasks = { path = "../ouroboros-tasks", optional = true }
+ouroboros-pyloop = { path = "../ouroboros-pyloop", optional = true }
+ouroboros-common = { path = "../ouroboros-common" }
+
+# Base64 encoding for binary data
+base64 = "0.22"
+
+# SQLx for PostgreSQL (only needed when postgres feature is enabled)
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"], optional = true }
+
+[features]
+default = ["mongodb", "http", "test"]
+mongodb = ["ouroboros-mongodb"]
+http = ["ouroboros-http"]
+test = ["ouroboros-test"]
+postgres = ["ouroboros-postgres", "sqlx"]
+kv = ["ouroboros-kv-client"]
+api = ["ouroboros-api", "ouroboros-pyloop"]  # api requires pyloop
+tasks = ["ouroboros-tasks"]
+pyloop = ["ouroboros-pyloop"]
+tasks-nats = ["tasks", "ouroboros-tasks/nats"]
+tasks-pubsub = ["tasks", "ouroboros-tasks/pubsub"]
+tasks-redis = ["tasks", "ouroboros-tasks/redis"]
+# Future features
+# redis = ["ouroboros-redis"]
+# rabbitmq = ["ouroboros-rabbitmq"]

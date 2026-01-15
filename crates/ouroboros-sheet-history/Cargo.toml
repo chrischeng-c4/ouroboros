@@ -1,0 +1,11 @@
+[package]
+name = "ouroboros-sheet-history"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Undo/redo history management for RuSheet"
+
+[dependencies]
+ouroboros-sheet-core = { path = "../ouroboros-sheet-core" }
+ouroboros-sheet-formula = { path = "../ouroboros-sheet-formula" }

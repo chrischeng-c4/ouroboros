@@ -42,7 +42,7 @@ def check_psutil():
         return False
 
 
-def check_data_bridge_test():
+def check_ouroboros_test():
     """Check if data-bridge-test is available."""
     try:
         from ouroboros.test import (
@@ -98,7 +98,7 @@ async def test_pytest_execution():
         return False
 
 
-async def test_data_bridge_test_execution():
+async def test_ouroboros_test_execution():
     """Test data-bridge-test can run basic tests."""
     try:
         from ouroboros.test import TestSuite, test, expect, TestRunner
@@ -174,7 +174,7 @@ async def main():
     print("-" * 70)
     checks.append(check_pytest())
     checks.append(check_psutil())
-    checks.append(check_data_bridge_test())
+    checks.append(check_ouroboros_test())
     checks.append(check_sample_tests())
     print()
 
@@ -182,7 +182,7 @@ async def main():
     print("Testing execution...")
     print("-" * 70)
     checks.append(await test_pytest_execution())
-    checks.append(await test_data_bridge_test_execution())
+    checks.append(await test_ouroboros_test_execution())
     print()
 
     # Infrastructure checks
@@ -200,7 +200,7 @@ async def main():
         print("✓ All required checks passed!")
         print()
         print("You can now run the full benchmark:")
-        print("  python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py")
+        print("  python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py")
         return 0
     else:
         print("✗ Some required checks failed")

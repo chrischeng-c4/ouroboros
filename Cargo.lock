@@ -1132,381 +1132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-bridge"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "bson",
- "chrono",
- "data-bridge-api",
- "data-bridge-common",
- "data-bridge-http",
- "data-bridge-kv-client",
- "data-bridge-mongodb",
- "data-bridge-postgres",
- "data-bridge-pyloop",
- "data-bridge-tasks",
- "data-bridge-test",
- "futures",
- "mongodb",
- "once_cell",
- "pyo3",
- "pyo3-async-runtimes",
- "pythonize",
- "rayon",
- "regex",
- "rust_decimal",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "data-bridge-api"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "async-trait",
- "axum 0.8.8",
- "base64 0.22.1",
- "bytes",
- "data-bridge-common",
- "data-bridge-pyloop",
- "futures-util",
- "http 1.4.0",
- "http-body-util",
- "hyper 1.8.1",
- "hyper-util",
- "matchit 0.7.3",
- "multer",
- "once_cell",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "pyo3",
- "regex",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha1",
- "sonic-rs",
- "thiserror 2.0.17",
- "tokio",
- "tokio-tungstenite 0.26.2",
- "tower 0.5.2",
- "tower-http 0.5.2",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "urlencoding",
- "utoipa",
-]
-
-[[package]]
-name = "data-bridge-common"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bson",
- "mongodb",
- "pyo3",
- "pyo3-async-runtimes",
- "serde",
- "serde_json",
- "sqlx",
- "thiserror 2.0.17",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "data-bridge-http"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes",
- "chrono",
- "data-bridge-common",
- "futures",
- "http 1.4.0",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "data-bridge-kv"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bincode",
- "crc32fast",
- "criterion",
- "crossbeam-channel",
- "data-bridge-common",
- "data-bridge-test",
- "hostname",
- "num_cpus",
- "parking_lot",
- "rust_decimal",
- "serde",
- "sha2",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
-]
-
-[[package]]
-name = "data-bridge-kv-client"
-version = "0.1.0"
-dependencies = [
- "data-bridge-kv",
- "rust_decimal",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
-]
-
-[[package]]
-name = "data-bridge-kv-server"
-version = "0.1.0"
-dependencies = [
- "clap",
- "data-bridge-kv",
- "rust_decimal",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "data-bridge-mongodb"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "bson",
- "chrono",
- "data-bridge-common",
- "futures",
- "mongodb",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
-]
-
-[[package]]
-name = "data-bridge-postgres"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "criterion",
- "data-bridge-common",
- "data-bridge-test",
- "futures",
- "rayon",
- "rust_decimal",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
- "unicode-normalization",
- "uuid",
-]
-
-[[package]]
-name = "data-bridge-pyloop"
-version = "0.1.0"
-dependencies = [
- "data-bridge-common",
- "futures",
- "once_cell",
- "pyo3",
- "pyo3-async-runtimes",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tracing",
-]
-
-[[package]]
-name = "data-bridge-sheet-core"
-version = "0.1.0"
-dependencies = [
- "bitvec",
- "regex",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "data-bridge-sheet-db"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "data-bridge-common",
- "data-bridge-kv",
- "data-bridge-sheet-core",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
-]
-
-[[package]]
-name = "data-bridge-sheet-formula"
-version = "0.1.0"
-dependencies = [
- "data-bridge-sheet-core",
- "nom",
- "serde",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "data-bridge-sheet-history"
-version = "0.1.0"
-dependencies = [
- "data-bridge-sheet-core",
- "data-bridge-sheet-formula",
-]
-
-[[package]]
-name = "data-bridge-sheet-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum 0.7.9",
- "chrono",
- "data-bridge-kv",
- "data-bridge-sheet-core",
- "data-bridge-sheet-db",
- "dotenvy",
- "futures",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tower 0.5.2",
- "tower-http 0.6.8",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "yrs",
-]
-
-[[package]]
-name = "data-bridge-sheet-wasm"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "data-bridge-sheet-core",
- "data-bridge-sheet-formula",
- "data-bridge-sheet-history",
- "js-sys",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "uuid",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
-]
-
-[[package]]
-name = "data-bridge-tasks"
-version = "0.1.0"
-dependencies = [
- "async-nats",
- "async-trait",
- "axum 0.7.9",
- "chrono",
- "cron",
- "dashmap",
- "data-bridge-common",
- "deadpool-redis",
- "futures",
- "google-cloud-googleapis",
- "google-cloud-pubsub",
- "num_cpus",
- "once_cell",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "prometheus",
- "redis",
- "regex",
- "schemars",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tokio-test",
- "tokio-util",
- "tower 0.4.13",
- "tower-http 0.5.2",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "data-bridge-test"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum 0.8.8",
- "bytecheck",
- "chrono",
- "criterion",
- "data-bridge-http",
- "futures",
- "inferno",
- "jwalk",
- "libc",
- "rand 0.8.5",
- "regex",
- "reqwest",
- "rkyv 0.7.46",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tower 0.5.2",
- "tracing",
- "walkdir",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3443,6 +3068,381 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
 dependencies = [
  "num-traits",
+]
+
+[[package]]
+name = "ouroboros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "bson",
+ "chrono",
+ "futures",
+ "mongodb",
+ "once_cell",
+ "ouroboros-api",
+ "ouroboros-common",
+ "ouroboros-http",
+ "ouroboros-kv-client",
+ "ouroboros-mongodb",
+ "ouroboros-postgres",
+ "ouroboros-pyloop",
+ "ouroboros-tasks",
+ "ouroboros-test",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "pythonize",
+ "rayon",
+ "regex",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ouroboros-api"
+version = "0.1.0"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "axum 0.8.8",
+ "base64 0.22.1",
+ "bytes",
+ "futures-util",
+ "http 1.4.0",
+ "http-body-util",
+ "hyper 1.8.1",
+ "hyper-util",
+ "matchit 0.7.3",
+ "multer",
+ "once_cell",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "ouroboros-common",
+ "ouroboros-pyloop",
+ "pyo3",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha1",
+ "sonic-rs",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-tungstenite 0.26.2",
+ "tower 0.5.2",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "urlencoding",
+ "utoipa",
+]
+
+[[package]]
+name = "ouroboros-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bson",
+ "mongodb",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "ouroboros-http"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "futures",
+ "http 1.4.0",
+ "ouroboros-common",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "ouroboros-kv"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bincode",
+ "crc32fast",
+ "criterion",
+ "crossbeam-channel",
+ "hostname",
+ "num_cpus",
+ "ouroboros-common",
+ "ouroboros-test",
+ "parking_lot",
+ "rust_decimal",
+ "serde",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
+name = "ouroboros-kv-client"
+version = "0.1.0"
+dependencies = [
+ "ouroboros-kv",
+ "rust_decimal",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+]
+
+[[package]]
+name = "ouroboros-kv-server"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ouroboros-kv",
+ "rust_decimal",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "ouroboros-mongodb"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bson",
+ "chrono",
+ "futures",
+ "mongodb",
+ "ouroboros-common",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
+name = "ouroboros-postgres"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "criterion",
+ "futures",
+ "ouroboros-common",
+ "ouroboros-test",
+ "rayon",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+ "unicode-normalization",
+ "uuid",
+]
+
+[[package]]
+name = "ouroboros-pyloop"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "once_cell",
+ "ouroboros-common",
+ "pyo3",
+ "pyo3-async-runtimes",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tracing",
+]
+
+[[package]]
+name = "ouroboros-sheet-core"
+version = "0.1.0"
+dependencies = [
+ "bitvec",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "ouroboros-sheet-db"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "ouroboros-common",
+ "ouroboros-kv",
+ "ouroboros-sheet-core",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.17",
+ "tokio",
+]
+
+[[package]]
+name = "ouroboros-sheet-formula"
+version = "0.1.0"
+dependencies = [
+ "nom",
+ "ouroboros-sheet-core",
+ "serde",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "ouroboros-sheet-history"
+version = "0.1.0"
+dependencies = [
+ "ouroboros-sheet-core",
+ "ouroboros-sheet-formula",
+]
+
+[[package]]
+name = "ouroboros-sheet-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.7.9",
+ "chrono",
+ "dotenvy",
+ "futures",
+ "ouroboros-kv",
+ "ouroboros-sheet-core",
+ "ouroboros-sheet-db",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "tower 0.5.2",
+ "tower-http 0.6.8",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "yrs",
+]
+
+[[package]]
+name = "ouroboros-sheet-wasm"
+version = "0.1.0"
+dependencies = [
+ "console_error_panic_hook",
+ "js-sys",
+ "ouroboros-sheet-core",
+ "ouroboros-sheet-formula",
+ "ouroboros-sheet-history",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "uuid",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
+]
+
+[[package]]
+name = "ouroboros-tasks"
+version = "0.1.0"
+dependencies = [
+ "async-nats",
+ "async-trait",
+ "axum 0.7.9",
+ "chrono",
+ "cron",
+ "dashmap",
+ "deadpool-redis",
+ "futures",
+ "google-cloud-googleapis",
+ "google-cloud-pubsub",
+ "num_cpus",
+ "once_cell",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "ouroboros-common",
+ "prometheus",
+ "redis",
+ "regex",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "ouroboros-test"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "bytecheck",
+ "chrono",
+ "criterion",
+ "futures",
+ "inferno",
+ "jwalk",
+ "libc",
+ "ouroboros-http",
+ "rand 0.8.5",
+ "regex",
+ "reqwest",
+ "rkyv 0.7.46",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.17",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]

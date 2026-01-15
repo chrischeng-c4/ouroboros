@@ -1,0 +1,13 @@
+[package]
+name = "ouroboros-sheet-formula"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Formula parsing and evaluation engine for RuSheet"
+
+[dependencies]
+ouroboros-sheet-core = { path = "../ouroboros-sheet-core" }
+serde.workspace = true
+thiserror.workspace = true
+nom = "7.1"

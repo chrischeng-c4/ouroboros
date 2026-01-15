@@ -21,7 +21,7 @@ def get_postgres_uri() -> str:
     """Get PostgreSQL URI from environment or use default."""
     return os.environ.get(
         "POSTGRES_URI",
-        "postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark"
+        "postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark"
     )
 
 
@@ -34,7 +34,7 @@ def parse_postgres_uri(uri: str) -> dict:
         "port": parsed.port or 5432,
         "user": parsed.username or "postgres",
         "password": parsed.password or "postgres",
-        "database": parsed.path.lstrip("/") or "data_bridge_benchmark",
+        "database": parsed.path.lstrip("/") or "ouroboros_benchmark",
     }
 
 

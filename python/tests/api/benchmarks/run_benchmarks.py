@@ -228,7 +228,7 @@ with ServerManager("data-bridge", DATA_BRIDGE_PORT, DATA_BRIDGE_SCRIPT) as db_se
     # Initialize benchmark_setup
     import benchmark_setup
     benchmark_setup.init_session(
-        data_bridge_url=f"http://localhost:{DATA_BRIDGE_PORT}",
+        ouroboros_url=f"http://localhost:{DATA_BRIDGE_PORT}",
         fastapi_url=f"http://localhost:{FASTAPI_PORT}",
     )
 

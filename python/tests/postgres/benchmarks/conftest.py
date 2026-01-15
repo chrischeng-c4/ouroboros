@@ -16,7 +16,7 @@ from typing import List, Dict, Any
 
 POSTGRES_URI = os.environ.get(
     "POSTGRES_URI",
-    "postgresql://postgres:postgres@localhost:5432/data_bridge_benchmark"
+    "postgresql://postgres:postgres@localhost:5432/ouroboros_benchmark"
 )
 
 # Parse connection parameters
@@ -30,7 +30,7 @@ def parse_postgres_uri(uri: str) -> Dict[str, str]:
         "port": parsed.port or 5432,
         "user": parsed.username or "postgres",
         "password": parsed.password or "postgres",
-        "database": parsed.path.lstrip("/") or "data_bridge_benchmark",
+        "database": parsed.path.lstrip("/") or "ouroboros_benchmark",
     }
 
 CONN_PARAMS = parse_postgres_uri(POSTGRES_URI)
@@ -52,7 +52,7 @@ FRAMEWORKS = [
 # =====================
 
 @pytest.fixture(scope="session")
-async def data_bridge_db():
+async def ouroboros_db():
     """Initialize data-bridge connection for benchmarks (session-scoped)."""
     from ouroboros.postgres import init, close, is_connected
 
@@ -235,7 +235,7 @@ async def setup_tables(request):
         return
 
     # Get fixtures only when needed
-    data_bridge_db = request.getfixturevalue('data_bridge_db')
+    ouroboros_db = request.getfixturevalue('ouroboros_db')
     asyncpg_pool = request.getfixturevalue('asyncpg_pool')
     psycopg2_conn = request.getfixturevalue('psycopg2_conn')
 

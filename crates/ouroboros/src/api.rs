@@ -1,0 +1,985 @@
+//! PyO3 bindings for ouroboros-api
+//!
+//! Follows the two-phase GIL pattern:
+//! 1. Extract: Python objects → SerializableRequest (GIL held, fast)
+//! 2. Process: Validation, routing, serialization (GIL released)
+//! 3. Materialize: SerializableResponse → Python objects (GIL held, fast)
+//!
+//! Phase 5 Migration: Integrated with PyLoop (Rust-native event loop)
+
+use pyo3::prelude::*;
+use pyo3::types::{PyDict, PyList, PyBool, PyBytes};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+
+use ouroboros_api::{
+    Router,
+    PythonHandler,
+    request::{HttpMethod, SerializableValue, SerializableRequest, Request},
+    response::{SerializableResponse, Response},
+    validation::{
+        TypeDescriptor, StringConstraints, NumericConstraints,
+        RequestValidator, ParamValidator, ParamLocation, ValidatedRequest,
+    },
+    handler::HandlerMeta,
+    error::ApiError,
+};
+
+use ouroboros_pyloop::PyLoop;
+use crate::error_handling::sanitize_error_message;
+
+// ============================================================================
+// Path Syntax Conversion
+// ============================================================================
+
+/// Convert FastAPI-style path parameters {param} to matchit-style :param
+fn convert_path_syntax(path: &str) -> String {
+    let mut result = String::with_capacity(path.len());
+    let mut in_brace = false;
+    for c in path.chars() {
+        match c {
+            '{' => {
+                in_brace = true;
+                result.push(':');
+            }
+            '}' => {
+                in_brace = false;
+            }
+            _ => {
+                result.push(c);
+            }
+        }
+    }
+    result
+}
+
+// ============================================================================
+// Python Value Conversion
+// ============================================================================
+
+/// Extract Python value to SerializableValue (GIL held)
+fn py_to_serializable(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<SerializableValue> {
+    if obj.is_none() {
+        return Ok(SerializableValue::Null);
+    }
+    if let Ok(b) = obj.downcast::<PyBool>() {
+        return Ok(SerializableValue::Bool(b.is_true()));
+    }
+    if let Ok(i) = obj.extract::<i64>() {
+        return Ok(SerializableValue::Int(i));
+    }
+    if let Ok(f) = obj.extract::<f64>() {
+        return Ok(SerializableValue::Float(f));
+    }
+    if let Ok(s) = obj.extract::<String>() {
+        return Ok(SerializableValue::String(s));
+    }
+    if let Ok(bytes) = obj.downcast::<PyBytes>() {
+        return Ok(SerializableValue::Bytes(bytes.as_bytes().to_vec()));
+    }
+    if let Ok(list) = obj.downcast::<PyList>() {
+        let items: PyResult<Vec<SerializableValue>> = list
+            .iter()
+            .map(|item| py_to_serializable(py, &item))
+            .collect();
+        return Ok(SerializableValue::List(items?));
+    }
+    if let Ok(dict) = obj.downcast::<PyDict>() {
+        let pairs: PyResult<Vec<(String, SerializableValue)>> = dict
+            .iter()
+            .map(|(k, v)| {
+                let key: String = k.extract()?;
+                let value = py_to_serializable(py, &v)?;
+                Ok((key, value))
+            })
+            .collect();
+        return Ok(SerializableValue::Object(pairs?));
+    }
+    // Fallback: convert to string
+    let s = obj.str()?.to_string();
+    Ok(SerializableValue::String(s))
+}
+
+/// Materialize SerializableValue to Python object (GIL held)
+fn serializable_to_py(py: Python<'_>, value: &SerializableValue) -> PyResult<PyObject> {
+    match value {
+        SerializableValue::Null => Ok(py.None()),
+        SerializableValue::Bool(b) => Ok(b.to_object(py)),
+        SerializableValue::Int(i) => Ok(i.to_object(py)),
+        SerializableValue::Float(f) => Ok(f.to_object(py)),
+        SerializableValue::String(s) => Ok(s.to_object(py)),
+        SerializableValue::Bytes(b) => Ok(PyBytes::new(py, b).to_object(py)),
+        SerializableValue::List(items) => {
+            let list = PyList::empty(py);
+            for item in items {
+                list.append(serializable_to_py(py, item)?)?;
+            }
+            Ok(list.to_object(py))
+        }
+        SerializableValue::Object(pairs) => {
+            let dict = PyDict::new(py);
+            for (k, v) in pairs {
+                dict.set_item(k, serializable_to_py(py, v)?)?;
+            }
+            Ok(dict.to_object(py))
+        }
+    }
+}
+
+// ============================================================================
+// Request/Response Conversion for Handler Invocation
+// ============================================================================
+
+/// Convert Rust Request → Python dict for handler invocation
+fn request_to_py_dict(
+    py: Python<'_>,
+    req: &Request,
+    validated: &ValidatedRequest,
+) -> PyResult<PyObject> {
+    let dict = PyDict::new(py);
+
+    // Add validated path parameters (lazy dict creation)
+    if !validated.path_params.is_empty() {
+        let path_params = PyDict::new(py);
+        for (key, value) in &validated.path_params {
+            path_params.set_item(key, serializable_to_py(py, value)?)?;
+        }
+        dict.set_item("path_params", path_params)?;
+    } else {
+        dict.set_item("path_params", PyDict::new(py))?;
+    }
+
+    // Add validated query parameters (lazy dict creation)
+    if !validated.query_params.is_empty() {
+        let query_params = PyDict::new(py);
+        for (key, value) in &validated.query_params {
+            query_params.set_item(key, serializable_to_py(py, value)?)?;
+        }
+        dict.set_item("query_params", query_params)?;
+    } else {
+        dict.set_item("query_params", PyDict::new(py))?;
+    }
+
+    // Add headers (lazy dict creation)
+    if !req.inner.headers.is_empty() {
+        let headers = PyDict::new(py);
+        for (key, value) in req.inner.headers.iter() {
+            headers.set_item(key, value)?;
+        }
+        dict.set_item("headers", headers)?;
+    } else {
+        dict.set_item("headers", PyDict::new(py))?;
+    }
+
+    // Add validated body (if present)
+    if let Some(body) = &validated.body {
+        dict.set_item("body", serializable_to_py(py, body)?)?;
+    } else {
+        dict.set_item("body", py.None())?;
+    }
+
+    // Add method and path for convenience
+    dict.set_item("method", req.method().as_str())?;
+    dict.set_item("path", req.path())?;
+    dict.set_item("url", req.url())?;
+
+    Ok(dict.to_object(py))
+}
+
+/// Convert Python response → Rust Response
+fn py_result_to_response(
+    py: Python<'_>,
+    result: &Bound<'_, PyAny>,
+) -> PyResult<Response> {
+    // Check if it's a PyResponse object
+    if let Ok(py_response) = result.downcast::<PyResponse>() {
+        let inner = py_response.borrow();
+        return Ok(Response::from(inner.inner.clone()));
+    }
+
+    // Check if it's a dict
+    if let Ok(_dict) = result.downcast::<PyDict>() {
+        // Convert dict to SerializableValue
+        let value = py_to_serializable(py, result)?;
+        return Ok(Response::json(value));
+    }
+
+    // Check if it's a list
+    if let Ok(_list) = result.downcast::<PyList>() {
+        let value = py_to_serializable(py, result)?;
+        return Ok(Response::json(value));
+    }
+
+    // Check if it's a string
+    if let Ok(s) = result.extract::<String>() {
+        return Ok(Response::text(s));
+    }
+
+    // Check if it's bytes
+    if let Ok(bytes) = result.downcast::<PyBytes>() {
+        return Ok(Response::bytes(
+            bytes.as_bytes().to_vec(),
+            "application/octet-stream",
+        ));
+    }
+
+    // Default: try to serialize as JSON
+    let value = py_to_serializable(py, result)?;
+    Ok(Response::json(value))
+}
+
+// ============================================================================
+// Python API Application
+// ============================================================================
+
+/// Python API application
+#[pyclass(name = "ApiApp")]
+pub struct PyApiApp {
+    /// Inner Rust app (Arc for thread-safe sharing)
+    inner: Arc<RwLock<AppState>>,
+}
+
+struct AppState {
+    title: String,
+    version: String,
+    router: Option<Router>,
+    /// Python handlers stored by route ID
+    handlers: HashMap<String, PyObject>,
+    /// Route counter
+    route_counter: usize,
+    /// Router Arc for serving (set when serve() is called)
+    router_arc: Option<Arc<Router>>,
+    /// PyLoop instance for executing Python handlers
+    pyloop: Arc<PyLoop>,
+}
+
+#[pymethods]
+impl PyApiApp {
+    #[new]
+    #[pyo3(signature = (title = "API", version = "1.0.0"))]
+    fn new(title: &str, version: &str) -> PyResult<Self> {
+        // Initialize PyLoop (single Rust-based event loop)
+        let pyloop = Arc::new(PyLoop::new_from_rust().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                format!("Failed to initialize PyLoop: {}", e)
+            )
+        })?);
+
+        Ok(Self {
+            inner: Arc::new(RwLock::new(AppState {
+                title: title.to_string(),
+                version: version.to_string(),
+                router: Some(Router::new()),
+                handlers: HashMap::new(),
+                route_counter: 0,
+                router_arc: None,
+                pyloop,
+            })),
+        })
+    }
+
+    /// Register a route handler
+    #[pyo3(signature = (method, path, handler, validator_dict = None, metadata_dict = None))]
+    fn register_route(
+        &self,
+        py: Python<'_>,
+        method: &str,
+        path: &str,
+        handler: PyObject,
+        validator_dict: Option<&Bound<'_, PyDict>>,
+        metadata_dict: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<String> {
+        let http_method = method.parse::<HttpMethod>()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                sanitize_error_message(&format!("Invalid HTTP method: {}", e))
+            ))?;
+
+        let validator = if let Some(dict) = validator_dict {
+            extract_validator(py, dict)?
+        } else {
+            RequestValidator::new()
+        };
+
+        let metadata = if let Some(dict) = metadata_dict {
+            extract_metadata(py, dict)?
+        } else {
+            HandlerMeta::new("handler".to_string())
+        };
+
+        let mut state = self.inner.write().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&format!("Lock error: {}", e))
+            )
+        })?;
+
+        let route_id = format!("route_{}", state.route_counter);
+        state.route_counter += 1;
+
+        // Store Python handler
+        state.handlers.insert(route_id.clone(), handler.clone_ref(py));
+
+        // Create PythonHandler with PyLoop integration
+        let python_handler = Arc::new(PythonHandler::new(handler, Arc::clone(&state.pyloop)));
+
+        // Create Rust handler that uses PythonHandler
+        let rust_handler = Arc::new(move |req: Request, validated: ValidatedRequest| {
+            let handler = Arc::clone(&python_handler);
+
+            Box::pin(async move {
+                // Execute handler via PyLoop (Rust-native event loop)
+                handler.execute(req, validated).await
+            }) as ouroboros_api::router::BoxFuture<'static, ouroboros_api::error::ApiResult<Response>>
+        });
+
+        let router = state.router.as_mut().ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Router has been consumed by serve(). Cannot register more routes."
+            )
+        })?;
+
+        // Convert FastAPI-style path {param} to matchit-style :param
+        let converted_path = convert_path_syntax(path);
+
+        router.route(http_method, &converted_path, rust_handler, validator, metadata)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&e.to_string())
+            ))?;
+
+        Ok(route_id)
+    }
+
+    /// Get OpenAPI JSON
+    fn openapi_json(&self) -> PyResult<String> {
+        let state = self.inner.read().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&format!("Lock error: {}", e))
+            )
+        })?;
+
+        // Generate basic OpenAPI structure
+        let openapi = serde_json::json!({
+            "openapi": "3.1.0",
+            "info": {
+                "title": state.title,
+                "version": state.version
+            },
+            "paths": {}
+        });
+
+        serde_json::to_string_pretty(&openapi)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&e.to_string())
+            ))
+    }
+
+    /// Start the HTTP server (blocking)
+    ///
+    /// This runs the Rust HTTP server on the current thread.
+    /// It will block until the server is shutdown (Ctrl+C).
+    ///
+    /// Note: After calling serve(), you cannot register more routes.
+    /// The router is consumed and moved into an Arc for thread-safe sharing.
+    ///
+    /// # Arguments
+    /// * `host` - Bind host (default: "127.0.0.1")
+    /// * `port` - Bind port (default: 8000)
+    ///
+    /// # Example
+    /// ```python
+    /// app = ApiApp(title="My API", version="1.0.0")
+    /// app.register_route("GET", "/hello", handler)
+    /// app.serve("0.0.0.0", 8000)  # Blocks until Ctrl+C
+    /// ```
+    #[pyo3(signature = (host = "127.0.0.1", port = 8000))]
+    fn serve(&self, py: Python<'_>, host: &str, port: u16) -> PyResult<()> {
+        use ouroboros_api::{Server, ServerConfig};
+
+        // PyLoop (Rust-native event loop) already initialized in new()
+        // All Python handlers execute via PyLoop.spawn_python_handler()
+
+        // Get or create the Arc<Router>
+        let router_arc = {
+            let mut state = self.inner.write().map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    sanitize_error_message(&format!("Lock error: {}", e))
+                )
+            })?;
+
+            // If router_arc already exists, clone it (server was already started)
+            if let Some(ref arc) = state.router_arc {
+                Arc::clone(arc)
+            } else {
+                // Take ownership of router and wrap in Arc
+                let router = state.router.take().ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                        "Router not available (already consumed)"
+                    )
+                })?;
+
+                let arc = Arc::new(router);
+                state.router_arc = Some(Arc::clone(&arc));
+                arc
+            }
+        };
+
+        // Create server config
+        let bind_addr = format!("{}:{}", host, port);
+        let config = ServerConfig::new(bind_addr);
+        let server = Server::with_shared_router(router_arc, config);
+
+        // Release GIL and run server
+        // This blocks the current thread until shutdown signal
+        py.allow_threads(|| {
+            // Create a new Tokio runtime for the server
+            tokio::runtime::Runtime::new()
+                .map_err(|e| format!("Failed to create runtime: {}", e))?
+                .block_on(server.run())
+                .map_err(|e| format!("Server error: {}", e))
+        }).map_err(|e: String| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&e)
+            )
+        })
+    }
+
+    /// Match a request to a route (for testing)
+    fn match_route(&self, method: &str, path: &str) -> PyResult<Option<(String, HashMap<String, String>)>> {
+        let http_method = method.parse::<HttpMethod>()
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                sanitize_error_message(&format!("Invalid HTTP method: {}", e))
+            ))?;
+
+        let state = self.inner.read().map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                sanitize_error_message(&format!("Lock error: {}", e))
+            )
+        })?;
+
+        // Check router_arc first (if serve() was called)
+        let router_ref = if let Some(ref arc) = state.router_arc {
+            arc.as_ref()
+        } else if let Some(ref router) = state.router {
+            router
+        } else {
+            return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "Router not available"
+            ));
+        };
+
+        if let Some(matched) = router_ref.match_route(http_method, path) {
+            Ok(Some(("matched".to_string(), matched.params)))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+// ============================================================================
+// Type Descriptor Extraction
+// ============================================================================
+
+/// Extract TypeDescriptor from Python dict
+fn extract_type_descriptor(_py: Python<'_>, dict: &Bound<'_, PyDict>) -> PyResult<TypeDescriptor> {
+    let type_name: String = dict.get_item("type")?
+        .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>("Missing 'type' field"))?
+        .extract()?;
+
+    match type_name.as_str() {
+        "string" => {
+            let mut constraints = StringConstraints::default();
+            if let Some(min) = dict.get_item("min_length")? {
+                constraints.min_length = Some(min.extract()?);
+            }
+            if let Some(max) = dict.get_item("max_length")? {
+                constraints.max_length = Some(max.extract()?);
+            }
+            if let Some(pattern) = dict.get_item("pattern")? {
+                constraints.pattern = Some(pattern.extract()?);
+            }
+            Ok(TypeDescriptor::String(constraints))
+        }
+        "int" | "integer" => {
+            let mut constraints = NumericConstraints::default();
+            if let Some(min) = dict.get_item("minimum")? {
+                constraints.minimum = Some(min.extract()?);
+            }
+            if let Some(max) = dict.get_item("maximum")? {
+                constraints.maximum = Some(max.extract()?);
+            }
+            Ok(TypeDescriptor::Int(constraints))
+        }
+        "float" | "number" => {
+            let mut constraints = NumericConstraints::default();
+            if let Some(min) = dict.get_item("minimum")? {
+                constraints.minimum = Some(min.extract()?);
+            }
+            if let Some(max) = dict.get_item("maximum")? {
+                constraints.maximum = Some(max.extract()?);
+            }
+            Ok(TypeDescriptor::Float(constraints))
+        }
+        "bool" | "boolean" => Ok(TypeDescriptor::Bool),
+        "uuid" => Ok(TypeDescriptor::Uuid),
+        "email" => Ok(TypeDescriptor::Email),
+        "url" => Ok(TypeDescriptor::Url),
+        "datetime" => Ok(TypeDescriptor::DateTime),
+        "any" => Ok(TypeDescriptor::Any),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            sanitize_error_message(&format!("Unknown type: {}", type_name))
+        )),
+    }
+}
+
+/// Extract RequestValidator from Python dict
+fn extract_validator(py: Python<'_>, dict: &Bound<'_, PyDict>) -> PyResult<RequestValidator> {
+    let mut validator = RequestValidator::new();
+
+    if let Some(path_params) = dict.get_item("path_params")? {
+        if let Ok(list) = path_params.downcast::<PyList>() {
+            for item in list.iter() {
+                let param_dict = item.downcast::<PyDict>()?;
+                validator.path_params.push(extract_param_validator(py, param_dict, ParamLocation::Path)?);
+            }
+        }
+    }
+
+    if let Some(query_params) = dict.get_item("query_params")? {
+        if let Ok(list) = query_params.downcast::<PyList>() {
+            for item in list.iter() {
+                let param_dict = item.downcast::<PyDict>()?;
+                validator.query_params.push(extract_param_validator(py, param_dict, ParamLocation::Query)?);
+            }
+        }
+    }
+
+    if let Some(header_params) = dict.get_item("header_params")? {
+        if let Ok(list) = header_params.downcast::<PyList>() {
+            for item in list.iter() {
+                let param_dict = item.downcast::<PyDict>()?;
+                validator.header_params.push(extract_param_validator(py, param_dict, ParamLocation::Header)?);
+            }
+        }
+    }
+
+    if let Some(body_type) = dict.get_item("body")? {
+        if let Ok(d) = body_type.downcast::<PyDict>() {
+            validator.body_validator = Some(extract_type_descriptor(py, d)?);
+        }
+    }
+
+    Ok(validator)
+}
+
+/// Extract ParamValidator from Python dict
+fn extract_param_validator(py: Python<'_>, dict: &Bound<'_, PyDict>, location: ParamLocation) -> PyResult<ParamValidator> {
+    let name: String = dict.get_item("name")?
+        .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>("Missing 'name' field"))?
+        .extract()?;
+
+    let type_dict = dict.get_item("type")?
+        .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>("Missing 'type' field"))?;
+    let type_desc = if let Ok(d) = type_dict.downcast::<PyDict>() {
+        extract_type_descriptor(py, d)?
+    } else {
+        TypeDescriptor::Any
+    };
+
+    let required: bool = dict.get_item("required")?
+        .map(|v| v.extract().unwrap_or(true))
+        .unwrap_or(true);
+
+    let default = if let Some(d) = dict.get_item("default")? {
+        Some(py_to_serializable(py, &d)?)
+    } else {
+        None
+    };
+
+    Ok(ParamValidator {
+        name,
+        location,
+        type_desc,
+        required,
+        default,
+    })
+}
+
+/// Extract HandlerMeta from Python dict
+fn extract_metadata(_py: Python<'_>, dict: &Bound<'_, PyDict>) -> PyResult<HandlerMeta> {
+    let name = dict.get_item("name")?
+        .map(|v| v.extract().unwrap_or_else(|_| "handler".to_string()))
+        .unwrap_or_else(|| "handler".to_string());
+
+    let mut meta = HandlerMeta::new(name);
+
+    if let Some(v) = dict.get_item("operation_id")? {
+        meta.operation_id = Some(v.extract()?);
+    }
+    if let Some(v) = dict.get_item("summary")? {
+        meta.summary = Some(v.extract()?);
+    }
+    if let Some(v) = dict.get_item("description")? {
+        meta.description = Some(v.extract()?);
+    }
+    if let Some(v) = dict.get_item("tags")? {
+        let list = v.downcast::<PyList>()?;
+        meta.tags = list.iter().map(|t| t.extract()).collect::<PyResult<Vec<String>>>()?;
+    }
+    if let Some(v) = dict.get_item("status_code")? {
+        meta.status_code = v.extract()?;
+    }
+    if let Some(v) = dict.get_item("deprecated")? {
+        meta.deprecated = v.extract()?;
+    }
+
+    Ok(meta)
+}
+
+// ============================================================================
+// Python Request Wrapper
+// ============================================================================
+
+/// Python request wrapper
+#[pyclass(name = "Request")]
+pub struct PyRequest {
+    inner: SerializableRequest,
+}
+
+#[pymethods]
+impl PyRequest {
+    #[getter]
+    fn method(&self) -> &str {
+        self.inner.method.as_str()
+    }
+
+    #[getter]
+    fn path(&self) -> &str {
+        &self.inner.path
+    }
+
+    #[getter]
+    fn url(&self) -> &str {
+        &self.inner.url
+    }
+
+    fn path_param(&self, name: &str) -> Option<String> {
+        self.inner.path_params.get(name).cloned()
+    }
+
+    fn query_param(&self, py: Python<'_>, name: &str) -> PyResult<PyObject> {
+        match self.inner.query_params.get(name) {
+            Some(v) => serializable_to_py(py, v),
+            None => Ok(py.None()),
+        }
+    }
+
+    fn header(&self, name: &str) -> Option<String> {
+        self.inner.headers.get(&name.to_lowercase()).cloned()
+    }
+
+    fn body_json(&self, py: Python<'_>) -> PyResult<PyObject> {
+        match &self.inner.body {
+            Some(v) => serializable_to_py(py, v),
+            None => Ok(py.None()),
+        }
+    }
+}
+
+// ============================================================================
+// Python Response Builder
+// ============================================================================
+
+/// Python response builder
+#[pyclass(name = "Response")]
+pub struct PyResponse {
+    inner: SerializableResponse,
+}
+
+#[pymethods]
+impl PyResponse {
+    #[new]
+    #[pyo3(signature = (status_code = 200))]
+    fn new(status_code: u16) -> Self {
+        Self {
+            inner: SerializableResponse::new(status_code),
+        }
+    }
+
+    #[staticmethod]
+    fn json(py: Python<'_>, body: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let value = py_to_serializable(py, body)?;
+        Ok(Self {
+            inner: SerializableResponse::json(value),
+        })
+    }
+
+    #[staticmethod]
+    fn text(body: &str) -> Self {
+        Self {
+            inner: SerializableResponse::text(body),
+        }
+    }
+
+    fn status(&mut self, code: u16) {
+        self.inner.status_code = code;
+    }
+
+    fn header(&mut self, name: &str, value: &str) {
+        self.inner.headers.insert(name.to_lowercase(), value.to_string());
+    }
+
+    #[getter]
+    fn status_code(&self) -> u16 {
+        self.inner.status_code
+    }
+}
+
+// ============================================================================
+// Standalone Validation Function
+// ============================================================================
+
+/// Validate a Python value against a type descriptor
+///
+/// This is the core validation function exposed for `ouroboros.validation.BaseModel`.
+/// It takes a Python dict (data) and a type descriptor dict, validates the data,
+/// and returns the validated/coerced data or raises a ValidationError.
+///
+/// # Arguments
+/// * `data` - Python dict containing the data to validate
+/// * `type_descriptor` - Python dict describing the expected type structure
+///
+/// # Returns
+/// * `Ok(PyObject)` - The validated data (possibly coerced)
+/// * `Err(PyErr)` - ValidationError with details
+#[pyfunction]
+#[pyo3(name = "validate_value")]
+pub fn py_validate_value(
+    py: Python<'_>,
+    data: &Bound<'_, PyDict>,
+    type_descriptor: &Bound<'_, PyDict>,
+) -> PyResult<PyObject> {
+    use ouroboros_api::validation::{validate_type, FieldDescriptor};
+    use ouroboros_api::error::ValidationErrors;
+
+    // Convert Python data to SerializableValue
+    let value = py_to_serializable(py, data.as_any())?;
+
+    // Convert Python type descriptor to Rust TypeDescriptor
+    let type_desc = extract_object_type_descriptor(py, type_descriptor)?;
+
+    // Validate
+    let mut errors = ValidationErrors::new();
+    validate_type(&value, &type_desc, "body", "", &mut errors);
+
+    if errors.is_empty() {
+        // Return the validated data
+        serializable_to_py(py, &value)
+    } else {
+        // Build error details as a Python list of dicts
+        let error_list = PyList::empty(py);
+        for err in &errors.errors {
+            let err_dict = PyDict::new(py);
+            err_dict.set_item("loc", PyList::new(py, &[&err.location, &err.field])?)?;
+            err_dict.set_item("msg", &err.message)?;
+            err_dict.set_item("type", &err.error_type)?;
+            error_list.append(err_dict)?;
+        }
+
+        // Raise a ValueError with the error details
+        // In Python, this will be caught and re-raised as ValidationError
+        Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            format!("Validation failed: {}", errors)
+        ))
+    }
+}
+
+/// Extract TypeDescriptor for an object type from Python dict
+///
+/// This handles the full object type with nested fields, supporting:
+/// - Basic types: string, int, float, bool
+/// - Nested objects (recursive)
+/// - Lists with item types
+/// - Optional types
+fn extract_object_type_descriptor(
+    py: Python<'_>,
+    dict: &Bound<'_, PyDict>,
+) -> PyResult<TypeDescriptor> {
+    use ouroboros_api::validation::FieldDescriptor;
+    #[allow(unused_imports)]
+    use ouroboros_api::error::ValidationErrors;
+
+    // Check if this is an object type with properties
+    if let Some(properties) = dict.get_item("properties")? {
+        if let Ok(props_dict) = properties.downcast::<PyDict>() {
+            let required_list: Vec<String> = dict
+                .get_item("required")?
+                .map(|r| r.extract().unwrap_or_default())
+                .unwrap_or_default();
+
+            let mut fields = Vec::new();
+            for (key, value) in props_dict.iter() {
+                let field_name: String = key.extract()?;
+                let field_dict = value.downcast::<PyDict>()?;
+                let field_type = extract_type_descriptor_recursive(py, field_dict)?;
+
+                fields.push(FieldDescriptor {
+                    name: field_name.clone(),
+                    type_desc: field_type,
+                    required: required_list.contains(&field_name),
+                    default: None,
+                    description: None,
+                });
+            }
+
+            return Ok(TypeDescriptor::Object {
+                fields,
+                additional_properties: None,
+            });
+        }
+    }
+
+    // Fallback to simple type extraction
+    extract_type_descriptor(py, dict)
+}
+
+/// Recursively extract TypeDescriptor from Python dict
+fn extract_type_descriptor_recursive(
+    py: Python<'_>,
+    dict: &Bound<'_, PyDict>,
+) -> PyResult<TypeDescriptor> {
+    use ouroboros_api::validation::FieldDescriptor;
+
+    // Check for nullable/optional wrapper
+    if let Some(any_of) = dict.get_item("anyOf")? {
+        if let Ok(any_of_list) = any_of.downcast::<PyList>() {
+            let mut variants = Vec::new();
+            let mut nullable = false;
+
+            for item in any_of_list.iter() {
+                if let Ok(item_dict) = item.downcast::<PyDict>() {
+                    if let Some(type_val) = item_dict.get_item("type")? {
+                        let type_str: String = type_val.extract().unwrap_or_default();
+                        if type_str == "null" {
+                            nullable = true;
+                            continue;
+                        }
+                    }
+                    variants.push(extract_type_descriptor_recursive(py, item_dict)?);
+                }
+            }
+
+            // If only one non-null variant, wrap in Optional
+            if variants.len() == 1 && nullable {
+                return Ok(TypeDescriptor::Optional(Box::new(variants.remove(0))));
+            } else if !variants.is_empty() {
+                return Ok(TypeDescriptor::Union { variants, nullable });
+            }
+        }
+    }
+
+    // Check for nested object
+    if let Some(properties) = dict.get_item("properties")? {
+        if let Ok(props_dict) = properties.downcast::<PyDict>() {
+            let required_list: Vec<String> = dict
+                .get_item("required")?
+                .map(|r| r.extract().unwrap_or_default())
+                .unwrap_or_default();
+
+            let mut fields = Vec::new();
+            for (key, value) in props_dict.iter() {
+                let field_name: String = key.extract()?;
+                let field_dict = value.downcast::<PyDict>()?;
+                let field_type = extract_type_descriptor_recursive(py, field_dict)?;
+
+                fields.push(FieldDescriptor {
+                    name: field_name.clone(),
+                    type_desc: field_type,
+                    required: required_list.contains(&field_name),
+                    default: None,
+                    description: None,
+                });
+            }
+
+            return Ok(TypeDescriptor::Object {
+                fields,
+                additional_properties: None,
+            });
+        }
+    }
+
+    // Check for array type
+    if let Some(type_val) = dict.get_item("type")? {
+        let type_str: String = type_val.extract().unwrap_or_default();
+        if type_str == "array" {
+            let items_type = if let Some(items) = dict.get_item("items")? {
+                if let Ok(items_dict) = items.downcast::<PyDict>() {
+                    extract_type_descriptor_recursive(py, items_dict)?
+                } else {
+                    TypeDescriptor::Any
+                }
+            } else {
+                TypeDescriptor::Any
+            };
+
+            let min_items = dict.get_item("minItems")?.map(|v| v.extract().ok()).flatten();
+            let max_items = dict.get_item("maxItems")?.map(|v| v.extract().ok()).flatten();
+
+            return Ok(TypeDescriptor::List {
+                items: Box::new(items_type),
+                min_items,
+                max_items,
+            });
+        }
+    }
+
+    // Fall back to simple type extraction
+    extract_type_descriptor(py, dict)
+}
+
+// ============================================================================
+// Module Registration
+// ============================================================================
+
+/// Register the api module
+pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyApiApp>()?;
+    m.add_class::<PyRequest>()?;
+    m.add_class::<PyResponse>()?;
+    m.add_function(wrap_pyfunction!(py_validate_value, m)?)?;
+    Ok(())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_convert_path_syntax() {
+        // Test simple path parameter
+        assert_eq!(convert_path_syntax("/users/{id}"), "/users/:id");
+
+        // Test multiple path parameters
+        assert_eq!(
+            convert_path_syntax("/users/{user_id}/posts/{post_id}"),
+            "/users/:user_id/posts/:post_id"
+        );
+
+        // Test path without parameters
+        assert_eq!(convert_path_syntax("/health"), "/health");
+
+        // Test path with mixed content
+        assert_eq!(
+            convert_path_syntax("/api/v1/users/{user_id}/items/{item_id}/details"),
+            "/api/v1/users/:user_id/items/:item_id/details"
+        );
+
+        // Test path with complex parameter names
+        assert_eq!(
+            convert_path_syntax("/resources/{resource_id_123}"),
+            "/resources/:resource_id_123"
+        );
+    }
+}

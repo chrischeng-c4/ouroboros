@@ -89,7 +89,7 @@ latency_100 = BenchmarkGroup("Latency 100 Concurrent")
 @latency_100.add("data-bridge")
 async def db_latency_100():
     """Measure latency at 100 concurrent connections (data-bridge)."""
-    base_url = benchmark_setup.get_data_bridge_url()
+    base_url = benchmark_setup.get_ouroboros_url()
 
     if check_wrk_available():
         stats = run_wrk_latency(f"{base_url}/plaintext", connections=100)
@@ -126,7 +126,7 @@ latency_1000 = BenchmarkGroup("Latency 1000 Concurrent")
 @latency_1000.add("data-bridge")
 async def db_latency_1000():
     """Measure latency at 1000 concurrent connections (data-bridge)."""
-    base_url = benchmark_setup.get_data_bridge_url()
+    base_url = benchmark_setup.get_ouroboros_url()
 
     if check_wrk_available():
         stats = run_wrk_latency(f"{base_url}/plaintext", connections=1000)
@@ -162,7 +162,7 @@ latency_5000 = BenchmarkGroup("Latency 5000 Concurrent")
 @latency_5000.add("data-bridge")
 async def db_latency_5000():
     """Measure latency at 5000 concurrent connections (data-bridge)."""
-    base_url = benchmark_setup.get_data_bridge_url()
+    base_url = benchmark_setup.get_ouroboros_url()
 
     if check_wrk_available():
         stats = run_wrk_latency(f"{base_url}/plaintext", connections=5000, duration=15)

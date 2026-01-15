@@ -1,0 +1,23 @@
+[package]
+name = "ouroboros-kv-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "TCP client for ouroboros KV store server"
+
+[dependencies]
+# Async runtime
+tokio.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Shared types
+ouroboros-kv = { path = "../ouroboros-kv" }
+
+# High-precision numeric
+rust_decimal = { version = "1.36", features = ["serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4"

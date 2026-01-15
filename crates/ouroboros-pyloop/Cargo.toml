@@ -1,0 +1,25 @@
+[package]
+name = "ouroboros-pyloop"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Rust-native Python asyncio event loop backed by Tokio"
+
+[dependencies]
+pyo3.workspace = true
+pyo3-async-runtimes.workspace = true
+tokio.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+once_cell.workspace = true
+
+# Shared utilities
+ouroboros-common = { path = "../ouroboros-common" }
+
+[lib]
+crate-type = ["rlib"]
+
+[dev-dependencies]
+tokio-test = "0.4"

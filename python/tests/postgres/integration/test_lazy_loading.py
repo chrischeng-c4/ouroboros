@@ -10,10 +10,10 @@ Tests Phase 2 implementation:
 Prerequisites:
 - PostgreSQL container 'rstn-postgres' running on port 5432
 - Database credentials: rstn:rstn
-- Test database: data_bridge_test
+- Test database: ouroboros_test
 
 Run with:
-    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
+    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test" \
         uv run pytest tests/postgres/integration/test_lazy_loading.py -v
 
 Setup database:

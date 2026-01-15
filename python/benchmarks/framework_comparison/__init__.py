@@ -10,5 +10,5 @@ pytest and data-bridge-test across multiple dimensions:
 - Memory usage
 
 Usage:
-    python benchmarks/framework_comparison/pytest_vs_data_bridge_test.py
+    python benchmarks/framework_comparison/pytest_vs_ouroboros_test.py
 """
