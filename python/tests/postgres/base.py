@@ -22,9 +22,8 @@ class PostgresSuite(TestSuite):
     Base class for PostgreSQL tests with real database connection.
 
     This suite automatically:
-    - Initializes the PostgreSQL connection pool before tests
+    - Initializes the PostgreSQL connection pool lazily on first use
     - Cleans up all tables after each test (for isolation)
-    - Closes the connection pool after all tests
 
     Example:
         from tests.postgres.base import PostgresSuite
@@ -32,16 +31,9 @@ class PostgresSuite(TestSuite):
         from ouroboros.postgres import execute
 
         class TestUserCRUD(PostgresSuite):
-            async def setup_method(self):
-                await execute('''
-                    CREATE TABLE IF NOT EXISTS users (
-                        id SERIAL PRIMARY KEY,
-                        name VARCHAR(255)
-                    )
-                ''')
-
             @test
             async def test_insert_user(self):
+                await self.create_table("users", "id SERIAL PRIMARY KEY, name VARCHAR(255)")
                 await execute("INSERT INTO users (name) VALUES ('Alice')")
                 rows = await execute("SELECT * FROM users")
                 expect(len(rows)).to_equal(1)
@@ -49,22 +41,20 @@ class PostgresSuite(TestSuite):
 
     _db_initialized: bool = False
 
-    async def setup_class(self) -> None:
-        """Initialize PostgreSQL connection pool once per test class."""
+    async def _ensure_db(self) -> None:
+        """Lazy initialization of database connection."""
         if not PostgresSuite._db_initialized:
             await init(POSTGRES_TEST_URI, min_connections=2, max_connections=10)
             PostgresSuite._db_initialized = True
 
-    async def teardown_class(self) -> None:
-        """Close PostgreSQL connection pool after all tests."""
-        if PostgresSuite._db_initialized:
-            await close()
-            PostgresSuite._db_initialized = False
+    async def setup_method(self) -> None:
+        """Ensure database is connected before each test."""
+        await self._ensure_db()
 
     async def teardown_method(self) -> None:
         """Clean up all test tables after each test for isolation."""
         try:
-            # Get all tables in public schema
+            # Get all tables in public schema (exclude system tables)
             tables = await execute(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             )
@@ -73,8 +63,13 @@ class PostgresSuite(TestSuite):
             for row in tables:
                 await execute(f"DROP TABLE IF EXISTS {row['tablename']} CASCADE")
         except Exception:
-            # Ignore errors during cleanup (e.g., if no tables exist)
+            # Ignore errors during cleanup
             pass
+
+    async def create_table(self, name: str, columns: str) -> str:
+        """Helper to create a test table. Returns the table name."""
+        await execute(f"CREATE TABLE IF NOT EXISTS {name} ({columns})")
+        return name
 
 
 # Alias for backwards compatibility

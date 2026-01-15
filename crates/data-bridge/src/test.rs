@@ -3904,7 +3904,9 @@ fn run_sync_hook(
     Ok(())
 }
 
-/// Run an asynchronous hook synchronously (using asyncio.run)
+/// Run an asynchronous hook synchronously
+/// Uses get_running_loop().run_until_complete() if inside async context,
+/// otherwise falls back to asyncio.run()
 fn run_async_hook_sync(
     py: Python<'_>,
     hook_fn: &PyObject,
@@ -3929,9 +3931,20 @@ fn run_async_hook_sync(
         return Ok(());
     }
 
-    // Use asyncio.run to execute the coroutine
-    let run_fn = asyncio.getattr("run")?;
-    run_fn.call1((coro,))?;
+    // Try to get the running event loop first
+    let get_running_loop = asyncio.getattr("get_running_loop")?;
+    match get_running_loop.call0() {
+        Ok(loop_obj) => {
+            // We're inside an async context - use run_until_complete
+            let run_until_complete = loop_obj.getattr("run_until_complete")?;
+            run_until_complete.call1((coro,))?;
+        }
+        Err(_) => {
+            // No running loop - use asyncio.run
+            let run_fn = asyncio.getattr("run")?;
+            run_fn.call1((coro,))?;
+        }
+    }
 
     Ok(())
 }
