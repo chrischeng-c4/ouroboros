@@ -15,8 +15,10 @@ class TestSmoke(PostgresSuite):
 
     async def create_test_table(self) -> str:
         """Create standard test table and return its name."""
+        await self.ensure_db()
+        await execute("DROP TABLE IF EXISTS test_users CASCADE")
         await execute("""
-            CREATE TABLE IF NOT EXISTS test_users (
+            CREATE TABLE test_users (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 email VARCHAR(255) UNIQUE,
@@ -44,6 +46,7 @@ class TestSmoke(PostgresSuite):
     @test
     async def test_database_connection(self):
         """Test basic database connectivity with simple query."""
+        await self.ensure_db()
         result = await execute("SELECT 1 as num")
         expect(len(result)).to_equal(1)
         expect(result[0]["num"]).to_equal(1)
@@ -51,6 +54,7 @@ class TestSmoke(PostgresSuite):
     @test
     async def test_database_version(self):
         """Test database version query."""
+        await self.ensure_db()
         result = await execute("SELECT version()")
         expect(len(result)).to_equal(1)
         expect("PostgreSQL" in result[0]["version"]).to_be_true()

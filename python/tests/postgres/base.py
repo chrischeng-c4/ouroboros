@@ -41,15 +41,11 @@ class PostgresSuite(TestSuite):
 
     _db_initialized: bool = False
 
-    async def _ensure_db(self) -> None:
-        """Lazy initialization of database connection."""
+    async def ensure_db(self) -> None:
+        """Lazy initialization of database connection. Call at start of each test."""
         if not PostgresSuite._db_initialized:
             await init(POSTGRES_TEST_URI, min_connections=2, max_connections=10)
             PostgresSuite._db_initialized = True
-
-    async def setup_method(self) -> None:
-        """Ensure database is connected before each test."""
-        await self._ensure_db()
 
     async def teardown_method(self) -> None:
         """Clean up all test tables after each test for isolation."""
