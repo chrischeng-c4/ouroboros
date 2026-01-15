@@ -71,6 +71,24 @@ enum QcAction {
         #[arg(short = 'k', long)]
         pattern: Option<String>,
     },
+
+    /// Migrate pytest tests to TestSuite format
+    Migrate {
+        /// Path to test file or directory
+        path: String,
+
+        /// Create backup before migration (path_pytest_bak)
+        #[arg(long)]
+        backup: bool,
+
+        /// Preview changes without modifying files
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Verbose output
+        #[arg(short, long)]
+        verbose: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -91,6 +109,10 @@ fn main() -> Result<()> {
 
             QcAction::Collect { path, pattern } => {
                 collect_tests(&path, pattern)?;
+            }
+
+            QcAction::Migrate { path, backup, dry_run, verbose } => {
+                migrate_tests(&path, backup, dry_run, verbose)?;
             }
         },
     }
@@ -371,5 +393,74 @@ fn collect_tests(path: &str, pattern: Option<String>) -> Result<()> {
     }
 
     println!("\n✅ Total: {} file(s)", files.len());
+    Ok(())
+}
+
+/// Migrate pytest tests to TestSuite format
+fn migrate_tests(path: &str, backup: bool, dry_run: bool, verbose: bool) -> Result<()> {
+    println!("🔄 Migrating pytest tests to TestSuite format...");
+
+    if dry_run {
+        println!("   (dry-run mode - no files will be modified)");
+    }
+
+    // Initialize Python
+    pyo3::prepare_freethreaded_python();
+
+    Python::with_gil(|py| -> Result<()> {
+        // Add tools directory to sys.path
+        let sys = py.import("sys")?;
+        let sys_path = sys.getattr("path")?;
+        sys_path.call_method1("insert", (0, "python/tools"))?;
+        sys_path.call_method1("insert", (0, "python"))?;
+
+        // Import the migration module
+        let migrate_module = py.import("migrate_to_ouroboros_test")
+            .context("Failed to import migrate_to_ouroboros_test module")?;
+
+        // Get the migrate_directory function
+        let migrate_fn = migrate_module.getattr("migrate_directory")?;
+
+        // Convert path to Python Path object
+        let pathlib = py.import("pathlib")?;
+        let py_path = pathlib.call_method1("Path", (path,))?;
+
+        // Build kwargs
+        let kwargs = pyo3::types::PyDict::new(py);
+        kwargs.set_item("backup", backup)?;
+        kwargs.set_item("dry_run", dry_run)?;
+        kwargs.set_item("verbose", verbose)?;
+
+        // Call migrate_directory
+        let stats = migrate_fn.call((py_path,), Some(&kwargs))?;
+
+        // Extract and print stats
+        let total: u32 = stats.getattr("total_files")?.extract()?;
+        let migrated: u32 = stats.getattr("migrated")?.extract()?;
+        let skipped: u32 = stats.getattr("skipped")?.extract()?;
+        let failed: u32 = stats.getattr("failed")?.extract()?;
+        let already: u32 = stats.getattr("already_testsuite")?.extract()?;
+
+        println!("\n{}", "=".repeat(60));
+        println!("MIGRATION SUMMARY{}", if dry_run { " (DRY RUN)" } else { "" });
+        println!("{}", "=".repeat(60));
+        println!("📁 Total files:       {}", total);
+        println!("✅ Migrated:          {}", migrated);
+        println!("⏭️  Already TestSuite: {}", already);
+        println!("⏭️  Skipped:           {}", skipped);
+        println!("❌ Failed:            {}", failed);
+        println!("{}", "=".repeat(60));
+
+        if failed > 0 {
+            let errors: Vec<(String, String)> = stats.getattr("errors")?.extract()?;
+            println!("\n❌ Errors:");
+            for (path, error) in errors {
+                println!("  {}: {}", path, error);
+            }
+        }
+
+        Ok(())
+    })?;
+
     Ok(())
 }
