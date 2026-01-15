@@ -12,7 +12,7 @@
 
 ## 3. QC Features
 - [x] 3.1 Implement automatic `TestSuite` discovery (scan classes inheriting from TestSuite).
-- [ ] 3.2 Fix async hook execution (`setup_method`, `teardown_method`) to ensure DB connections.
+- [x] 3.2 Fix async hook execution (`setup_method`, `teardown_method`) to ensure DB connections.
 - [x] 3.3 Implement `-k` pattern filtering logic in the runner.
 
 ## 4. Integration

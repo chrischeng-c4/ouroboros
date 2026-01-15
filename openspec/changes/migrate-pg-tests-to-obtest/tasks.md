@@ -16,10 +16,15 @@
     - Add `@test` decorator to all test methods.
     - Replace `import pytest` with `from ouroboros.test import TestSuite, test, expect`.
     - `expect().to_raise()` works with new Rust implementation.
-- [ ] 3.2 Migrate remaining `python/tests/postgres/unit/*.py` files (23 files remaining).
-- [ ] 3.3 Migrate `python/tests/postgres/integration/*.py` files (20 files).
-- [ ] 3.4 Verify all 45 test files work with `ob-test` runner.
+- [x] 3.2 Fix syntax errors in test files (broken `expect(lambda: await ...).to_raise()` patterns).
+- [x] 3.3 Migrate `python/tests/postgres/integration/*.py` and `benchmarks/*.py` files via `ob qc migrate`.
+    - 22 files migrated, 20 already TestSuite, 2 skipped (no pytest patterns).
+- [ ] 3.4 Verify all test files work with `ob qc run`.
+    - **Partial**: 33 tests pass (tests without DB fixtures)
+    - **Blocked**: Tests with fixture parameters (`test_table`, `sample_data`) don't run
+    - **Fix needed**: Change test classes to inherit `PostgresSuite` instead of `TestSuite`
 
 ## 4. Cleanup
 - [ ] 4.1 Remove `pytest` dependencies/markers from postgres test files.
-- [ ] 4.2 Update `just test-pg` (or equivalent command) to use `dbtest` instead of `pytest`.
+    - `conftest.py` still has pytest fixtures (can delete after fixture migration)
+- [ ] 4.2 Update `just test-pg` (or equivalent command) to use `ob qc run` instead of `pytest`.

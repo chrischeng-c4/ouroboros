@@ -2,7 +2,6 @@
 Test lifecycle hooks system (setup_class, teardown_class, setup_method, teardown_method).
 """
 import asyncio
-import pytest
 from ouroboros.qc import TestSuite, test, expect
 
 

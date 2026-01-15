@@ -11,15 +11,13 @@ Tests cover:
 - Window functions combined with WHERE and GROUP BY
 - Multiple window functions in the same query
 """
-
-import pytest
 from decimal import Decimal
 from datetime import date
 from ouroboros.postgres import execute, insert_one, Table, Column
 from ouroboros.postgres.query import WindowSpec
+from ouroboros.qc import TestSuite, expect, fixture, test
 
-
-@pytest.fixture
+@fixture
 async def sales_table():
     """
     Create and populate a sales table for window function testing.
@@ -31,661 +29,251 @@ async def sales_table():
     - amount: DECIMAL(10, 2)
     - sale_date: DATE
     """
-    # Create sales table
-    await execute(
-        """
-        CREATE TABLE IF NOT EXISTS sales (
-            id SERIAL PRIMARY KEY,
-            salesperson VARCHAR(100) NOT NULL,
-            region VARCHAR(50) NOT NULL,
-            amount DECIMAL(10, 2) NOT NULL,
-            sale_date DATE NOT NULL
-        )
-        """
-    )
-
-    # Insert sample data with multiple salespeople and regions
-    test_data = [
-        # North region
-        {"salesperson": "Alice", "region": "North", "amount": 1000.00, "sale_date": "2024-01-15"},
-        {"salesperson": "Alice", "region": "North", "amount": 1500.00, "sale_date": "2024-02-10"},
-        {"salesperson": "Alice", "region": "North", "amount": 2000.00, "sale_date": "2024-03-05"},
-        {"salesperson": "Bob", "region": "North", "amount": 800.00, "sale_date": "2024-01-20"},
-        {"salesperson": "Bob", "region": "North", "amount": 1200.00, "sale_date": "2024-02-15"},
-        {"salesperson": "Bob", "region": "North", "amount": 900.00, "sale_date": "2024-03-10"},
-
-        # South region
-        {"salesperson": "Charlie", "region": "South", "amount": 2200.00, "sale_date": "2024-01-10"},
-        {"salesperson": "Charlie", "region": "South", "amount": 1800.00, "sale_date": "2024-02-05"},
-        {"salesperson": "Charlie", "region": "South", "amount": 2500.00, "sale_date": "2024-03-01"},
-        {"salesperson": "Diana", "region": "South", "amount": 1100.00, "sale_date": "2024-01-25"},
-        {"salesperson": "Diana", "region": "South", "amount": 1400.00, "sale_date": "2024-02-20"},
-        {"salesperson": "Diana", "region": "South", "amount": 1600.00, "sale_date": "2024-03-15"},
-
-        # East region
-        {"salesperson": "Eve", "region": "East", "amount": 1700.00, "sale_date": "2024-01-12"},
-        {"salesperson": "Eve", "region": "East", "amount": 1900.00, "sale_date": "2024-02-08"},
-        {"salesperson": "Eve", "region": "East", "amount": 2100.00, "sale_date": "2024-03-03"},
-        {"salesperson": "Frank", "region": "East", "amount": 1300.00, "sale_date": "2024-01-18"},
-        {"salesperson": "Frank", "region": "East", "amount": 1500.00, "sale_date": "2024-02-12"},
-        {"salesperson": "Frank", "region": "East", "amount": 1700.00, "sale_date": "2024-03-08"},
-    ]
-
+    await execute('\n        CREATE TABLE IF NOT EXISTS sales (\n            id SERIAL PRIMARY KEY,\n            salesperson VARCHAR(100) NOT NULL,\n            region VARCHAR(50) NOT NULL,\n            amount DECIMAL(10, 2) NOT NULL,\n            sale_date DATE NOT NULL\n        )\n        ')
+    test_data = [{'salesperson': 'Alice', 'region': 'North', 'amount': 1000.0, 'sale_date': '2024-01-15'}, {'salesperson': 'Alice', 'region': 'North', 'amount': 1500.0, 'sale_date': '2024-02-10'}, {'salesperson': 'Alice', 'region': 'North', 'amount': 2000.0, 'sale_date': '2024-03-05'}, {'salesperson': 'Bob', 'region': 'North', 'amount': 800.0, 'sale_date': '2024-01-20'}, {'salesperson': 'Bob', 'region': 'North', 'amount': 1200.0, 'sale_date': '2024-02-15'}, {'salesperson': 'Bob', 'region': 'North', 'amount': 900.0, 'sale_date': '2024-03-10'}, {'salesperson': 'Charlie', 'region': 'South', 'amount': 2200.0, 'sale_date': '2024-01-10'}, {'salesperson': 'Charlie', 'region': 'South', 'amount': 1800.0, 'sale_date': '2024-02-05'}, {'salesperson': 'Charlie', 'region': 'South', 'amount': 2500.0, 'sale_date': '2024-03-01'}, {'salesperson': 'Diana', 'region': 'South', 'amount': 1100.0, 'sale_date': '2024-01-25'}, {'salesperson': 'Diana', 'region': 'South', 'amount': 1400.0, 'sale_date': '2024-02-20'}, {'salesperson': 'Diana', 'region': 'South', 'amount': 1600.0, 'sale_date': '2024-03-15'}, {'salesperson': 'Eve', 'region': 'East', 'amount': 1700.0, 'sale_date': '2024-01-12'}, {'salesperson': 'Eve', 'region': 'East', 'amount': 1900.0, 'sale_date': '2024-02-08'}, {'salesperson': 'Eve', 'region': 'East', 'amount': 2100.0, 'sale_date': '2024-03-03'}, {'salesperson': 'Frank', 'region': 'East', 'amount': 1300.0, 'sale_date': '2024-01-18'}, {'salesperson': 'Frank', 'region': 'East', 'amount': 1500.0, 'sale_date': '2024-02-12'}, {'salesperson': 'Frank', 'region': 'East', 'amount': 1700.0, 'sale_date': '2024-03-08'}]
     for data in test_data:
-        await insert_one("sales", data)
-
+        await insert_one('sales', data)
     yield
 
-    # Cleanup handled by cleanup_tables fixture
-
-
-@pytest.mark.asyncio
-class TestRowNumberWindow:
+class TestRowNumberWindow(TestSuite):
     """Test ROW_NUMBER() window function."""
 
+    @test
     async def test_row_number_order_by_amount(self, sales_table):
         """Test ROW_NUMBER() with ORDER BY to rank sales by amount."""
-        # Execute raw SQL with window function
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                ROW_NUMBER() OVER (ORDER BY amount DESC) as rank
-            FROM sales
-            ORDER BY amount DESC
-            LIMIT 5
-            """
-        )
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                ROW_NUMBER() OVER (ORDER BY amount DESC) as rank\n            FROM sales\n            ORDER BY amount DESC\n            LIMIT 5\n            ')
+        expect(len(results)).to_equal(5)
+        expect(results[0]['rank']).to_equal(1)
+        expect(results[1]['rank']).to_equal(2)
+        expect(results[2]['rank']).to_equal(3)
+        expect(results[3]['rank']).to_equal(4)
+        expect(results[4]['rank']).to_equal(5)
+        expect(float(results[0]['amount'])).to_equal(2500.0)
+        expect(results[0]['salesperson']).to_equal('Charlie')
 
-        # Verify top 5 sales have sequential row numbers
-        assert len(results) == 5
-        assert results[0]["rank"] == 1
-        assert results[1]["rank"] == 2
-        assert results[2]["rank"] == 3
-        assert results[3]["rank"] == 4
-        assert results[4]["rank"] == 5
-
-        # Verify highest sale
-        assert float(results[0]["amount"]) == 2500.00
-        assert results[0]["salesperson"] == "Charlie"
-
+    @test
     async def test_row_number_partition_by_region(self, sales_table):
         """Test ROW_NUMBER() with PARTITION BY region."""
-        # Rank sales within each region
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank
-            FROM sales
-            ORDER BY region, region_rank
-            """
-        )
-
-        # Group results by region
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank\n            FROM sales\n            ORDER BY region, region_rank\n            ')
         by_region = {}
         for row in results:
-            region = row["region"]
+            region = row['region']
             if region not in by_region:
                 by_region[region] = []
             by_region[region].append(row)
-
-        # Verify each region has sequential rankings
         for region, rows in by_region.items():
             for i, row in enumerate(rows, start=1):
-                assert row["region_rank"] == i
+                expect(row['region_rank']).to_equal(i)
+        east_sales = by_region['East']
+        expect(float(east_sales[0]['amount'])).to_equal(2100.0)
+        expect(east_sales[0]['salesperson']).to_equal('Eve')
 
-        # Verify East region top sale
-        east_sales = by_region["East"]
-        assert float(east_sales[0]["amount"]) == 2100.00
-        assert east_sales[0]["salesperson"] == "Eve"
-
-
-@pytest.mark.asyncio
-class TestRankDenseRankWindow:
+class TestRankDenseRankWindow(TestSuite):
     """Test RANK() and DENSE_RANK() window functions."""
 
+    @test
     async def test_rank_with_partition(self, sales_table):
         """Test RANK() with PARTITION BY and ORDER BY."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                RANK() OVER (PARTITION BY region ORDER BY amount DESC) as sales_rank
-            FROM sales
-            WHERE region = 'North'
-            ORDER BY sales_rank
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                amount,\n                RANK() OVER (PARTITION BY region ORDER BY amount DESC) as sales_rank\n            FROM sales\n            WHERE region = 'North'\n            ORDER BY sales_rank\n            ")
+        expect(len(results)).to_equal(6)
+        alice_top = [r for r in results if r['salesperson'] == 'Alice' and r['sales_rank'] == 1]
+        expect(len(alice_top)).to_equal(1)
+        expect(float(alice_top[0]['amount'])).to_equal(2000.0)
 
-        # Verify North region rankings
-        assert len(results) == 6  # 6 sales in North region
-
-        # Alice's top sale should be rank 1
-        alice_top = [r for r in results if r["salesperson"] == "Alice" and r["sales_rank"] == 1]
-        assert len(alice_top) == 1
-        assert float(alice_top[0]["amount"]) == 2000.00
-
+    @test
     async def test_dense_rank_window(self, sales_table):
         """Test DENSE_RANK() window function."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                DENSE_RANK() OVER (ORDER BY amount DESC) as dense_rank
-            FROM sales
-            ORDER BY dense_rank
-            LIMIT 10
-            """
-        )
-
-        # Verify dense rankings are sequential (no gaps)
-        assert len(results) == 10
-        ranks = [r["dense_rank"] for r in results]
-
-        # Dense rank should not have gaps
-        assert ranks[0] == 1
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                DENSE_RANK() OVER (ORDER BY amount DESC) as dense_rank\n            FROM sales\n            ORDER BY dense_rank\n            LIMIT 10\n            ')
+        expect(len(results)).to_equal(10)
+        ranks = [r['dense_rank'] for r in results]
+        expect(ranks[0]).to_equal(1)
         for i in range(1, len(ranks)):
-            assert ranks[i] <= ranks[i-1] + 1
+            expect(ranks[i]).to_be_less_than_or_equal(ranks[i - 1] + 1)
 
-
-@pytest.mark.asyncio
-class TestLagLeadWindow:
+class TestLagLeadWindow(TestSuite):
     """Test LAG() and LEAD() window functions."""
 
+    @test
     async def test_lag_previous_sale_amount(self, sales_table):
         """Test LAG() to get previous sale amount for each salesperson."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                LAG(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount
-            FROM sales
-            WHERE salesperson = 'Alice'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                LAG(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount\n            FROM sales\n            WHERE salesperson = 'Alice'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(3)
+        expect(results[0]['prev_amount']).to_be_none()
+        expect(float(results[0]['amount'])).to_equal(1000.0)
+        expect(results[1]['prev_amount']).to_not_be_none()
+        expect(float(results[1]['prev_amount'])).to_equal(1000.0)
+        expect(float(results[1]['amount'])).to_equal(1500.0)
+        expect(results[2]['prev_amount']).to_not_be_none()
+        expect(float(results[2]['prev_amount'])).to_equal(1500.0)
+        expect(float(results[2]['amount'])).to_equal(2000.0)
 
-        # Alice has 3 sales
-        assert len(results) == 3
-
-        # First sale has no previous (NULL)
-        assert results[0]["prev_amount"] is None
-        assert float(results[0]["amount"]) == 1000.00
-
-        # Second sale's previous is first sale
-        assert results[1]["prev_amount"] is not None
-        assert float(results[1]["prev_amount"]) == 1000.00
-        assert float(results[1]["amount"]) == 1500.00
-
-        # Third sale's previous is second sale
-        assert results[2]["prev_amount"] is not None
-        assert float(results[2]["prev_amount"]) == 1500.00
-        assert float(results[2]["amount"]) == 2000.00
-
+    @test
     async def test_lead_next_sale_amount(self, sales_table):
         """Test LEAD() to get next sale amount."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                LEAD(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as next_amount
-            FROM sales
-            WHERE salesperson = 'Bob'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                LEAD(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as next_amount\n            FROM sales\n            WHERE salesperson = 'Bob'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(3)
+        expect(results[0]['next_amount']).to_not_be_none()
+        expect(float(results[0]['next_amount'])).to_equal(1200.0)
+        expect(results[1]['next_amount']).to_not_be_none()
+        expect(float(results[1]['next_amount'])).to_equal(900.0)
+        expect(results[2]['next_amount']).to_be_none()
 
-        # Bob has 3 sales
-        assert len(results) == 3
-
-        # First sale's next is second sale
-        assert results[0]["next_amount"] is not None
-        assert float(results[0]["next_amount"]) == 1200.00
-
-        # Second sale's next is third sale
-        assert results[1]["next_amount"] is not None
-        assert float(results[1]["next_amount"]) == 900.00
-
-        # Last sale has no next (NULL)
-        assert results[2]["next_amount"] is None
-
+    @test
     async def test_lag_with_offset_and_default(self, sales_table):
         """Test LAG() with custom offset and default value."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                LAG(amount, 2, 0) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_prev_amount
-            FROM sales
-            WHERE salesperson = 'Charlie'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                LAG(amount, 2, 0) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_prev_amount\n            FROM sales\n            WHERE salesperson = 'Charlie'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(3)
+        expect(float(results[0]['prev_prev_amount'])).to_equal(0.0)
+        expect(float(results[1]['prev_prev_amount'])).to_equal(0.0)
+        expect(float(results[2]['prev_prev_amount'])).to_equal(2200.0)
 
-        # Charlie has 3 sales
-        assert len(results) == 3
-
-        # First two sales have no prev-prev (default to 0)
-        assert float(results[0]["prev_prev_amount"]) == 0.00
-        assert float(results[1]["prev_prev_amount"]) == 0.00
-
-        # Third sale's prev-prev is first sale
-        assert float(results[2]["prev_prev_amount"]) == 2200.00
-
-
-@pytest.mark.asyncio
-class TestFirstLastValueWindow:
+class TestFirstLastValueWindow(TestSuite):
     """Test FIRST_VALUE() and LAST_VALUE() window functions."""
 
+    @test
     async def test_first_value_by_region(self, sales_table):
         """Test FIRST_VALUE() to get first sale in each region."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                sale_date,
-                amount,
-                FIRST_VALUE(amount) OVER (
-                    PARTITION BY region
-                    ORDER BY sale_date
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                ) as first_sale_amount
-            FROM sales
-            WHERE region = 'South'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                sale_date,\n                amount,\n                FIRST_VALUE(amount) OVER (\n                    PARTITION BY region\n                    ORDER BY sale_date\n                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\n                ) as first_sale_amount\n            FROM sales\n            WHERE region = 'South'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(6)
+        first_amounts = {float(r['first_sale_amount']) for r in results}
+        expect(len(first_amounts)).to_equal(1)
+        expect(2200.0).to_be_in(first_amounts)
 
-        # All South region sales should have same first_sale_amount
-        assert len(results) == 6
-        first_amounts = {float(r["first_sale_amount"]) for r in results}
-        assert len(first_amounts) == 1  # Should all be the same
-
-        # First sale in South region was Charlie on 2024-01-10
-        assert 2200.00 in first_amounts
-
+    @test
     async def test_last_value_by_region(self, sales_table):
         """Test LAST_VALUE() to get last sale in each region."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                sale_date,
-                amount,
-                LAST_VALUE(amount) OVER (
-                    PARTITION BY region
-                    ORDER BY sale_date
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                ) as last_sale_amount
-            FROM sales
-            WHERE region = 'East'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                sale_date,\n                amount,\n                LAST_VALUE(amount) OVER (\n                    PARTITION BY region\n                    ORDER BY sale_date\n                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\n                ) as last_sale_amount\n            FROM sales\n            WHERE region = 'East'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(6)
+        last_amounts = {float(r['last_sale_amount']) for r in results}
+        expect(len(last_amounts)).to_equal(1)
+        expect(1700.0).to_be_in(last_amounts)
 
-        # All East region sales should have same last_sale_amount
-        assert len(results) == 6
-        last_amounts = {float(r["last_sale_amount"]) for r in results}
-        assert len(last_amounts) == 1  # Should all be the same
-
-        # Last sale in East region was Frank on 2024-03-08
-        assert 1700.00 in last_amounts
-
-
-@pytest.mark.asyncio
-class TestAggregateWindowFunctions:
+class TestAggregateWindowFunctions(TestSuite):
     """Test aggregate functions used as window functions."""
 
+    @test
     async def test_sum_over_partition(self, sales_table):
         """Test SUM() OVER (PARTITION BY ...) for running totals."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                SUM(amount) OVER (PARTITION BY region) as region_total
-            FROM sales
-            WHERE region = 'North'
-            ORDER BY salesperson, amount
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                amount,\n                SUM(amount) OVER (PARTITION BY region) as region_total\n            FROM sales\n            WHERE region = 'North'\n            ORDER BY salesperson, amount\n            ")
+        expect(len(results)).to_equal(6)
+        totals = {float(r['region_total']) for r in results}
+        expect(len(totals)).to_equal(1)
+        expect(7400.0).to_be_in(totals)
 
-        # All North region sales should have same total
-        assert len(results) == 6
-        totals = {float(r["region_total"]) for r in results}
-        assert len(totals) == 1  # Should all be the same
-
-        # North region total: Alice (1000+1500+2000) + Bob (800+1200+900) = 7400
-        assert 7400.00 in totals
-
+    @test
     async def test_avg_over_with_order(self, sales_table):
         """Test AVG() OVER with ORDER BY for moving average."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                AVG(amount) OVER (
-                    PARTITION BY salesperson
-                    ORDER BY sale_date
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                ) as cumulative_avg
-            FROM sales
-            WHERE salesperson = 'Alice'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                AVG(amount) OVER (\n                    PARTITION BY salesperson\n                    ORDER BY sale_date\n                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n                ) as cumulative_avg\n            FROM sales\n            WHERE salesperson = 'Alice'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(3)
+        expect(float(results[0]['cumulative_avg'])).to_equal(pytest.approx(1000.0, rel=0.01))
+        expect(float(results[1]['cumulative_avg'])).to_equal(pytest.approx(1250.0, rel=0.01))
+        expect(float(results[2]['cumulative_avg'])).to_equal(pytest.approx(1500.0, rel=0.01))
 
-        # Alice has 3 sales: 1000, 1500, 2000
-        assert len(results) == 3
-
-        # First sale: avg of 1000 = 1000
-        assert float(results[0]["cumulative_avg"]) == pytest.approx(1000.00, rel=0.01)
-
-        # Second sale: avg of (1000 + 1500) / 2 = 1250
-        assert float(results[1]["cumulative_avg"]) == pytest.approx(1250.00, rel=0.01)
-
-        # Third sale: avg of (1000 + 1500 + 2000) / 3 = 1500
-        assert float(results[2]["cumulative_avg"]) == pytest.approx(1500.00, rel=0.01)
-
+    @test
     async def test_sum_with_frame_specification(self, sales_table):
         """Test SUM() OVER with custom frame specification."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                SUM(amount) OVER (
-                    PARTITION BY salesperson
-                    ORDER BY sale_date
-                    ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
-                ) as two_sale_total
-            FROM sales
-            WHERE salesperson = 'Bob'
-            ORDER BY sale_date
-            """
-        )
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                SUM(amount) OVER (\n                    PARTITION BY salesperson\n                    ORDER BY sale_date\n                    ROWS BETWEEN 1 PRECEDING AND CURRENT ROW\n                ) as two_sale_total\n            FROM sales\n            WHERE salesperson = 'Bob'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(3)
+        expect(float(results[0]['two_sale_total'])).to_equal(800.0)
+        expect(float(results[1]['two_sale_total'])).to_equal(2000.0)
+        expect(float(results[2]['two_sale_total'])).to_equal(2100.0)
 
-        # Bob has 3 sales: 800, 1200, 900
-        assert len(results) == 3
-
-        # First sale: only current row = 800
-        assert float(results[0]["two_sale_total"]) == 800.00
-
-        # Second sale: previous + current = 800 + 1200 = 2000
-        assert float(results[1]["two_sale_total"]) == 2000.00
-
-        # Third sale: previous + current = 1200 + 900 = 2100
-        assert float(results[2]["two_sale_total"]) == 2100.00
-
-
-@pytest.mark.asyncio
-class TestWindowWithWhereAndGroupBy:
+class TestWindowWithWhereAndGroupBy(TestSuite):
     """Test window functions combined with WHERE and GROUP BY."""
 
+    @test
     async def test_window_with_where_condition(self, sales_table):
         """Test window function with WHERE clause filtering."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                ROW_NUMBER() OVER (ORDER BY amount DESC) as rank
-            FROM sales
-            WHERE amount > 1500
-            ORDER BY rank
-            """
-        )
-
-        # Should only include sales > 1500
-        assert all(float(r["amount"]) > 1500 for r in results)
-
-        # Rankings should be sequential
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                ROW_NUMBER() OVER (ORDER BY amount DESC) as rank\n            FROM sales\n            WHERE amount > 1500\n            ORDER BY rank\n            ')
+        expect(all((float(r['amount']) > 1500 for r in results))).to_be_true()
         for i, row in enumerate(results, start=1):
-            assert row["rank"] == i
+            expect(row['rank']).to_equal(i)
 
+    @test
     async def test_window_with_having(self, sales_table):
         """Test window function in subquery with GROUP BY and HAVING."""
-        results = await execute(
-            """
-            SELECT
-                region,
-                total_sales,
-                RANK() OVER (ORDER BY total_sales DESC) as region_rank
-            FROM (
-                SELECT
-                    region,
-                    SUM(amount) as total_sales
-                FROM sales
-                GROUP BY region
-                HAVING SUM(amount) > 5000
-            ) regional_totals
-            ORDER BY region_rank
-            """
-        )
-
-        # Should only include regions with total > 5000
-        assert all(float(r["total_sales"]) > 5000 for r in results)
-
-        # Rankings should be sequential
+        results = await execute('\n            SELECT\n                region,\n                total_sales,\n                RANK() OVER (ORDER BY total_sales DESC) as region_rank\n            FROM (\n                SELECT\n                    region,\n                    SUM(amount) as total_sales\n                FROM sales\n                GROUP BY region\n                HAVING SUM(amount) > 5000\n            ) regional_totals\n            ORDER BY region_rank\n            ')
+        expect(all((float(r['total_sales']) > 5000 for r in results))).to_be_true()
         for i, row in enumerate(results, start=1):
-            assert row["region_rank"] == i
+            expect(row['region_rank']).to_equal(i)
 
+    @test
     async def test_window_aggregates_by_salesperson(self, sales_table):
         """Test combining GROUP BY with window functions."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                total_amount,
-                AVG(total_amount) OVER (PARTITION BY region) as region_avg
-            FROM (
-                SELECT
-                    salesperson,
-                    region,
-                    SUM(amount) as total_amount
-                FROM sales
-                GROUP BY salesperson, region
-            ) salesperson_totals
-            ORDER BY region, salesperson
-            """
-        )
-
-        # Group by region to verify averages
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                total_amount,\n                AVG(total_amount) OVER (PARTITION BY region) as region_avg\n            FROM (\n                SELECT\n                    salesperson,\n                    region,\n                    SUM(amount) as total_amount\n                FROM sales\n                GROUP BY salesperson, region\n            ) salesperson_totals\n            ORDER BY region, salesperson\n            ')
         by_region = {}
         for row in results:
-            region = row["region"]
+            region = row['region']
             if region not in by_region:
                 by_region[region] = []
             by_region[region].append(row)
-
-        # Verify each region has consistent average
         for region, rows in by_region.items():
-            region_avgs = {float(r["region_avg"]) for r in rows}
-            assert len(region_avgs) == 1  # All should have same avg
+            region_avgs = {float(r['region_avg']) for r in rows}
+            expect(len(region_avgs)).to_equal(1)
 
-
-@pytest.mark.asyncio
-class TestMultipleWindowFunctions:
+class TestMultipleWindowFunctions(TestSuite):
     """Test multiple window functions in the same query."""
 
+    @test
     async def test_multiple_window_functions_same_query(self, sales_table):
         """Test combining multiple window functions."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                sale_date,
-                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank,
-                RANK() OVER (ORDER BY amount DESC) as overall_rank,
-                LAG(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount,
-                SUM(amount) OVER (PARTITION BY region) as region_total
-            FROM sales
-            WHERE region IN ('North', 'South')
-            ORDER BY region, region_rank
-            """
-        )
-
-        # Verify all window functions are present
-        assert all("region_rank" in r for r in results)
-        assert all("overall_rank" in r for r in results)
-        assert all("region_total" in r for r in results)
-
-        # North and South regions combined: 12 sales
-        assert len(results) == 12
-
-        # Verify region_rank is sequential within each region
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                amount,\n                sale_date,\n                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as region_rank,\n                RANK() OVER (ORDER BY amount DESC) as overall_rank,\n                LAG(amount) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount,\n                SUM(amount) OVER (PARTITION BY region) as region_total\n            FROM sales\n            WHERE region IN ('North', 'South')\n            ORDER BY region, region_rank\n            ")
+        expect(all(('region_rank' in r for r in results))).to_be_true()
+        expect(all(('overall_rank' in r for r in results))).to_be_true()
+        expect(all(('region_total' in r for r in results))).to_be_true()
+        expect(len(results)).to_equal(12)
         by_region = {}
         for row in results:
-            region = row["region"]
+            region = row['region']
             if region not in by_region:
                 by_region[region] = []
             by_region[region].append(row)
-
         for region, rows in by_region.items():
             for i, row in enumerate(rows, start=1):
-                assert row["region_rank"] == i
+                expect(row['region_rank']).to_equal(i)
 
+    @test
     async def test_multiple_partitions_and_orders(self, sales_table):
         """Test window functions with different PARTITION BY and ORDER BY."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                sale_date,
-                ROW_NUMBER() OVER (PARTITION BY salesperson ORDER BY sale_date) as sale_sequence,
-                DENSE_RANK() OVER (PARTITION BY region ORDER BY amount DESC) as region_amount_rank,
-                FIRST_VALUE(sale_date) OVER (
-                    PARTITION BY salesperson
-                    ORDER BY sale_date
-                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
-                ) as first_sale_date,
-                AVG(amount) OVER (PARTITION BY region) as region_avg_amount
-            FROM sales
-            WHERE salesperson IN ('Alice', 'Bob', 'Charlie')
-            ORDER BY salesperson, sale_date
-            """
-        )
-
-        # Alice (3) + Bob (3) + Charlie (3) = 9 sales
-        assert len(results) == 9
-
-        # Verify sale_sequence is sequential for each salesperson
+        results = await execute("\n            SELECT\n                salesperson,\n                region,\n                amount,\n                sale_date,\n                ROW_NUMBER() OVER (PARTITION BY salesperson ORDER BY sale_date) as sale_sequence,\n                DENSE_RANK() OVER (PARTITION BY region ORDER BY amount DESC) as region_amount_rank,\n                FIRST_VALUE(sale_date) OVER (\n                    PARTITION BY salesperson\n                    ORDER BY sale_date\n                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING\n                ) as first_sale_date,\n                AVG(amount) OVER (PARTITION BY region) as region_avg_amount\n            FROM sales\n            WHERE salesperson IN ('Alice', 'Bob', 'Charlie')\n            ORDER BY salesperson, sale_date\n            ")
+        expect(len(results)).to_equal(9)
         by_salesperson = {}
         for row in results:
-            sp = row["salesperson"]
+            sp = row['salesperson']
             if sp not in by_salesperson:
                 by_salesperson[sp] = []
             by_salesperson[sp].append(row)
-
         for sp, rows in by_salesperson.items():
             for i, row in enumerate(rows, start=1):
-                assert row["sale_sequence"] == i
-                # Verify all sales by same person have same first_sale_date
+                expect(row['sale_sequence']).to_equal(i)
                 if i > 1:
-                    assert row["first_sale_date"] == rows[0]["first_sale_date"]
+                    expect(row['first_sale_date']).to_equal(rows[0]['first_sale_date'])
 
-
-@pytest.mark.asyncio
-class TestWindowEdgeCases:
+class TestWindowEdgeCases(TestSuite):
     """Test edge cases and special scenarios for window functions."""
 
+    @test
     async def test_window_with_empty_partition(self, sales_table):
         """Test window function when filtering leaves some partitions empty."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as rank
-            FROM sales
-            WHERE amount > 2000
-            ORDER BY region, rank
-            """
-        )
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                ROW_NUMBER() OVER (PARTITION BY region ORDER BY amount DESC) as rank\n            FROM sales\n            WHERE amount > 2000\n            ORDER BY region, rank\n            ')
+        expect(len(results)).to_be_greater_than_or_equal(3)
+        expect(all((float(r['amount']) > 2000 for r in results))).to_be_true()
 
-        # Only sales > 2000: Charlie (2200, 2500), Alice (2000 - excluded), Eve (2100)
-        # Actually Alice's 2000 is not > 2000, so excluded
-        assert len(results) >= 3
-
-        # Verify all amounts are > 2000
-        assert all(float(r["amount"]) > 2000 for r in results)
-
+    @test
     async def test_window_with_null_handling(self, sales_table):
         """Test window function with LAG default for NULL values."""
-        # Insert a salesperson with only one sale
-        await insert_one("sales", {
-            "salesperson": "Grace",
-            "region": "West",
-            "amount": 3000.00,
-            "sale_date": "2024-01-05"
-        })
+        await insert_one('sales', {'salesperson': 'Grace', 'region': 'West', 'amount': 3000.0, 'sale_date': '2024-01-05'})
+        results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                LAG(amount, 1, -1) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount\n            FROM sales\n            WHERE salesperson = 'Grace'\n            ORDER BY sale_date\n            ")
+        expect(len(results)).to_equal(1)
+        expect(float(results[0]['prev_amount'])).to_equal(-1.0)
 
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                sale_date,
-                amount,
-                LAG(amount, 1, -1) OVER (PARTITION BY salesperson ORDER BY sale_date) as prev_amount
-            FROM sales
-            WHERE salesperson = 'Grace'
-            ORDER BY sale_date
-            """
-        )
-
-        # Grace has only one sale, so prev_amount should be default (-1)
-        assert len(results) == 1
-        assert float(results[0]["prev_amount"]) == -1.00
-
+    @test
     async def test_window_with_limit(self, sales_table):
         """Test window function with LIMIT clause."""
-        results = await execute(
-            """
-            SELECT
-                salesperson,
-                region,
-                amount,
-                ROW_NUMBER() OVER (ORDER BY amount DESC) as overall_rank
-            FROM sales
-            ORDER BY overall_rank
-            LIMIT 3
-            """
-        )
-
-        # Should return top 3 sales
-        assert len(results) == 3
-        assert results[0]["overall_rank"] == 1
-        assert results[1]["overall_rank"] == 2
-        assert results[2]["overall_rank"] == 3
-
-        # Verify descending order by amount
-        assert float(results[0]["amount"]) >= float(results[1]["amount"])
-        assert float(results[1]["amount"]) >= float(results[2]["amount"])
+        results = await execute('\n            SELECT\n                salesperson,\n                region,\n                amount,\n                ROW_NUMBER() OVER (ORDER BY amount DESC) as overall_rank\n            FROM sales\n            ORDER BY overall_rank\n            LIMIT 3\n            ')
+        expect(len(results)).to_equal(3)
+        expect(results[0]['overall_rank']).to_equal(1)
+        expect(results[1]['overall_rank']).to_equal(2)
+        expect(results[2]['overall_rank']).to_equal(3)
+        expect(float(results[0]['amount'])).to_be_greater_than_or_equal(float(results[1]['amount']))
+        expect(float(results[1]['amount'])).to_be_greater_than_or_equal(float(results[2]['amount']))

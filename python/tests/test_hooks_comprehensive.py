@@ -2,7 +2,6 @@
 Comprehensive tests for the hooks system including error handling and edge cases.
 """
 import asyncio
-import pytest
 from ouroboros.qc import TestSuite, test, expect
 
 
