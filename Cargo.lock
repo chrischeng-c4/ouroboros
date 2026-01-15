@@ -3153,6 +3153,7 @@ dependencies = [
  "clap",
  "ouroboros-qc",
  "pyo3",
+ "serde_json",
  "tokio",
 ]
 

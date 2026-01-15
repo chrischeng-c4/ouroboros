@@ -140,12 +140,15 @@ class PytestToDataBridgeTransformer(ast.NodeTransformer):
         """Common transformation for sync/async functions."""
         # Check for @pytest.fixture
         is_fixture = False
+        fixture_scope = None
         new_decorators = []
 
         for dec in node.decorator_list:
             if self._is_pytest_fixture(dec):
                 is_fixture = True
                 self.modified = True
+                # Extract scope before removing
+                fixture_scope = self._get_pytest_fixture_scope(dec)
                 # Store fixture for later reference
                 self.fixtures[node.name] = node
             elif self._is_pytest_decorator(dec):
@@ -156,10 +159,15 @@ class PytestToDataBridgeTransformer(ast.NodeTransformer):
 
         node.decorator_list = new_decorators
 
-        # If it's a fixture, we might convert to setup_method or remove
+        # If it's a fixture, convert to @fixture decorator
         if is_fixture:
-            # For now, keep fixture functions but they need manual review
-            pass
+            # Store scope for _create_fixture_decorator to use
+            node._fixture_scope = fixture_scope  # type: ignore
+            # Add @fixture decorator with preserved scope
+            fixture_decorator = self._create_fixture_decorator(node)
+            node.decorator_list.insert(0, fixture_decorator)
+            self.imports_to_add.add('fixture')
+            # Fixtures stay in place and will work with ouroboros.qc
 
         # Handle module-level test functions (no current_class)
         if node.name.startswith('test_') and self.current_class is None:
@@ -373,6 +381,43 @@ class PytestToDataBridgeTransformer(ast.NodeTransformer):
         elif isinstance(node, ast.Call):
             return self._is_pytest_fixture(node.func)
         return False
+
+    def _get_pytest_fixture_scope(self, node) -> Optional[str]:
+        """Extract scope from @pytest.fixture(scope="...") decorator."""
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg == 'scope' and isinstance(keyword.value, ast.Constant):
+                    return keyword.value.value
+        return None
+
+    def _create_fixture_decorator(self, original_node) -> ast.AST:
+        """Create @fixture decorator, preserving scope from original @pytest.fixture."""
+        # Find the original pytest.fixture decorator to extract scope
+        scope = None
+        for dec in getattr(original_node, '_original_decorators', []):
+            if self._is_pytest_fixture(dec):
+                scope = self._get_pytest_fixture_scope(dec)
+                break
+
+        # Check if there's a saved scope from _transform_function
+        if scope is None and hasattr(original_node, '_fixture_scope'):
+            scope = original_node._fixture_scope
+
+        if scope and scope != 'function':
+            # @fixture(scope="class") or similar
+            return ast.Call(
+                func=ast.Name(id='fixture', ctx=ast.Load()),
+                args=[],
+                keywords=[
+                    ast.keyword(
+                        arg='scope',
+                        value=ast.Constant(value=scope)
+                    )
+                ]
+            )
+        else:
+            # Simple @fixture
+            return ast.Name(id='fixture', ctx=ast.Load())
 
     def _is_testsuite_base(self, node) -> bool:
         """Check if a base class is a TestSuite variant."""

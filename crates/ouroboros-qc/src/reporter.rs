@@ -118,6 +118,19 @@ impl TestReport {
         }
     }
 
+    /// Create a test report from summary (for coverage-only reports)
+    pub fn from_summary(suite_name: impl Into<String>, summary: TestSummary) -> Self {
+        Self {
+            suite_name: suite_name.into(),
+            generated_at: chrono::Utc::now().to_rfc3339(),
+            duration_ms: summary.total_duration_ms,
+            summary,
+            results: Vec::new(),
+            environment: EnvironmentInfo::default(),
+            coverage: None,
+        }
+    }
+
     /// Set environment info
     pub fn with_environment(mut self, env: EnvironmentInfo) -> Self {
         self.environment = env;

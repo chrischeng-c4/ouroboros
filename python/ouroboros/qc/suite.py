@@ -7,10 +7,11 @@ Provides a base class for organizing tests into suites.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 import traceback
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Type, Union
 
 # Import from Rust bindings
 from .. import ouroboros as _rust_module
@@ -31,6 +32,299 @@ Parameter = _test.Parameter
 ParametrizedTest = _test.ParametrizedTest
 HookType = _test.HookType
 HookRegistry = _test.HookRegistry
+FixtureRegistry = _test.FixtureRegistry
+FixtureScope = _test.FixtureScope
+
+
+class FixtureRunner:
+    """
+    Manages fixture lifecycle including setup, caching, and teardown.
+
+    Supports:
+    - Scope-based caching (function, class, module, session)
+    - Yield-based setup/teardown (sync and async)
+    - Dependency resolution and injection
+    """
+
+    def __init__(self, suite_instance: Any, registry: FixtureRegistry):
+        self.suite = suite_instance
+        self.registry = registry
+        # Fixture functions by name
+        self._fixtures: Dict[str, Callable] = {}
+        # Track if fixture is a method (needs self) or module-level function
+        self._fixture_is_method: Dict[str, bool] = {}
+        # Pending module fixtures (deferred registration for dependency resolution)
+        self._pending_module_fixtures: Dict[str, Tuple[Callable, Dict[str, Any]]] = {}
+        # Cached fixture values by (scope, name)
+        self._cache: Dict[Tuple[str, str], Any] = {}
+        # Active generators (for teardown) by (scope, name)
+        self._generators: Dict[Tuple[str, str], Union[Generator, Any]] = {}
+        # Current scope context
+        self._current_class: Optional[str] = None
+        self._current_module: Optional[str] = None
+
+    def register_fixture(self, name: str, func: Callable, meta: Dict[str, Any]) -> None:
+        """Register a class-level fixture function (method with self)."""
+        self._fixtures[name] = func
+        self._fixture_is_method[name] = True
+
+        # Parse dependencies from function signature
+        sig = inspect.signature(func)
+        deps = [
+            p for p in sig.parameters.keys()
+            if p != 'self' and self.registry.has_fixture(p)
+        ]
+
+        # Check if function is a generator (has yield)
+        has_teardown = (
+            inspect.isgeneratorfunction(func) or
+            inspect.isasyncgenfunction(func)
+        )
+
+        # Register with Rust registry
+        scope_str = meta.get("scope", "function")
+        scope = FixtureScope.from_string(scope_str)
+        self.registry.register(
+            name,
+            scope,
+            meta.get("autouse", False),
+            deps,
+            has_teardown,
+        )
+
+    def register_module_fixture(self, name: str, func: Callable, meta: Dict[str, Any]) -> None:
+        """Register a module-level fixture function (no self parameter)."""
+        # Skip if already registered (class fixtures take precedence)
+        if name in self._fixtures:
+            return
+
+        self._fixtures[name] = func
+        self._fixture_is_method[name] = False  # Module-level, no self
+        # Store meta for deferred dependency resolution
+        self._pending_module_fixtures[name] = (func, meta)
+
+    def finalize_fixture_registration(self) -> None:
+        """Finalize registration after all fixtures are discovered (resolve dependencies)."""
+        # Process pending module fixtures now that all fixtures are known
+        for name, (func, meta) in self._pending_module_fixtures.items():
+            # Parse dependencies from function signature
+            sig = inspect.signature(func)
+            deps = [
+                p for p in sig.parameters.keys()
+                if p in self._fixtures  # Check against all discovered fixtures
+            ]
+
+            # Check if function is a generator (has yield)
+            has_teardown = (
+                inspect.isgeneratorfunction(func) or
+                inspect.isasyncgenfunction(func)
+            )
+
+            # Register with Rust registry
+            scope_str = meta.get("scope", "function")
+            scope = FixtureScope.from_string(scope_str)
+            self.registry.register(
+                name,
+                scope,
+                meta.get("autouse", False),
+                deps,
+                has_teardown,
+            )
+        self._pending_module_fixtures.clear()
+
+    async def get_fixture_value(self, name: str) -> Any:
+        """
+        Get fixture value, setting up if needed.
+
+        Returns cached value if available, otherwise runs fixture setup.
+        """
+        meta = self.registry.get_meta(name)
+        if meta is None:
+            raise ValueError(f"Unknown fixture: {name}")
+
+        scope_key = self._get_scope_key(meta.scope)
+        cache_key = (scope_key, name)
+
+        # Return cached value if available
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        # Resolve dependencies first (in topological order)
+        deps = meta.dependencies
+        dep_values = {}
+        if deps:
+            resolved_order = self.registry.resolve_order(deps)
+            for dep_name in resolved_order:
+                dep_values[dep_name] = await self.get_fixture_value(dep_name)
+
+        # Get the fixture function
+        func = self._fixtures.get(name)
+        if func is None:
+            raise ValueError(f"Fixture function not found: {name}")
+
+        # Build kwargs for fixture call
+        sig = inspect.signature(func)
+        kwargs = {}
+        for param_name in sig.parameters.keys():
+            if param_name == 'self':
+                continue
+            if param_name in dep_values:
+                kwargs[param_name] = dep_values[param_name]
+
+        # Execute fixture setup
+        value = await self._execute_fixture(name, func, kwargs, cache_key)
+        return value
+
+    async def _execute_fixture(
+        self,
+        name: str,
+        func: Callable,
+        kwargs: Dict[str, Any],
+        cache_key: Tuple[str, str],
+    ) -> Any:
+        """Execute fixture function and handle yield for teardown."""
+        # Check if fixture is a method (needs self) or module-level function
+        is_method = self._fixture_is_method.get(name, True)
+
+        if inspect.isasyncgenfunction(func):
+            # Async generator fixture
+            if is_method:
+                gen = func(self.suite, **kwargs)
+            else:
+                gen = func(**kwargs)
+            value = await gen.__anext__()
+            self._generators[cache_key] = gen
+        elif inspect.isgeneratorfunction(func):
+            # Sync generator fixture
+            if is_method:
+                gen = func(self.suite, **kwargs)
+            else:
+                gen = func(**kwargs)
+            value = next(gen)
+            self._generators[cache_key] = gen
+        elif inspect.iscoroutinefunction(func):
+            # Async function (no teardown)
+            if is_method:
+                value = await func(self.suite, **kwargs)
+            else:
+                value = await func(**kwargs)
+        else:
+            # Sync function (no teardown)
+            if is_method:
+                value = func(self.suite, **kwargs)
+            else:
+                value = func(**kwargs)
+
+        self._cache[cache_key] = value
+        return value
+
+    async def teardown_scope(self, scope: str) -> None:
+        """
+        Teardown all fixtures for a given scope.
+
+        Teardown runs in reverse dependency order.
+        """
+        scope_key = self._get_scope_key_for_string(scope)
+
+        # Find all cache keys matching this scope
+        keys_to_teardown = [
+            key for key in self._cache.keys()
+            if key[0] == scope_key
+        ]
+
+        # Get fixture names and resolve reverse order
+        fixture_names = [key[1] for key in keys_to_teardown]
+        if fixture_names:
+            try:
+                ordered = self.registry.resolve_order(fixture_names)
+                # Reverse for teardown
+                ordered = list(reversed(ordered))
+            except Exception:
+                # If resolution fails, use original order reversed
+                ordered = list(reversed(fixture_names))
+        else:
+            ordered = []
+
+        # Teardown each fixture
+        for name in ordered:
+            cache_key = (scope_key, name)
+            await self._teardown_fixture(cache_key)
+
+    async def _teardown_fixture(self, cache_key: Tuple[str, str]) -> None:
+        """Run teardown for a single fixture."""
+        if cache_key not in self._generators:
+            # No teardown needed (not a generator fixture)
+            self._cache.pop(cache_key, None)
+            return
+
+        gen = self._generators.pop(cache_key)
+        self._cache.pop(cache_key, None)
+
+        try:
+            if inspect.isasyncgen(gen):
+                # Async generator - continue to teardown
+                try:
+                    await gen.__anext__()
+                except StopAsyncIteration:
+                    pass
+            else:
+                # Sync generator
+                try:
+                    next(gen)
+                except StopIteration:
+                    pass
+        except Exception as e:
+            # Log teardown error but don't propagate
+            # Teardown should always run to completion
+            pass
+
+    async def teardown_all(self) -> None:
+        """Teardown all active fixtures in reverse order."""
+        # Teardown in order: function -> class -> module -> session
+        for scope in ["function", "class", "module", "session"]:
+            await self.teardown_scope(scope)
+
+    def _get_scope_key(self, scope: Any) -> str:
+        """Get cache key prefix for a scope."""
+        scope_str = str(scope)
+        return self._get_scope_key_for_string(scope_str)
+
+    def _get_scope_key_for_string(self, scope: str) -> str:
+        """Get cache key prefix for a scope string."""
+        if scope == "function":
+            return "function"
+        elif scope == "class":
+            return f"class:{self._current_class or 'default'}"
+        elif scope == "module":
+            return f"module:{self._current_module or 'default'}"
+        elif scope == "session":
+            return "session"
+        return scope
+
+    def set_class_context(self, class_name: Optional[str]) -> None:
+        """Set current class context for class-scoped fixtures."""
+        self._current_class = class_name
+
+    def set_module_context(self, module_name: Optional[str]) -> None:
+        """Set current module context for module-scoped fixtures."""
+        self._current_module = module_name
+
+    async def inject_fixtures(self, func: Callable) -> Dict[str, Any]:
+        """
+        Resolve and inject fixtures based on function signature.
+
+        Returns a dict of fixture name -> value for all fixture parameters.
+        """
+        sig = inspect.signature(func)
+        kwargs = {}
+
+        for param_name in sig.parameters.keys():
+            if param_name == 'self':
+                continue
+            if self.registry.has_fixture(param_name):
+                kwargs[param_name] = await self.get_fixture_value(param_name)
+
+        return kwargs
 
 
 class ParametrizedTestInstance:
@@ -77,10 +371,8 @@ class ParametrizedTestInstance:
     def is_async(self) -> bool:
         return self.test_desc.is_async
 
-    def __call__(self, suite_instance: Any) -> Any:
-        """Execute the test with parameter injection"""
-        import inspect
-
+    def __call__(self, suite_instance: Any, fixture_kwargs: Optional[Dict[str, Any]] = None) -> Any:
+        """Execute the test with parameter and fixture injection"""
         # Get the test function signature to extract parameter names
         sig = inspect.signature(self.test_desc.func)
         param_names = [p for p in sig.parameters.keys() if p != 'self']
@@ -93,6 +385,12 @@ class ParametrizedTestInstance:
         for param_name in param_names:
             if param_name in param_dict:
                 kwargs[param_name] = param_dict[param_name]
+
+        # Merge fixture kwargs (fixtures take precedence over parametrize for same name)
+        if fixture_kwargs:
+            for k, v in fixture_kwargs.items():
+                if k not in kwargs:
+                    kwargs[k] = v
 
         # Call the original test function with injected parameters
         # Return whatever the function returns (coroutine for async, value for sync)
@@ -135,8 +433,44 @@ class TestSuite:
     def __init__(self) -> None:
         self._tests: List[TestDescriptor] = []
         self._hook_registry: HookRegistry = HookRegistry()
+        self._fixture_registry: FixtureRegistry = FixtureRegistry()
+        self._fixture_runner: Optional[FixtureRunner] = None
+        self._discover_fixtures()
         self._discover_tests()
         self._discover_hooks()
+
+    def _discover_fixtures(self) -> None:
+        """Discover all @fixture decorated methods in this suite and module."""
+        self._fixture_runner = FixtureRunner(self, self._fixture_registry)
+
+        # 1. Discover module-level fixtures (pytest-compatible)
+        import sys
+        module_name = self.__class__.__module__
+        if module_name in sys.modules:
+            module = sys.modules[module_name]
+            for name in dir(module):
+                attr = getattr(module, name, None)
+                if attr is None:
+                    continue
+                # Check for _fixture_meta attribute (set by @fixture decorator)
+                fixture_meta = getattr(attr, '_fixture_meta', None)
+                if fixture_meta is not None:
+                    # Module-level fixtures don't have 'self', register as-is
+                    self._fixture_runner.register_module_fixture(name, attr, fixture_meta)
+
+        # 2. Discover class-level fixtures (methods)
+        for name in dir(self):
+            attr = getattr(self.__class__, name, None)
+            if attr is None:
+                continue
+
+            # Check for _fixture_meta attribute (set by @fixture decorator)
+            fixture_meta = getattr(attr, '_fixture_meta', None)
+            if fixture_meta is not None:
+                self._fixture_runner.register_fixture(name, attr, fixture_meta)
+
+        # 3. Finalize registration (resolve dependencies for module fixtures)
+        self._fixture_runner.finalize_fixture_registration()
 
     def _discover_tests(self) -> None:
         """Discover all test methods in this suite"""
@@ -274,8 +608,6 @@ class TestSuite:
         self,
         runner: Optional[TestRunner] = None,
         verbose: bool = False,
-        parallel: bool = False,
-        max_workers: int = 4,
     ) -> TestReport:
         """
         Run all tests in this suite.
@@ -283,27 +615,19 @@ class TestSuite:
         Args:
             runner: Optional test runner with filters. If None, runs all tests.
             verbose: Whether to print verbose output
-            parallel: Enable parallel test execution (default: False)
-            max_workers: Maximum number of concurrent tests when parallel=True (default: 4)
 
         Returns:
             TestReport with all results
         """
         if runner is None:
-            # Create runner with appropriate config for parallel/sequential execution
-            runner = TestRunner(parallel=parallel, max_workers=max_workers)
-        elif parallel:
-            # If runner provided but parallel requested, create a new runner with parallel config
-            # This ensures max_workers is respected
-            runner = TestRunner(parallel=parallel, max_workers=max_workers)
-
-        # If parallel execution is requested, use Rust parallel runner
-        if parallel:
-            return await self._run_parallel(runner, verbose, max_workers)
-
-        # Otherwise, use sequential execution (existing behavior)
+            runner = TestRunner()
 
         runner.start()
+
+        # Set fixture context for class scope
+        if self._fixture_runner is not None:
+            self._fixture_runner.set_class_context(self.__class__.__name__)
+            self._fixture_runner.set_module_context(self.__class__.__module__)
 
         # Run setup_class hooks (and legacy setup_suite)
         try:
@@ -352,13 +676,30 @@ class TestSuite:
                     print(f"  ERROR: {meta.name} (setup failed)")
                 continue
 
-            # Run the test
+            # Run the test with fixture injection
             start_time = time.perf_counter()
             try:
+                # Inject fixtures based on test function signature
+                fixture_kwargs = {}
+                if self._fixture_runner is not None:
+                    # Get the underlying function for signature inspection
+                    if isinstance(test_desc, ParametrizedTestInstance):
+                        func = test_desc.test_desc.func
+                    else:
+                        func = test_desc.func
+                    fixture_kwargs = await self._fixture_runner.inject_fixtures(func)
+
                 if test_desc.is_async:
-                    await test_desc(self)
+                    if isinstance(test_desc, ParametrizedTestInstance):
+                        # ParametrizedTestInstance handles both param and fixture injection
+                        await test_desc(self, fixture_kwargs)
+                    else:
+                        await test_desc.func(self, **fixture_kwargs)
                 else:
-                    test_desc(self)
+                    if isinstance(test_desc, ParametrizedTestInstance):
+                        test_desc(self, fixture_kwargs)
+                    else:
+                        test_desc.func(self, **fixture_kwargs)
 
                 duration_ms = int((time.perf_counter() - start_time) * 1000)
                 result = TestResult.passed(meta, duration_ms)
@@ -388,7 +729,10 @@ class TestSuite:
 
             # Run teardown_method hooks (and legacy teardown)
             try:
-                # Run teardown_method hooks first
+                # Teardown function-scoped fixtures first
+                if self._fixture_runner is not None:
+                    await self._fixture_runner.teardown_scope("function")
+                # Run teardown_method hooks
                 error = await self._hook_registry.run_hooks(HookType.TeardownMethod, self)
                 if error and verbose:
                     print(f"  WARNING: Method teardown error for {meta.name}: {error}")
@@ -400,7 +744,10 @@ class TestSuite:
 
         # Run teardown_class hooks (and legacy teardown_suite)
         try:
-            # Run teardown_class hooks first
+            # Teardown class-scoped fixtures first
+            if self._fixture_runner is not None:
+                await self._fixture_runner.teardown_scope("class")
+            # Run teardown_class hooks
             error = await self._hook_registry.run_hooks(HookType.TeardownClass, self)
             if error and verbose:
                 print(f"WARNING: Class teardown error: {error}")
@@ -409,86 +756,13 @@ class TestSuite:
             if verbose:
                 print(f"WARNING: Class teardown failed: {e}")
 
-        return TestReport(self.suite_name, runner.results())
-
-    async def _run_parallel(
-        self,
-        runner: TestRunner,
-        verbose: bool,
-        max_workers: int,
-    ) -> TestReport:
-        """
-        Run tests in parallel using Rust Tokio runtime.
-
-        Args:
-            runner: Test runner with configuration
-            verbose: Whether to print verbose output
-            max_workers: Maximum concurrent tests
-
-        Returns:
-            TestReport with all results
-        """
-        runner.start()
-
-        # Filter tests based on runner configuration
-        tests_to_run = []
-        skipped_results = []
-
-        for test_desc in self._tests:
-            meta = test_desc.get_meta()
-
-            # Check if test should run based on filters
-            if not runner.should_run(meta):
-                continue
-
-            # Check if skipped
-            if meta.is_skipped():
-                result = TestResult.skipped(meta, meta.skip_reason or "Skipped")
-                skipped_results.append(result)
-                if verbose:
-                    print(f"  SKIPPED: {meta.name}")
-                continue
-
-            tests_to_run.append(test_desc)
-
-        if verbose and tests_to_run:
-            print(f"  Running {len(tests_to_run)} tests in parallel (max_workers={max_workers})...")
-
-        # Run tests in parallel using Rust runner
-        if tests_to_run:
-            try:
-                # Call Rust parallel runner
-                # Note: max_workers is used via the runner's config
-                results = await runner.run_parallel_async(
-                    suite_instance=self,
-                    test_descriptors=tests_to_run,
-                )
-
-                # Record all results
-                for result in results:
-                    runner.record(result)
-                    if verbose:
-                        status_str = str(result.status).upper()
-                        duration = result.duration_ms
-                        print(f"  {status_str}: {result.meta.name} ({duration}ms)")
-                        if result.error_message and result.status != "SKIPPED":
-                            print(f"    Error: {result.error_message}")
-
-            except Exception as e:
-                # If parallel execution fails, mark all tests as error
-                if verbose:
-                    print(f"  ERROR: Parallel execution failed: {e}")
-                    traceback.print_exc()
-
-                for test_desc in tests_to_run:
-                    meta = test_desc.get_meta()
-                    result = TestResult.error(meta, 0, f"Parallel execution failed: {e}")
-                    result.set_stack_trace(traceback.format_exc())
-                    runner.record(result)
-
-        # Record skipped tests
-        for result in skipped_results:
-            runner.record(result)
+        # Final cleanup: teardown any remaining fixtures (module/session scope)
+        try:
+            if self._fixture_runner is not None:
+                await self._fixture_runner.teardown_all()
+        except Exception as e:
+            if verbose:
+                print(f"WARNING: Fixture cleanup failed: {e}")
 
         return TestReport(self.suite_name, runner.results())
 
@@ -498,8 +772,6 @@ def run_suite(
     output_format: ReportFormat = ReportFormat.Markdown,
     output_file: Optional[str] = None,
     verbose: bool = True,
-    parallel: bool = False,
-    max_workers: int = 4,
     **runner_kwargs: Any,
 ) -> TestReport:
     """
@@ -510,8 +782,6 @@ def run_suite(
         output_format: Report output format (default: Markdown)
         output_file: Optional file path to write report
         verbose: Whether to print verbose output
-        parallel: Enable parallel test execution (default: False)
-        max_workers: Maximum number of concurrent tests when parallel=True (default: 4)
         **runner_kwargs: Additional arguments for TestRunner
 
     Returns:
@@ -520,24 +790,16 @@ def run_suite(
     Example:
         from ouroboros.qc import run_suite, ReportFormat
 
-        # Sequential execution (default)
         report = run_suite(MyTests, output_format=ReportFormat.Html, output_file="report.html")
-
-        # Parallel execution
-        report = run_suite(MyTests, parallel=True, max_workers=8)
     """
     suite = suite_class()
     runner = TestRunner(**runner_kwargs)
 
     if verbose:
         print(f"\nRunning: {suite.suite_name}")
-        if parallel:
-            print(f"Mode: Parallel (max_workers={max_workers})")
-        else:
-            print("Mode: Sequential")
         print("=" * 50)
 
-    report = asyncio.run(suite.run(runner=runner, verbose=verbose, parallel=parallel, max_workers=max_workers))
+    report = asyncio.run(suite.run(runner=runner, verbose=verbose))
 
     if verbose:
         print("=" * 50)

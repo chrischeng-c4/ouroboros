@@ -65,7 +65,7 @@ pub use performance::{
 };
 
 pub use reporter::{Reporter, ReportFormat, TestReport, CoverageInfo, FileCoverage, EnvironmentInfo};
-pub use runner::{TestRunner, TestMeta, TestResult, TestStatus, TestType};
+pub use runner::{TestRunner, TestMeta, TestResult, TestStatus, TestType, TestSummary};
 pub use security::{
     AsyncFuzzConfig, AsyncFuzzer,
     FuzzConfig, FuzzCrash, FuzzResult, Fuzzer, MutationStrategy,

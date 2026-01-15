@@ -1,18 +1,20 @@
 //! Ouroboros CLI - Unified command-line interface
 //!
 //! Usage:
-//!   ob qc run [path]       Run tests
-//!   ob qc run --bench      Run benchmarks
-//!   ob qc run --security   Run security tests
-//!   ob qc collect [path]   Collect tests without running
-//!   ob qc run -k <pattern> Filter tests by pattern
+//!   ob qc run [path]            Run tests
+//!   ob qc run --bench           Run benchmarks
+//!   ob qc run --security        Run security tests
+//!   ob qc run --coverage        Run tests with coverage
+//!   ob qc run --coverage --html Generate HTML coverage report
+//!   ob qc collect [path]        Collect tests without running
+//!   ob qc run -k <pattern>      Filter tests by pattern
 
 use clap::{Parser, Subcommand};
 use anyhow::{Result, Context};
 use pyo3::prelude::*;
 use std::path::PathBuf;
 
-use ouroboros_qc::{DiscoveryConfig, FileType, walk_files};
+use ouroboros_qc::{DiscoveryConfig, FileType, walk_files, CoverageInfo, FileCoverage, Reporter, ReportFormat, TestReport, TestSummary};
 
 #[derive(Parser)]
 #[command(name = "ob")]
@@ -47,6 +49,30 @@ enum QcAction {
         /// Run security tests
         #[arg(long)]
         security: bool,
+
+        /// Collect code coverage
+        #[arg(long)]
+        coverage: bool,
+
+        /// Output HTML report (use with --coverage)
+        #[arg(long)]
+        html: bool,
+
+        /// Output file for coverage report
+        #[arg(short, long)]
+        output: Option<String>,
+
+        /// Fail if coverage is below threshold (0-100)
+        #[arg(long, value_name = "MIN")]
+        cov_fail_under: Option<f64>,
+
+        /// Output coverage as JSON (for CI tools like Codecov)
+        #[arg(long)]
+        cov_json: bool,
+
+        /// CI mode: minimal output, exit codes for automation
+        #[arg(long)]
+        ci: bool,
 
         /// Filter tests by pattern (case-insensitive)
         #[arg(short = 'k', long)]
@@ -100,11 +126,20 @@ fn main() -> Result<()> {
                 path,
                 bench,
                 security,
+                coverage,
+                html,
+                output,
+                cov_fail_under,
+                cov_json,
+                ci,
                 pattern,
                 verbose,
                 fail_fast,
             } => {
-                run_tests(&path, bench, security, pattern, verbose, fail_fast)?;
+                let exit_code = run_tests(&path, bench, security, coverage, html, output, cov_fail_under, cov_json, ci, pattern, verbose, fail_fast)?;
+                if exit_code != 0 {
+                    std::process::exit(exit_code);
+                }
             }
 
             QcAction::Collect { path, pattern } => {
@@ -148,34 +183,50 @@ fn discover_test_files(path: &str, file_type: FileType) -> Result<Vec<ouroboros_
 }
 
 /// Run tests using embedded Python
+/// Returns exit code: 0 = success, 1 = test failures, 2 = coverage below threshold
 fn run_tests(
     path: &str,
     bench: bool,
     _security: bool,
+    coverage: bool,
+    html: bool,
+    output: Option<String>,
+    cov_fail_under: Option<f64>,
+    cov_json: bool,
+    ci: bool,
     pattern: Option<String>,
     verbose: bool,
     fail_fast: bool,
-) -> Result<()> {
+) -> Result<i32> {
     let file_type = if bench { FileType::Benchmark } else { FileType::Test };
 
-    println!("🔍 Discovering {} files in {}...",
-        if bench { "benchmark" } else { "test" },
-        path
-    );
+    if !ci {
+        println!("🔍 Discovering {} files in {}...",
+            if bench { "benchmark" } else { "test" },
+            path
+        );
+    }
 
     let files = discover_test_files(path, file_type)?;
 
     if files.is_empty() {
-        println!("❌ No {} files found", if bench { "benchmark" } else { "test" });
-        return Ok(());
+        if !ci {
+            println!("❌ No {} files found", if bench { "benchmark" } else { "test" });
+        }
+        return Ok(1);
     }
 
-    println!("✅ Found {} file(s)", files.len());
+    if !ci {
+        println!("✅ Found {} file(s)", files.len());
+        if coverage {
+            println!("📊 Coverage collection enabled");
+        }
+    }
 
     // Initialize Python
     pyo3::prepare_freethreaded_python();
 
-    Python::with_gil(|py| -> Result<()> {
+    let result = Python::with_gil(|py| -> Result<(u32, u32, u32, Option<CoverageInfo>)> {
         // Add directories to sys.path
         let sys = py.import("sys").context("Failed to import sys")?;
         let sys_path = sys.getattr("path").context("Failed to get sys.path")?;
@@ -195,6 +246,22 @@ fn run_tests(
         // Add the test directory itself
         sys_path.call_method1("insert", (0, path)).ok();
 
+        // Start coverage if enabled
+        let cov_instance = if coverage {
+            match start_coverage(py, path) {
+                Ok(cov) => Some(cov),
+                Err(e) => {
+                    if !ci {
+                        println!("⚠️  Failed to start coverage: {}", e);
+                        println!("   Install coverage.py: pip install coverage");
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         let mut total_passed = 0u32;
         let mut total_failed = 0u32;
         let mut total_errors = 0u32;
@@ -208,22 +275,26 @@ fn run_tests(
                 }
             }
 
-            if verbose {
+            if verbose && !ci {
                 println!("\n📄 Loading: {}", file_info.module_name);
             }
 
-            match run_test_file(py, &file_info.path, &file_info.module_name, verbose) {
+            match run_test_file(py, &file_info.path, &file_info.module_name, verbose && !ci) {
                 Ok((passed, failed)) => {
                     total_passed += passed;
                     total_failed += failed;
 
                     if fail_fast && failed > 0 {
-                        println!("\n❌ Stopping due to --fail-fast");
+                        if !ci {
+                            println!("\n❌ Stopping due to --fail-fast");
+                        }
                         break;
                     }
                 }
                 Err(e) => {
-                    println!("❌ Error loading {}: {}", file_info.module_name, e);
+                    if !ci {
+                        println!("❌ Error loading {}: {}", file_info.module_name, e);
+                    }
                     total_errors += 1;
                     if fail_fast {
                         break;
@@ -232,19 +303,257 @@ fn run_tests(
             }
         }
 
-        // Print summary
+        // Stop coverage and collect data
+        let coverage_info = if let Some(ref cov) = cov_instance {
+            match stop_and_collect_coverage(py, cov, path) {
+                Ok(info) => Some(info),
+                Err(e) => {
+                    if !ci {
+                        println!("⚠️  Failed to collect coverage: {}", e);
+                    }
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        Ok((total_passed, total_failed, total_errors, coverage_info))
+    })?;
+
+    let (total_passed, total_failed, total_errors, coverage_info) = result;
+
+    // CI mode: JSON output
+    if ci && cov_json {
+        if let Some(ref cov_info) = coverage_info {
+            let json_output = serde_json::json!({
+                "tests": {
+                    "passed": total_passed,
+                    "failed": total_failed,
+                    "errors": total_errors,
+                    "total": total_passed + total_failed + total_errors
+                },
+                "coverage": {
+                    "percent": cov_info.coverage_percent,
+                    "covered": cov_info.covered_statements,
+                    "total": cov_info.total_statements,
+                    "files": cov_info.files.iter().map(|f| {
+                        serde_json::json!({
+                            "path": f.path,
+                            "percent": f.coverage_percent,
+                            "covered": f.covered,
+                            "statements": f.statements,
+                            "missing_lines": f.missing_lines
+                        })
+                    }).collect::<Vec<_>>()
+                }
+            });
+            println!("{}", serde_json::to_string(&json_output).unwrap_or_default());
+        } else {
+            let json_output = serde_json::json!({
+                "tests": {
+                    "passed": total_passed,
+                    "failed": total_failed,
+                    "errors": total_errors,
+                    "total": total_passed + total_failed + total_errors
+                }
+            });
+            println!("{}", serde_json::to_string(&json_output).unwrap_or_default());
+        }
+    } else if ci {
+        // CI mode: minimal line output
+        if let Some(ref cov_info) = coverage_info {
+            println!("PASSED={} FAILED={} ERRORS={} COVERAGE={:.1}%",
+                total_passed, total_failed, total_errors, cov_info.coverage_percent);
+        } else {
+            println!("PASSED={} FAILED={} ERRORS={}",
+                total_passed, total_failed, total_errors);
+        }
+    } else {
+        // Normal mode: pretty output
         println!("\n{}", "=".repeat(60));
         println!("TEST SUMMARY");
         println!("{}", "=".repeat(60));
         println!("✅ Passed:  {}", total_passed);
         println!("❌ Failed:  {}", total_failed);
         println!("⚠️  Errors:  {}", total_errors);
+
+        // Print coverage summary
+        if let Some(ref cov_info) = coverage_info {
+            println!();
+            let cov_emoji = if cov_info.coverage_percent >= 80.0 {
+                "🟢"
+            } else if cov_info.coverage_percent >= 60.0 {
+                "🟡"
+            } else {
+                "🔴"
+            };
+            println!("{} Coverage: {:.1}% ({}/{} statements)",
+                cov_emoji,
+                cov_info.coverage_percent,
+                cov_info.covered_statements,
+                cov_info.total_statements
+            );
+        }
+
         println!("{}", "=".repeat(60));
+    }
 
-        Ok(())
-    })?;
+    // Generate report if coverage was collected (non-CI or explicit output)
+    if let Some(ref cov_info) = coverage_info {
+        if !ci || output.is_some() {
+            let report = TestReport::from_summary(
+                "Test Results".to_string(),
+                TestSummary {
+                    total: (total_passed + total_failed + total_errors) as usize,
+                    passed: total_passed as usize,
+                    failed: total_failed as usize,
+                    skipped: 0,
+                    errors: total_errors as usize,
+                    total_duration_ms: 0,
+                },
+            ).with_coverage(cov_info.clone());
 
-    Ok(())
+            let format = if html { ReportFormat::Html } else { ReportFormat::Markdown };
+            let output_path = output.clone().unwrap_or_else(|| {
+                if html { "coverage_report.html".to_string() } else { "coverage_report.md".to_string() }
+            });
+
+            let reporter = Reporter::new(format);
+            let report_content = reporter.generate(&report);
+
+            std::fs::write(&output_path, &report_content)
+                .context("Failed to write coverage report")?;
+
+            if !ci {
+                println!("\n📄 Coverage report written to: {}", output_path);
+            }
+        }
+    }
+
+    // Determine exit code
+    let mut exit_code = 0;
+
+    // Exit 1 if tests failed
+    if total_failed > 0 || total_errors > 0 {
+        exit_code = 1;
+    }
+
+    // Exit 2 if coverage below threshold
+    if let Some(threshold) = cov_fail_under {
+        if let Some(ref cov_info) = coverage_info {
+            if cov_info.coverage_percent < threshold {
+                if !ci {
+                    println!("\n❌ Coverage {:.1}% is below threshold {:.1}%",
+                        cov_info.coverage_percent, threshold);
+                }
+                exit_code = 2;
+            }
+        }
+    }
+
+    Ok(exit_code)
+}
+
+/// Start coverage.py collection
+fn start_coverage<'py>(py: Python<'py>, source_path: &str) -> Result<Bound<'py, PyAny>> {
+    let coverage_module = py.import("coverage")
+        .context("coverage.py not installed")?;
+
+    // Determine source directory (coverage needs directories, not files)
+    let _source_dir = if std::path::Path::new(source_path).is_file() {
+        std::path::Path::new(source_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".to_string())
+    } else {
+        source_path.to_string()
+    };
+
+    // Create Coverage instance with source filter
+    // Cover the ouroboros module which is in python/ouroboros
+    let kwargs = pyo3::types::PyDict::new(py);
+    kwargs.set_item("source", vec!["python/ouroboros"])?;
+    kwargs.set_item("omit", vec!["*test_*", "*__pycache__*", "*/.venv/*", "*tests/*"])?;
+
+    let cov = coverage_module.call_method("Coverage", (), Some(&kwargs))?;
+
+    // Start collection
+    cov.call_method0("start")?;
+
+    // Store source_dir for later use (we'll use it in stop_and_collect)
+    Ok(cov)
+}
+
+/// Stop coverage and collect data into Rust CoverageInfo
+fn stop_and_collect_coverage(py: Python<'_>, cov: &Bound<'_, PyAny>, source_path: &str) -> Result<CoverageInfo> {
+    // Stop and save
+    cov.call_method0("stop")?;
+    cov.call_method0("save")?;
+
+    // Get coverage data
+    let data = cov.call_method0("get_data")?;
+    // measured_files() returns a set, need to convert to list first
+    let measured_set = data.call_method0("measured_files")?;
+    let builtins = py.import("builtins")?;
+    let measured_list = builtins.call_method1("list", (&measured_set,))?;
+    let measured_files: Vec<String> = measured_list.extract()?;
+
+    let mut coverage_info = CoverageInfo::default();
+    let mut files = Vec::new();
+
+    for file_path in measured_files {
+        // Skip test files and non-python files
+        if file_path.contains("test_") || file_path.contains("__pycache__") {
+            continue;
+        }
+
+        // Get analysis for this file
+        let analysis_result = cov.call_method1("analysis", (&file_path,));
+        if let Ok(analysis) = analysis_result {
+            let tuple: (String, Vec<i32>, Vec<i32>, String) = analysis.extract()?;
+            let (_filename, executable, missing, _excluded) = tuple;
+
+            let total_statements = executable.len();
+            let missing_count = missing.len();
+            let covered = total_statements - missing_count;
+
+            let coverage_percent = if total_statements > 0 {
+                (covered as f64 / total_statements as f64) * 100.0
+            } else {
+                100.0
+            };
+
+            // Make path relative to source
+            let relative_path = file_path
+                .strip_prefix(source_path)
+                .unwrap_or(&file_path)
+                .trim_start_matches('/')
+                .to_string();
+
+            files.push(FileCoverage {
+                path: relative_path,
+                statements: total_statements,
+                covered,
+                missing_lines: missing.iter().map(|&x| x as usize).collect(),
+                coverage_percent,
+            });
+
+            coverage_info.total_statements += total_statements;
+            coverage_info.covered_statements += covered;
+        }
+    }
+
+    // Calculate overall percentage
+    coverage_info.coverage_percent = if coverage_info.total_statements > 0 {
+        (coverage_info.covered_statements as f64 / coverage_info.total_statements as f64) * 100.0
+    } else {
+        100.0
+    };
+
+    coverage_info.files = files;
+
+    Ok(coverage_info)
 }
 
 /// Run a single test file and return (passed, failed) counts
