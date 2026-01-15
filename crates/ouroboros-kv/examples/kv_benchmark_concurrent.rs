@@ -7,7 +7,7 @@
 
 use ouroboros_kv::engine::KvEngine;
 use ouroboros_kv::types::{KvKey, KvValue};
-use ouroboros_test::benchmark::{
+use ouroboros_qc::benchmark::{
     Benchmarker, BenchmarkConfig, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
 };
 use std::sync::{Arc, Barrier};
@@ -226,7 +226,7 @@ fn run_throughput_test<F>(
     ops_per_thread: usize,
     engine: &Arc<KvEngine>,
     test_fn: F,
-) -> ouroboros_test::benchmark::BenchmarkResult
+) -> ouroboros_qc::benchmark::BenchmarkResult
 where
     F: Fn(usize, usize, &Arc<KvEngine>) -> (f64, f64),
 {
@@ -251,14 +251,14 @@ where
                  num_threads, format_number(ops_per_sec), elapsed_secs);
     }
 
-    let stats = ouroboros_test::benchmark::BenchmarkStats::from_times(
+    let stats = ouroboros_qc::benchmark::BenchmarkStats::from_times(
         times_ms,
         1,
         config.rounds,
         config.warmup,
     );
 
-    ouroboros_test::benchmark::BenchmarkResult::success(name, stats)
+    ouroboros_qc::benchmark::BenchmarkResult::success(name, stats)
 }
 
 /// Benchmark scalability: measure how performance scales with thread count

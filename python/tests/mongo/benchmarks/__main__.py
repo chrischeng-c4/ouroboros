@@ -14,7 +14,7 @@ except ImportError:
     pass
 
 from ouroboros import init, close, is_connected
-from ouroboros.test import discover_benchmarks, run_benchmarks
+from ouroboros.qc import discover_benchmarks, run_benchmarks
 
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient

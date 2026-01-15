@@ -3,7 +3,7 @@ Test parametrize functionality for data-bridge test framework.
 """
 
 import asyncio
-from ouroboros.test import (
+from ouroboros.qc import (
     TestSuite,
     test,
     parametrize,

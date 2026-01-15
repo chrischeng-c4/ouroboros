@@ -9,7 +9,7 @@ Tests for:
 Migrated from test_coverage.py and focused for maintainability.
 """
 from ouroboros.mongodb.connection import _build_connection_string
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 from tests.base import CommonTestSuite
 
 
@@ -150,7 +150,7 @@ class TestConnectionInit(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([
         TestConnectionStringBuilding,

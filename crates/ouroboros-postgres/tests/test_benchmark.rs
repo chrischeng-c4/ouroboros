@@ -1,10 +1,10 @@
 //! Benchmark tests for ouroboros-postgres
 //!
-//! Tests performance of critical PostgreSQL operations using the ouroboros-test framework.
+//! Tests performance of critical PostgreSQL operations using the ouroboros-qc framework.
 
 use ouroboros_postgres::{QueryBuilder, Operator, OrderDirection, ExtractedValue, JoinType, JoinCondition};
-use ouroboros_test::{expect, AssertionError};
-use ouroboros_test::benchmark::{Benchmarker, BenchmarkConfig, print_comparison_table};
+use ouroboros_qc::{expect, AssertionError};
+use ouroboros_qc::benchmark::{Benchmarker, BenchmarkConfig, print_comparison_table};
 
 // ============================================================================
 // Benchmark: QueryBuilder Construction

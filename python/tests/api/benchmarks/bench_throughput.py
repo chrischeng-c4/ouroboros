@@ -1,6 +1,6 @@
 """Throughput benchmarks for API servers."""
 
-from ouroboros.test import BenchmarkGroup, register_group
+from ouroboros.qc import BenchmarkGroup, register_group
 from . import benchmark_setup
 
 

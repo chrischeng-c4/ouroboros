@@ -3088,8 +3088,8 @@ dependencies = [
  "ouroboros-mongodb",
  "ouroboros-postgres",
  "ouroboros-pyloop",
+ "ouroboros-qc",
  "ouroboros-tasks",
- "ouroboros-test",
  "pyo3",
  "pyo3-async-runtimes",
  "pythonize",
@@ -3197,7 +3197,7 @@ dependencies = [
  "hostname",
  "num_cpus",
  "ouroboros-common",
- "ouroboros-test",
+ "ouroboros-qc",
  "parking_lot",
  "rust_decimal",
  "serde",
@@ -3262,7 +3262,7 @@ dependencies = [
  "criterion",
  "futures",
  "ouroboros-common",
- "ouroboros-test",
+ "ouroboros-qc",
  "rayon",
  "rust_decimal",
  "serde",
@@ -3291,6 +3291,34 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+]
+
+[[package]]
+name = "ouroboros-qc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "bytecheck",
+ "chrono",
+ "criterion",
+ "futures",
+ "inferno",
+ "jwalk",
+ "libc",
+ "ouroboros-http",
+ "rand 0.8.5",
+ "regex",
+ "reqwest",
+ "rkyv 0.7.46",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.17",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
+ "walkdir",
 ]
 
 [[package]]
@@ -3415,34 +3443,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
-]
-
-[[package]]
-name = "ouroboros-test"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum 0.8.8",
- "bytecheck",
- "chrono",
- "criterion",
- "futures",
- "inferno",
- "jwalk",
- "libc",
- "ouroboros-http",
- "rand 0.8.5",
- "regex",
- "reqwest",
- "rkyv 0.7.46",
- "serde",
- "serde_json",
- "serde_yaml",
- "thiserror 2.0.17",
- "tokio",
- "tower 0.5.2",
- "tracing",
- "walkdir",
 ]
 
 [[package]]

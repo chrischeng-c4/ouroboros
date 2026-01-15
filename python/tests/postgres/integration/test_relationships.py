@@ -15,7 +15,7 @@ from ouroboros.postgres import (
     Column,
     ForeignKeyProxy,
 )
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.mark.asyncio

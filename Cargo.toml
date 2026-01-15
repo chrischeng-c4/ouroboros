@@ -4,7 +4,7 @@ members = [
     "crates/ouroboros-mongodb",
     "crates/ouroboros-postgres",
     "crates/ouroboros-http",
-    "crates/ouroboros-test",
+    "crates/ouroboros-qc",
     "crates/ouroboros-common",
     "crates/ouroboros-kv",
     "crates/ouroboros-kv-server",

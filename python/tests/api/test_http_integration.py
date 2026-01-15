@@ -1,6 +1,6 @@
 """Tests for HTTP client integration in data-bridge-api."""
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from typing import Annotated
 from ouroboros.api import App, Depends, RequestContext
 from ouroboros.http import HttpClient

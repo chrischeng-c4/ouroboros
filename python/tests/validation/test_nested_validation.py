@@ -4,7 +4,7 @@ Tests for nested model validation with Rust backend.
 Run: uv run python python/tests/validation/test_nested_validation.py
 """
 
-from ouroboros.test import TestSuite, test, expect
+from ouroboros.qc import TestSuite, test, expect
 from typing import Optional, List
 from ouroboros.validation import BaseModel, Field
 

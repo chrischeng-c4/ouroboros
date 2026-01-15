@@ -5,7 +5,7 @@ works end-to-end through the Python → Rust boundary.
 """
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from typing import Annotated
 from ouroboros import Document, init, MinLen, MaxLen, Min, Max, Email, Url
 from ouroboros.mongodb.types import PydanticObjectId

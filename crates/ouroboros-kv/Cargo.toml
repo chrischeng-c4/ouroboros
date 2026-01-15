@@ -30,7 +30,7 @@ ouroboros-common = { path = "../ouroboros-common" }
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = "0.5"
-ouroboros-test = { path = "../ouroboros-test" }
+ouroboros-qc = { path = "../ouroboros-qc" }
 num_cpus = "1.16"
 hostname = "0.4"
 tempfile = "3.12"

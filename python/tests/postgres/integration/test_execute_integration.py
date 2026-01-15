@@ -15,7 +15,7 @@ Run with:
 
 import pytest
 from ouroboros.postgres import execute
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 # Note: Connection setup is handled by conftest.py fixtures

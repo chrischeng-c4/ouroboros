@@ -8,7 +8,7 @@
 
 use ouroboros_kv::engine::KvEngine;
 use ouroboros_kv::types::{KvKey, KvValue};
-use ouroboros_test::benchmark::{
+use ouroboros_qc::benchmark::{
     Benchmarker, BenchmarkConfig, BenchmarkReport, BenchmarkReportGroup, BenchmarkEnvironment,
 };
 use std::sync::Arc;
@@ -26,7 +26,7 @@ fn make_string_value(id: usize) -> KvValue {
 }
 
 /// Benchmark: Single-threaded SET throughput
-fn bench_set_single_threaded(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_set_single_threaded(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
     let mut counter = 0;
 
@@ -39,7 +39,7 @@ fn bench_set_single_threaded(benchmarker: &Benchmarker) -> ouroboros_test::bench
 }
 
 /// Benchmark: Single-threaded GET throughput
-fn bench_get_single_threaded(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_get_single_threaded(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
 
     // Pre-populate with 10K entries
@@ -58,7 +58,7 @@ fn bench_get_single_threaded(benchmarker: &Benchmarker) -> ouroboros_test::bench
 }
 
 /// Benchmark: Mixed workload (50% GET, 50% SET)
-fn bench_mixed_workload(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_mixed_workload(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
 
     // Pre-populate
@@ -85,7 +85,7 @@ fn bench_mixed_workload(benchmarker: &Benchmarker) -> ouroboros_test::benchmark:
 }
 
 /// Benchmark: INCR atomic operations
-fn bench_incr_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_incr_operations(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
     let key = KvKey::new("counter").unwrap();
 
@@ -98,7 +98,7 @@ fn bench_incr_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark
 }
 
 /// Benchmark: DECR atomic operations
-fn bench_decr_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_decr_operations(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
     let key = KvKey::new("counter").unwrap();
 
@@ -111,7 +111,7 @@ fn bench_decr_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark
 }
 
 /// Benchmark: Multi-threaded SET with 2 threads
-fn bench_set_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_set_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let config = benchmarker.config();
     let total_ops = (config.iterations * config.rounds) as usize;
     let ops_per_thread = total_ops / 2;
@@ -138,7 +138,7 @@ fn bench_set_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Multi-threaded SET with 4 threads
-fn bench_set_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_set_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let config = benchmarker.config();
     let total_ops = (config.iterations * config.rounds) as usize;
     let ops_per_thread = total_ops / 4;
@@ -165,7 +165,7 @@ fn bench_set_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Multi-threaded SET with 8 threads
-fn bench_set_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_set_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let config = benchmarker.config();
     let total_ops = (config.iterations * config.rounds) as usize;
     let ops_per_thread = total_ops / 8;
@@ -192,7 +192,7 @@ fn bench_set_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Multi-threaded GET with 2 threads
-fn bench_get_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_get_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = Arc::new(KvEngine::new());
 
     // Pre-populate
@@ -226,7 +226,7 @@ fn bench_get_concurrent_2_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Multi-threaded GET with 4 threads
-fn bench_get_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_get_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = Arc::new(KvEngine::new());
 
     // Pre-populate
@@ -260,7 +260,7 @@ fn bench_get_concurrent_4_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Multi-threaded GET with 8 threads
-fn bench_get_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_get_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = Arc::new(KvEngine::new());
 
     // Pre-populate
@@ -294,7 +294,7 @@ fn bench_get_concurrent_8_threads(benchmarker: &Benchmarker) -> ouroboros_test::
 }
 
 /// Benchmark: Lock contention with concurrent access
-fn bench_lock_contention(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_lock_contention(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let config = benchmarker.config();
     let total_ops = (config.iterations * config.rounds) as usize;
     let ops_per_thread = total_ops / 4;
@@ -330,7 +330,7 @@ fn bench_lock_contention(benchmarker: &Benchmarker) -> ouroboros_test::benchmark
 }
 
 /// Benchmark: Memory usage with 100K entries
-fn bench_memory_100k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_memory_100k_entries(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     benchmarker.run("memory_100k_entries", || {
         let engine = KvEngine::new();
 
@@ -347,7 +347,7 @@ fn bench_memory_100k_entries(benchmarker: &Benchmarker) -> ouroboros_test::bench
 }
 
 /// Benchmark: TTL cleanup overhead
-fn bench_ttl_cleanup(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_ttl_cleanup(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     benchmarker.run("ttl_cleanup", || {
         let engine = KvEngine::new();
 
@@ -368,7 +368,7 @@ fn bench_ttl_cleanup(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::Be
 }
 
 /// Benchmark: Insertion scalability - 1K entries
-fn bench_insert_1k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_insert_1k_entries(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     benchmarker.run("insert_1k", || {
         let engine = KvEngine::new();
         for i in 0..1_000 {
@@ -380,7 +380,7 @@ fn bench_insert_1k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchma
 }
 
 /// Benchmark: Insertion scalability - 10K entries
-fn bench_insert_10k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_insert_10k_entries(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     benchmarker.run("insert_10k", || {
         let engine = KvEngine::new();
         for i in 0..10_000 {
@@ -392,7 +392,7 @@ fn bench_insert_10k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchm
 }
 
 /// Benchmark: Insertion scalability - 100K entries
-fn bench_insert_100k_entries(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_insert_100k_entries(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     benchmarker.run("insert_100k", || {
         let engine = KvEngine::new();
         for i in 0..100_000 {
@@ -404,7 +404,7 @@ fn bench_insert_100k_entries(benchmarker: &Benchmarker) -> ouroboros_test::bench
 }
 
 /// Benchmark: Insertion scalability - 1M entries
-fn bench_insert_1m_entries(_benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_insert_1m_entries(_benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     // Use quick config for this heavy benchmark
     let benchmarker = Benchmarker::new(BenchmarkConfig::new(1, 1, 0));
 
@@ -419,7 +419,7 @@ fn bench_insert_1m_entries(_benchmarker: &Benchmarker) -> ouroboros_test::benchm
 }
 
 /// Benchmark: CAS (Compare-And-Swap) operations
-fn bench_cas_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_cas_operations(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
     let key = KvKey::new("cas_key").unwrap();
 
@@ -436,7 +436,7 @@ fn bench_cas_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark:
 }
 
 /// Benchmark: SETNX (Set if Not Exists) operations
-fn bench_setnx_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_setnx_operations(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
     let mut counter = 0;
 
@@ -449,7 +449,7 @@ fn bench_setnx_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmar
 }
 
 /// Benchmark: EXISTS checks
-fn bench_exists_checks(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_exists_checks(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let engine = KvEngine::new();
 
     // Pre-populate
@@ -468,7 +468,7 @@ fn bench_exists_checks(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::
 }
 
 /// Benchmark: DELETE operations
-fn bench_delete_operations(benchmarker: &Benchmarker) -> ouroboros_test::benchmark::BenchmarkResult {
+fn bench_delete_operations(benchmarker: &Benchmarker) -> ouroboros_qc::benchmark::BenchmarkResult {
     let config = benchmarker.config();
     let total_ops = (config.iterations * config.rounds) as usize;
 

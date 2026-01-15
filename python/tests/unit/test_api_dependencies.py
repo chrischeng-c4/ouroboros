@@ -1,7 +1,7 @@
 """Tests for API dependency injection system."""
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from typing import Annotated
 from ouroboros.api.dependencies import (
     Depends, Scope, DependencyContainer, RequestContext,

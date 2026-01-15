@@ -4,7 +4,7 @@ Tests for response_model filtering functionality.
 Run: uv run python python/tests/validation/test_response_model.py
 """
 
-from ouroboros.test import TestSuite, test, expect
+from ouroboros.qc import TestSuite, test, expect
 from typing import Optional, List
 from ouroboros.validation import BaseModel, Field
 

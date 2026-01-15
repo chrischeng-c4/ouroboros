@@ -3,7 +3,7 @@
 API Server Comparison Benchmarks (Rust Framework)
 
 Standalone benchmark comparing data-bridge-api vs FastAPI using the
-ouroboros.test framework (pure Rust benchmark implementation).
+ouroboros.qc framework (pure Rust benchmark implementation).
 
 This replaces pytest-benchmark with our native Rust-backed framework for:
 - Consistent benchmark methodology
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Optional, Dict, List
 
 from ouroboros.http import HttpClient
-from ouroboros.test import BenchmarkGroup, register_group
+from ouroboros.qc import BenchmarkGroup, register_group
 
 # =====================
 # Server Configuration

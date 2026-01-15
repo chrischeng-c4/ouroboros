@@ -49,8 +49,8 @@ mod mongodb;
 #[cfg(feature = "http")]
 mod http;
 
-#[cfg(feature = "test")]
-mod test;
+#[cfg(feature = "qc")]
+mod qc;
 
 #[cfg(feature = "postgres")]
 mod postgres;
@@ -96,10 +96,10 @@ fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     // Add Test module if enabled
-    #[cfg(feature = "test")]
+    #[cfg(feature = "qc")]
     {
-        let test_module = PyModule::new(py, "test")?;
-        test::register_module(&test_module)?;
+        let test_module = PyModule::new(py, "qc")?;
+        qc::register_module(&test_module)?;
         m.add_submodule(&test_module)?;
     }
 

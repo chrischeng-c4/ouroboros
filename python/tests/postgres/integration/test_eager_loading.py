@@ -16,7 +16,7 @@ from ouroboros.postgres import (
     fetch_one_eager,
     fetch_many_with_relations,
 )
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.mark.integration

@@ -17,7 +17,7 @@ from ouroboros.postgres import (
     BackReference,
     BackReferenceQuery,
 )
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.mark.asyncio

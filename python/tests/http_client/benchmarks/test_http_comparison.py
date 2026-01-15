@@ -2,12 +2,12 @@
 Head-to-head comparison: data-bridge HTTP client vs httpx.
 
 Tests if data-bridge's Rust-based HTTP client is faster than httpx.
-Uses ouroboros.test benchmark utilities for timing and comparison.
+Uses ouroboros.qc benchmark utilities for timing and comparison.
 """
 import asyncio
 import httpx
 from ouroboros.http import HttpClient
-from ouroboros.test import (
+from ouroboros.qc import (
     TestSuite, test, expect,
     benchmark, compare_benchmarks, BenchmarkGroup,
 )
@@ -191,6 +191,6 @@ class TestHttpBenchmarks(HttpTestSuite):
 
 # Run benchmarks when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([TestHttpBenchmarks], verbose=True)

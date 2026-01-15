@@ -6,7 +6,7 @@ for different test categories.
 """
 
 import os
-from ouroboros.test import TestSuite
+from ouroboros.qc import TestSuite
 
 # Shared database URI - use environment variable or default
 MONGODB_URI = os.environ.get(

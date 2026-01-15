@@ -1,11 +1,11 @@
 """
-Base classes for PostgreSQL tests using ouroboros.test framework.
+Base classes for PostgreSQL tests using ouroboros.qc framework.
 
 All tests connect to a real PostgreSQL instance (Homebrew PostgreSQL 17).
 """
 
 import os
-from ouroboros.test import TestSuite, test, expect, fixture
+from ouroboros.qc import TestSuite, test, expect, fixture
 from ouroboros.postgres import init, close, execute
 
 
@@ -27,7 +27,7 @@ class PostgresSuite(TestSuite):
 
     Example:
         from tests.postgres.base import PostgresSuite
-        from ouroboros.test import test, expect
+        from ouroboros.qc import test, expect
         from ouroboros.postgres import execute
 
         class TestUserCRUD(PostgresSuite):

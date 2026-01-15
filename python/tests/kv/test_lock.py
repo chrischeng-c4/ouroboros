@@ -10,7 +10,7 @@ Tests distributed locking functionality including:
 """
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 import asyncio
 from ouroboros.kv import KvClient, Lock
 

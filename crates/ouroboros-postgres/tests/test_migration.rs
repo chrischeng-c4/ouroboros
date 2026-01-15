@@ -9,7 +9,7 @@
 //! Run tests with: cargo test --package ouroboros-postgres --test test_migration -- --ignored
 
 use ouroboros_postgres::{Connection, Migration, MigrationRunner, PoolConfig};
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::{expect, AssertionError};
 use tempfile::TempDir;
 use std::fs;
 

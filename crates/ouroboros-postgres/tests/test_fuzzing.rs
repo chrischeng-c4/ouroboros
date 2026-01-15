@@ -4,8 +4,8 @@
 //! and input validation in the ouroboros-postgres crate.
 
 use ouroboros_postgres::{QueryBuilder, Operator, ExtractedValue, OrderDirection};
-use ouroboros_test::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
+use ouroboros_qc::{expect, AssertionError};
 
 // ============================================================================
 // IDENTIFIER FUZZING TESTS

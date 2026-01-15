@@ -9,14 +9,14 @@ Tests rare but important edge cases:
 - Empty arrays and null values
 - Extreme field values
 
-Migrated from pytest to ouroboros.test framework.
+Migrated from pytest to ouroboros.qc framework.
 """
 import asyncio
 from typing import Optional, List
 from pydantic import Field
 
 from ouroboros import Document, init, close, is_connected
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 from tests.base import MongoTestSuite, MONGODB_URI
 
 
@@ -430,7 +430,7 @@ class TestFieldNameEdgeCases(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([
         TestLargeDocuments,

@@ -4,7 +4,7 @@ Integration tests for subquery support.
 Tests subquery functionality (IN, NOT IN, EXISTS, NOT EXISTS) with real PostgreSQL database.
 """
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from ouroboros.postgres import execute, insert_one, query_aggregate, query_with_cte
 
 

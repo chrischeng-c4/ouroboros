@@ -4,7 +4,7 @@ HTTP client tests for data-bridge.
 Tests the HttpClient and HttpResponse functionality against httpbin.org.
 """
 from ouroboros.http import HttpClient
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 from tests.base import HttpTestSuite
 
 
@@ -214,7 +214,7 @@ class TestHttpClientConfiguration(HttpTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([
         TestHttpClientBasics,

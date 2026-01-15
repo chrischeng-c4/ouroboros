@@ -5,7 +5,7 @@ import subprocess
 import statistics
 import time
 from typing import Dict
-from ouroboros.test import BenchmarkGroup, register_group
+from ouroboros.qc import BenchmarkGroup, register_group
 from . import benchmark_setup
 from .conftest import CONCURRENCY_LEVELS
 

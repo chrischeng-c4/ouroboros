@@ -45,7 +45,7 @@ def check_psutil():
 def check_ouroboros_test():
     """Check if data-bridge-test is available."""
     try:
-        from ouroboros.test import (
+        from ouroboros.qc import (
             TestSuite, test, expect, benchmark, BenchmarkGroup
         )
         print("✓ data-bridge-test available")
@@ -101,7 +101,7 @@ async def test_pytest_execution():
 async def test_ouroboros_test_execution():
     """Test data-bridge-test can run basic tests."""
     try:
-        from ouroboros.test import TestSuite, test, expect, TestRunner
+        from ouroboros.qc import TestSuite, test, expect, TestRunner
 
         class ValidationSuite(TestSuite):
             @test
@@ -136,7 +136,7 @@ async def test_ouroboros_test_execution():
 async def test_benchmark_infrastructure():
     """Test basic benchmark functionality."""
     try:
-        from ouroboros.test import benchmark
+        from ouroboros.qc import benchmark
 
         async def simple_operation():
             return sum(range(100))

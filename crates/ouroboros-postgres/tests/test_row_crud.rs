@@ -4,7 +4,7 @@
 //! Set DATABASE_URL environment variable or skip with SKIP_INTEGRATION=true
 
 use ouroboros_postgres::{Connection, ExtractedValue, PoolConfig, QueryBuilder, Row, Operator, OrderDirection};
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::{expect, AssertionError};
 
 #[tokio::test]
 #[ignore] // Only run with --ignored flag when database is available

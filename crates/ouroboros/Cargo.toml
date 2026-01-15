@@ -33,7 +33,7 @@ rust_decimal.workspace = true
 # Optional feature-gated dependencies
 ouroboros-mongodb = { path = "../ouroboros-mongodb", optional = true }
 ouroboros-http = { path = "../ouroboros-http", optional = true }
-ouroboros-test = { path = "../ouroboros-test", optional = true }
+ouroboros-qc = { path = "../ouroboros-qc", optional = true }
 ouroboros-postgres = { path = "../ouroboros-postgres", optional = true }
 ouroboros-kv-client = { path = "../ouroboros-kv-client", optional = true }
 ouroboros-api = { path = "../ouroboros-api", optional = true }
@@ -48,10 +48,10 @@ base64 = "0.22"
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"], optional = true }
 
 [features]
-default = ["mongodb", "http", "test"]
+default = ["mongodb", "http", "qc"]
 mongodb = ["ouroboros-mongodb"]
 http = ["ouroboros-http"]
-test = ["ouroboros-test"]
+qc = ["ouroboros-qc"]
 postgres = ["ouroboros-postgres", "sqlx"]
 kv = ["ouroboros-kv-client"]
 api = ["ouroboros-api", "ouroboros-pyloop"]  # api requires pyloop

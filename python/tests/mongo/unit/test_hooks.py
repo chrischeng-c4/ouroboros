@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ouroboros import Document, before_event, after_event, Insert, Delete, Replace
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 from tests.base import MongoTestSuite
 
 
@@ -558,7 +558,7 @@ class TestStateManagement(MongoTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([
         TestBeforeInsertHook,

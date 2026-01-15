@@ -13,7 +13,7 @@
 
 use ouroboros_postgres::schema::ColumnType;
 use ouroboros_postgres::{Connection, PoolConfig, SchemaInspector};
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::{expect, AssertionError};
 
 /// Helper to create a test database connection
 async fn create_test_connection() -> Connection {

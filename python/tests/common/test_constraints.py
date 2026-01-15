@@ -25,7 +25,7 @@ from ouroboros.mongodb.type_extraction import (
     is_annotated_type,
     unwrap_annotated_type,
 )
-from ouroboros.test import TestSuite, test, expect
+from ouroboros.qc import TestSuite, test, expect
 
 from tests.base import CommonTestSuite
 
@@ -406,7 +406,7 @@ class TestEdgeCases(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites, ReportFormat
+    from ouroboros.qc import run_suites, ReportFormat
 
     suites = [
         TestConstraintClasses,

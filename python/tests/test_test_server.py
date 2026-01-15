@@ -2,9 +2,9 @@
 
 import asyncio
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 import httpx
-from ouroboros.test import TestServer
+from ouroboros.qc import TestServer
 
 
 @pytest.mark.asyncio

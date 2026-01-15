@@ -3,8 +3,8 @@
 //! Tests SQL injection prevention and input validation.
 
 use ouroboros_postgres::{QueryBuilder, Operator, ExtractedValue, RelationConfig, JoinType};
-use ouroboros_test::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::security::{PayloadDatabase, SqlInjectionTester, Fuzzer, FuzzConfig};
+use ouroboros_qc::{expect, AssertionError};
 
 // Test that SQL injection payloads are blocked in table names
 #[test]

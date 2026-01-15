@@ -4,7 +4,7 @@ Integration tests for aggregate query functionality.
 Tests query_aggregate with a real PostgreSQL database.
 """
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from ouroboros.postgres import execute, insert_one, query_aggregate
 
 

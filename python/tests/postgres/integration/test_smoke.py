@@ -7,7 +7,7 @@ before running more complex integration tests.
 
 from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import execute
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 
 
 class TestSmoke(PostgresSuite):

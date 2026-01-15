@@ -12,7 +12,7 @@ Tests cover:
 
 import pytest
 from ouroboros.postgres import init, close, execute, upsert_one, upsert_many
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.mark.integration

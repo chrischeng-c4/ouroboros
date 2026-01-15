@@ -1,6 +1,6 @@
 """Integration tests for PostgreSQL extensions (Full-Text Search, PostGIS, Arrays)."""
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from ouroboros.postgres import (
     Table, Column, init,
     FullTextSearch, fts,

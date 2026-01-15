@@ -13,7 +13,7 @@ These tests verify:
 """
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from typing import Optional, List
 from ouroboros.api import BaseModel, Field
 

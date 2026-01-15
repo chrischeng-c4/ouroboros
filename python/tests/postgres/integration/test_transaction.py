@@ -2,7 +2,7 @@
 
 import pytest
 from ouroboros.postgres import connection
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.mark.asyncio

@@ -5,8 +5,8 @@ This test verifies that the fixture system works correctly.
 """
 
 import pytest
-from ouroboros.test import expect
-from ouroboros.test import (
+from ouroboros.qc import expect
+from ouroboros.qc import (
     fixture, test, expect, TestSuite, run_suite,
     FixtureScope, FixtureRegistry, FixtureMeta
 )

@@ -6,7 +6,7 @@ and cascade rules via the PostgreSQL database.
 
 import pytest
 from ouroboros.postgres import execute
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.fixture

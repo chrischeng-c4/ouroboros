@@ -1,6 +1,6 @@
 """Tests for app.run() method."""
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from unittest.mock import Mock, patch
 from ouroboros.api import App
 

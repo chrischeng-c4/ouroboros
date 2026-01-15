@@ -9,7 +9,7 @@
 use ouroboros_postgres::{
     Connection, ExtractedValue, JoinType, PoolConfig, RelationConfig, Row,
 };
-use ouroboros_test::{expect, AssertionError};
+use ouroboros_qc::{expect, AssertionError};
 
 #[tokio::test]
 #[ignore] // Only run with --ignored flag when database is available

@@ -35,7 +35,7 @@ from .ouroboros import ObjectId
 from . import mongodb
 from . import http
 from . import postgres
-from . import test
+from . import qc
 
 # Import KV module if available (feature-gated)
 try:

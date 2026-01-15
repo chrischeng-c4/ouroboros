@@ -20,7 +20,7 @@ Setup database:
     bash scripts/setup_test_db.sh
 """
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from ouroboros.postgres import Table, Column, relationship, init
 from ouroboros.postgres.session import Session
 

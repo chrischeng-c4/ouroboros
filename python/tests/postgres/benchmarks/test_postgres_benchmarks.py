@@ -15,7 +15,7 @@ and manipulation overhead only.
 """
 import pytest
 from typing import Optional
-from ouroboros.test import benchmark, BenchmarkConfig, expect
+from ouroboros.qc import benchmark, BenchmarkConfig, expect
 from ouroboros.postgres import Table, Column, QueryBuilder, ColumnProxy
 
 

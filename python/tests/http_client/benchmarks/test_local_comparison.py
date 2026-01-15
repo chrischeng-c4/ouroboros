@@ -7,7 +7,7 @@ Declarative benchmark using the new simplified API.
 
 import httpx
 from ouroboros.http import HttpClient
-from ouroboros.test import HttpBenchmark
+from ouroboros.qc import HttpBenchmark
 
 
 # Declarative routes (server responds with these JSON payloads)

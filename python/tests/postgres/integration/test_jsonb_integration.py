@@ -16,7 +16,7 @@ Tests cover:
 
 import pytest
 from ouroboros.postgres import execute, insert_one, insert_many
-from ouroboros.test import expect
+from ouroboros.qc import expect
 
 
 @pytest.fixture

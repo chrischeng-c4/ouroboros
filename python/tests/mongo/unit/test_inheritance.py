@@ -6,10 +6,10 @@ Document inheritance allows:
 - Polymorphic loading (loading correct subclass based on _class_id)
 - Filtering by class type using with_children()
 
-Migrated from pytest to ouroboros.test framework.
+Migrated from pytest to ouroboros.qc framework.
 """
 from ouroboros import Document
-from ouroboros.test import test, expect
+from ouroboros.qc import test, expect
 from tests.base import MongoTestSuite, CommonTestSuite
 
 
@@ -361,7 +361,7 @@ class TestInheritanceEdgeCases(CommonTestSuite):
 
 # Run tests when executed directly
 if __name__ == "__main__":
-    from ouroboros.test import run_suites
+    from ouroboros.qc import run_suites
 
     run_suites([
         TestInheritanceSetup,

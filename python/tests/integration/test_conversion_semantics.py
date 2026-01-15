@@ -6,7 +6,7 @@ to the current implementation, maintaining 100% backward compatibility.
 """
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from datetime import datetime, timezone
 from decimal import Decimal
 from bson import ObjectId, Binary

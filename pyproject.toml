@@ -26,7 +26,7 @@ dependencies = []  # Zero runtime dependencies - all functionality is in Rust
 
 # Console scripts
 [project.scripts]
-obtest = "ouroboros.test.cli:main"
+ob = "ouroboros.qc.cli:main"
 
 # Optional dependencies for different data sources
 [project.optional-dependencies]
@@ -57,7 +57,7 @@ python-source = "python"
 manifest-path = "crates/ouroboros/Cargo.toml"
 # Build with all features by default
 # To enable observability: maturin develop --features observability
-features = ["mongodb", "postgres", "http", "test", "kv", "api", "pyloop"]
+features = ["mongodb", "postgres", "http", "qc", "kv", "api", "pyloop"]
 
 [tool.ruff]
 line-length = 100

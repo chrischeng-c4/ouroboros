@@ -13,7 +13,7 @@ edge cases that could lead to security issues.
 """
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 import asyncio
 from ouroboros.kv import KvClient, KvPool, PoolConfig
 

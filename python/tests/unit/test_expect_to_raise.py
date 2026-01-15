@@ -1,10 +1,10 @@
 """
 Unit tests for expect().to_raise() assertion method.
 
-This tests the Rust-backed to_raise implementation in ouroboros.test.
+This tests the Rust-backed to_raise implementation in ouroboros.qc.
 """
 
-from ouroboros.test import TestSuite, test, expect
+from ouroboros.qc import TestSuite, test, expect
 
 
 class TestToRaise(TestSuite):

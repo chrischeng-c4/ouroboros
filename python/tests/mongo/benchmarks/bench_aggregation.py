@@ -1,7 +1,7 @@
 """Aggregation benchmark."""
 
 import time
-from ouroboros.test import BenchmarkGroup, register_group
+from ouroboros.qc import BenchmarkGroup, register_group
 from tests.mongo.benchmarks.models import DBUser, BeanieUser
 
 group = BenchmarkGroup("Aggregation")

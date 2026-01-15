@@ -1,7 +1,7 @@
 """Integration tests for API dependency injection with App."""
 
 import pytest
-from ouroboros.test import expect
+from ouroboros.qc import expect
 from typing import Annotated
 from ouroboros.api import App, Path, Query, Depends
 from ouroboros.api.dependencies import RequestContext, Scope
