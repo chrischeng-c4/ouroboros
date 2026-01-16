@@ -6,9 +6,7 @@
       "search_file_content",
       "glob",
       "write_file",
-      "replace",
-      "save_memory",
-      "google_web_search"
+      "replace"
     ]
   },
   "approvals": {
