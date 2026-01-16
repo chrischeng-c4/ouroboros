@@ -9,9 +9,10 @@ Tests verify that:
 - Batch eager loading works efficiently
 """
 from ouroboros.postgres import init, close, execute, fetch_one_with_relations, fetch_one_eager, fetch_many_with_relations
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestFetchOneEager(TestSuite):
+class TestFetchOneEager(PostgresSuite):
     """Test single row eager loading with simplified tuple-based API."""
 
     @test
@@ -59,7 +60,7 @@ class TestFetchOneEager(TestSuite):
         expect(result['user_id']).to_equal(1)
         expect(result['profile_id']).to_equal(1)
 
-class TestFetchOneWithRelations(TestSuite):
+class TestFetchOneWithRelations(PostgresSuite):
     """Test fetch_one_with_relations with full configuration."""
 
     @test
@@ -99,7 +100,7 @@ class TestFetchOneWithRelations(TestSuite):
         expect(result['name']).to_equal('New York')
         expect(result['country_code']).to_equal('US')
 
-class TestFetchManyWithRelations(TestSuite):
+class TestFetchManyWithRelations(PostgresSuite):
     """Test fetch_many_with_relations for batch eager loading."""
 
     @test
@@ -195,7 +196,7 @@ class TestFetchManyWithRelations(TestSuite):
         player_without_team = next((p for p in results if p['name'] == 'Player 2'))
         expect(player_without_team['team_id']).to_be_none()
 
-class TestEagerLoadingComplexScenarios(TestSuite):
+class TestEagerLoadingComplexScenarios(PostgresSuite):
     """Test complex eager loading scenarios."""
 
     @test

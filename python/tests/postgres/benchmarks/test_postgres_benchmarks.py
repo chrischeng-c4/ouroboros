@@ -16,7 +16,6 @@ and manipulation overhead only.
 from typing import Optional
 from ouroboros.qc import benchmark, BenchmarkConfig, expect, test, TestSuite
 from ouroboros.postgres import Table, Column, QueryBuilder, ColumnProxy
-pytestmark = pytest.mark.no_db_required
 
 class User(Table):
     """Sample User table for benchmarks."""

@@ -3,7 +3,8 @@ Integration tests for aggregate query functionality.
 
 Tests query_aggregate with a real PostgreSQL database.
 """
-from ouroboros.qc import expect, fixture, TestSuite, test
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import execute, insert_one, query_aggregate
 
 @fixture
@@ -16,7 +17,7 @@ async def orders_table():
     yield
     await execute('DROP TABLE IF EXISTS orders')
 
-class TestBasicAggregates(TestSuite):
+class TestBasicAggregates(PostgresSuite):
     """Test basic aggregate functions."""
 
     @test
@@ -68,7 +69,7 @@ class TestBasicAggregates(TestSuite):
         expect(len(results)).to_equal(1)
         expect(float(results[0]['max_amount'])).to_equal(pytest.approx(300.75, rel=0.01))
 
-class TestGroupBy(TestSuite):
+class TestGroupBy(PostgresSuite):
     """Test GROUP BY functionality."""
 
     @test
@@ -92,7 +93,7 @@ class TestGroupBy(TestSuite):
         results = await query_aggregate('orders', [('sum', 'amount', 'total')], group_by=['user_id', 'status'], having=None, where_conditions=None, order_by=[('user_id', 'asc'), ('status', 'asc')], limit=None)
         expect(len(results)).to_be_greater_than_or_equal(3)
 
-class TestWhereConditions(TestSuite):
+class TestWhereConditions(PostgresSuite):
     """Test WHERE clause filtering with aggregates."""
 
     @test
@@ -121,7 +122,7 @@ class TestWhereConditions(TestSuite):
         expect(float(results[1]['total'])).to_equal(pytest.approx(450.75, rel=0.01))
         expect(results[1]['count']).to_equal(2)
 
-class TestOrderByAndLimit(TestSuite):
+class TestOrderByAndLimit(PostgresSuite):
     """Test ORDER BY and LIMIT with aggregates."""
 
     @test
@@ -141,7 +142,7 @@ class TestOrderByAndLimit(TestSuite):
         expect(results[0]['user_id']).to_equal(2)
         expect(results[1]['user_id']).to_equal(1)
 
-class TestMultipleAggregates(TestSuite):
+class TestMultipleAggregates(PostgresSuite):
     """Test multiple aggregate functions in single query."""
 
     @test
@@ -166,7 +167,7 @@ class TestMultipleAggregates(TestSuite):
             expect('total_amount').to_be_in(result)
             expect('avg_amount').to_be_in(result)
 
-class TestOperatorVariations(TestSuite):
+class TestOperatorVariations(PostgresSuite):
     """Test different operator string variations."""
 
     @test
@@ -186,7 +187,7 @@ class TestOperatorVariations(TestSuite):
         results = await query_aggregate('orders', [('count', None, 'count')], group_by=None, having=None, where_conditions=[('amount', 'lt', 100)], order_by=None, limit=None)
         expect(results[0]['count']).to_equal(2)
 
-class TestHavingClause(TestSuite):
+class TestHavingClause(PostgresSuite):
     """Test HAVING clause functionality."""
 
     @test
@@ -238,7 +239,7 @@ class TestHavingClause(TestSuite):
         expect(results[0]['user_id']).to_equal(2)
         expect(float(results[0]['max_amount'])).to_equal(pytest.approx(300.75, rel=0.01))
 
-class TestErrorHandling(TestSuite):
+class TestErrorHandling(PostgresSuite):
     """Test error handling and validation."""
 
     @test

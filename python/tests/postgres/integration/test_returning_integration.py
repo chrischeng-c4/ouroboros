@@ -15,8 +15,8 @@ which is useful for retrieving auto-generated values (like serial IDs) or
 verifying what was changed.
 """
 from ouroboros.postgres import execute, insert_one, insert_many
-from ouroboros.qc import expect, fixture, TestSuite, test
-
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 @fixture
 async def tasks_table():
     """
@@ -44,7 +44,7 @@ async def sample_tasks(tasks_table):
         inserted_ids.append(result['id'])
     return inserted_ids
 
-class TestInsertReturning(TestSuite):
+class TestInsertReturning(PostgresSuite):
     """Test INSERT operations with RETURNING clause."""
 
     @test
@@ -154,7 +154,7 @@ class TestInsertReturning(TestSuite):
         ids = [r['id'] for r in results]
         expect(len(set(ids))).to_equal(3)
 
-class TestUpdateReturning(TestSuite):
+class TestUpdateReturning(PostgresSuite):
     """Test UPDATE operations with RETURNING clause."""
 
     @test
@@ -215,7 +215,7 @@ class TestUpdateReturning(TestSuite):
         result = await execute('\n            UPDATE tasks\n            SET status = $1\n            WHERE id = $2\n            RETURNING *\n            ', ['completed', 99999])
         expect(result).to_equal([])
 
-class TestDeleteReturning(TestSuite):
+class TestDeleteReturning(PostgresSuite):
     """Test DELETE operations with RETURNING clause."""
 
     @test
@@ -278,7 +278,7 @@ class TestDeleteReturning(TestSuite):
         all_tasks = await execute('SELECT * FROM tasks')
         expect(len(all_tasks)).to_equal(3)
 
-class TestReturningComputedExpressions(TestSuite):
+class TestReturningComputedExpressions(PostgresSuite):
     """Test RETURNING with computed expressions and transformations."""
 
     @test
@@ -341,7 +341,7 @@ class TestReturningComputedExpressions(TestSuite):
         expect(row['desc_or_default']).to_equal('No description')
         expect(row['priority_or_zero']).to_equal(0)
 
-class TestReturningEdgeCases(TestSuite):
+class TestReturningEdgeCases(PostgresSuite):
     """Test edge cases and error conditions with RETURNING."""
 
     @test

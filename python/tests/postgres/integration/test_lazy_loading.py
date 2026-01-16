@@ -18,11 +18,12 @@ Run with:
 Setup database:
     bash scripts/setup_test_db.sh
 """
-from ouroboros.qc import expect, fixture, TestSuite, test
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import Table, Column, relationship, init
 from ouroboros.postgres.session import Session
 
-class TestLazyLoading(TestSuite):
+class TestLazyLoading(PostgresSuite):
 
     @test
     async def test_lazy_load_select_strategy(self, sample_data):

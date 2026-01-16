@@ -965,6 +965,28 @@ impl PyExpectation {
         }
     }
 
+    /// Assert is NOT None (convenience method)
+    fn to_not_be_none(&self, py: Python<'_>) -> PyResult<()> {
+        let result = !self.value.bind(py).is_none();
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected value to be None, but got {:?}", self.value)
+            } else {
+                "Expected value to NOT be None, but got None".to_string()
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert value equals expected (alias for to_equal for simple comparisons)
+    fn to_be(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        self.to_equal(py, expected)
+    }
+
     /// Assert greater than
     fn to_be_greater_than(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
         let result = self.value.bind(py).gt(expected.bind(py))?;
@@ -3795,21 +3817,19 @@ impl PyHookRegistry {
 
     /// Run hooks of a specific type (async method)
     ///
-    /// This properly awaits async hooks using pyo3_async_runtimes::into_future(),
-    /// which allows async hooks to work correctly even when database connections
-    /// or other async resources are needed.
+    /// Returns a Python coroutine that runs on the caller's event loop.
+    /// This ensures async hooks (like database setup) work correctly
+    /// because they share the same event loop as the test runner.
     fn run_hooks<'py>(
         &self,
         py: Python<'py>,
         hook_type: PyHookType,
         suite_instance: Option<PyObject>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        use pyo3_async_runtimes::tokio::future_into_py;
-
         let hook_type_rust: HookType = hook_type.into();
         let is_teardown = hook_type_rust.is_teardown();
 
-        // Clone hooks while holding the lock by explicitly cloning each PyObject
+        // Clone hooks while holding the lock
         let hooks_to_run: Vec<PyObject> = {
             let hooks = self.hooks.lock().unwrap();
             hooks
@@ -3818,81 +3838,50 @@ impl PyHookRegistry {
                 .unwrap_or_default()
         };
 
-        future_into_py(py, async move {
-            if hooks_to_run.is_empty() {
-                return Ok(Python::with_gil(|py| py.None()));
-            }
+        // Create Python async function to run hooks on caller's event loop
+        let code = r#"
+async def _run_hooks(hooks, instance, is_teardown, asyncio):
+    if not hooks:
+        return None
 
-            let mut errors: Vec<String> = Vec::new();
+    errors = []
+    for idx, hook_fn in enumerate(hooks):
+        hook_name = f"hook[{idx}]"
+        try:
+            if asyncio.iscoroutinefunction(hook_fn):
+                if instance is not None:
+                    await hook_fn(instance)
+                else:
+                    await hook_fn()
+            else:
+                if instance is not None:
+                    hook_fn(instance)
+                else:
+                    hook_fn()
+        except Exception as e:
+            error_msg = f"{hook_name} failed: {e}"
+            errors.append(error_msg)
+            if not is_teardown:
+                raise
 
-            for (idx, hook_fn) in hooks_to_run.iter().enumerate() {
-                let hook_name = format!("{}[{}]", hook_type_rust, idx);
+    return "; ".join(errors) if errors else None
+"#;
 
-                // Determine if hook is async and prepare the call
-                let call_result: Result<Option<PyObject>, PyErr> = Python::with_gil(|py| {
-                    let asyncio = py.import_bound("asyncio")?;
-                    let is_coroutine_fn = asyncio.getattr("iscoroutinefunction")?;
-                    let is_async: bool = is_coroutine_fn.call1((hook_fn,))?.extract()?;
+        // Execute the code to define _run_hooks
+        let globals = pyo3::types::PyDict::new(py);
+        py.run_bound(code, Some(&globals), None)?;
 
-                    if is_async {
-                        // Async hook - call to get coroutine, will await later
-                        let coro = if let Some(ref instance) = suite_instance {
-                            hook_fn.call1(py, (instance,))?
-                        } else {
-                            hook_fn.call0(py)?
-                        };
-                        Ok(Some(coro))
-                    } else {
-                        // Sync hook - execute directly
-                        if let Some(ref instance) = suite_instance {
-                            hook_fn.call1(py, (instance,))?;
-                        } else {
-                            hook_fn.call0(py)?;
-                        }
-                        Ok(None)
-                    }
-                });
+        // Get the function and call it
+        let run_hooks_fn = globals.get_item("_run_hooks")?.ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("Failed to get _run_hooks function")
+        })?;
 
-                match call_result {
-                    Ok(Some(coro)) => {
-                        // Await the Python coroutine properly using into_future
-                        let await_result: Result<(), PyErr> = async {
-                            let future = Python::with_gil(|py| {
-                                pyo3_async_runtimes::tokio::into_future(coro.bind(py).clone())
-                            })?;
-                            future.await?;
-                            Ok(())
-                        }
-                        .await;
+        let asyncio = py.import("asyncio")?;
+        let hooks_list = pyo3::types::PyList::new(py, hooks_to_run.iter().map(|h| h.bind(py)))?;
 
-                        if let Err(e) = await_result {
-                            let error_msg = format!("{} failed: {}", hook_name, e);
-                            errors.push(error_msg);
-                            if !is_teardown {
-                                return Err(e);
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        // Sync hook already executed successfully
-                    }
-                    Err(e) => {
-                        let error_msg = format!("{} failed: {}", hook_name, e);
-                        errors.push(error_msg);
-                        if !is_teardown {
-                            return Err(e);
-                        }
-                    }
-                }
-            }
-
-            // Return collected errors (if any) for teardown hooks
-            if errors.is_empty() {
-                Ok(Python::with_gil(|py| py.None()))
-            } else {
-                Ok(Python::with_gil(|py| errors.join("; ").into_py(py)))
-            }
-        })
+        // Return the coroutine (not awaited yet - caller will await it)
+        let coro = run_hooks_fn.call1((hooks_list, suite_instance, is_teardown, asyncio))?;
+        Ok(coro)
     }
 
     fn __repr__(&self) -> String {

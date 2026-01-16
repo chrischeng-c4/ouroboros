@@ -280,11 +280,12 @@ fn run_tests(
             }
 
             match run_test_file(py, &file_info.path, &file_info.module_name, verbose && !ci) {
-                Ok((passed, failed)) => {
+                Ok((passed, failed, errors)) => {
                     total_passed += passed;
                     total_failed += failed;
+                    total_errors += errors;
 
-                    if fail_fast && failed > 0 {
+                    if fail_fast && (failed > 0 || errors > 0) {
                         if !ci {
                             println!("\n❌ Stopping due to --fail-fast");
                         }
@@ -557,7 +558,7 @@ fn stop_and_collect_coverage(py: Python<'_>, cov: &Bound<'_, PyAny>, source_path
 }
 
 /// Run a single test file and return (passed, failed) counts
-fn run_test_file(py: Python<'_>, file_path: &std::path::Path, module_name: &str, verbose: bool) -> Result<(u32, u32)> {
+fn run_test_file(py: Python<'_>, file_path: &std::path::Path, module_name: &str, verbose: bool) -> Result<(u32, u32, u32)> {
     // Import module using file path
     let importlib_util = py.import("importlib.util")
         .context("Failed to import importlib.util")?;
@@ -589,6 +590,7 @@ fn run_test_file(py: Python<'_>, file_path: &std::path::Path, module_name: &str,
     // Find all TestSuite subclasses in the module
     let mut total_passed = 0u32;
     let mut total_failed = 0u32;
+    let mut total_errors = 0u32;
 
     let dir_result = module.dir()?;
     for name in dir_result.iter() {
@@ -638,22 +640,23 @@ fn run_test_file(py: Python<'_>, file_path: &std::path::Path, module_name: &str,
 
         // Create instance and run
         match run_test_suite(py, &attr, verbose) {
-            Ok((p, f)) => {
+            Ok((p, f, e)) => {
                 total_passed += p;
                 total_failed += f;
+                total_errors += e;
             }
             Err(e) => {
                 println!("  ❌ Error running {}: {}", name_str, e);
-                total_failed += 1;
+                total_errors += 1;
             }
         }
     }
 
-    Ok((total_passed, total_failed))
+    Ok((total_passed, total_failed, total_errors))
 }
 
-/// Run a TestSuite class and return (passed, failed) counts
-fn run_test_suite(py: Python<'_>, suite_class: &Bound<'_, PyAny>, verbose: bool) -> Result<(u32, u32)> {
+/// Run a TestSuite class and return (passed, failed, errors) counts
+fn run_test_suite(py: Python<'_>, suite_class: &Bound<'_, PyAny>, verbose: bool) -> Result<(u32, u32, u32)> {
     // Create instance
     let suite_instance = suite_class.call0()
         .context("Failed to instantiate test suite")?;
@@ -673,8 +676,9 @@ fn run_test_suite(py: Python<'_>, suite_class: &Bound<'_, PyAny>, verbose: bool)
     let summary = report.getattr("summary")?;
     let passed: u32 = summary.getattr("passed")?.extract()?;
     let failed: u32 = summary.getattr("failed")?.extract()?;
+    let errors: u32 = summary.getattr("errors")?.extract()?;
 
-    Ok((passed, failed))
+    Ok((passed, failed, errors))
 }
 
 /// Collect tests without running them

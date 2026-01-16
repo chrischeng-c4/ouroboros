@@ -5,9 +5,9 @@ Tests query_with_cte with real PostgreSQL database.
 """
 from datetime import datetime, timezone
 from ouroboros.postgres import execute, insert_one, query_with_cte
-from ouroboros.qc import TestSuite, expect, fixture, test
-
-class TestCteIntegration(TestSuite):
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
+class TestCteIntegration(PostgresSuite):
 
     @test
     @fixture
@@ -25,7 +25,7 @@ class TestCteIntegration(TestSuite):
         await execute('DROP TABLE IF EXISTS orders')
         await execute('DROP TABLE IF EXISTS users')
 
-class TestSimpleCTE(TestSuite):
+class TestSimpleCTE(PostgresSuite):
     """Test simple CTE functionality."""
 
     @test
@@ -52,7 +52,7 @@ class TestSimpleCTE(TestSuite):
         expect(float(results[0]['total'])).to_equal(550.0)
         expect(results[0]['order_count']).to_equal(2)
 
-class TestCTEWithWhereConditions(TestSuite):
+class TestCTEWithWhereConditions(PostgresSuite):
     """Test CTE combined with WHERE conditions."""
 
     @test
@@ -69,7 +69,7 @@ class TestCTEWithWhereConditions(TestSuite):
         results = await query_with_cte('all_orders', [('all_orders', 'SELECT * FROM orders', [])], select_columns=['user_id', 'amount', 'status'], where_conditions=[('status', 'eq', 'completed'), ('amount', 'gte', 100)], order_by=[('user_id', 'asc')])
         expect(len(results)).to_equal(5)
 
-class TestCTEWithOrderAndLimit(TestSuite):
+class TestCTEWithOrderAndLimit(PostgresSuite):
     """Test CTE with ORDER BY and LIMIT."""
 
     @test
@@ -89,7 +89,7 @@ class TestCTEWithOrderAndLimit(TestSuite):
         expect(results[1]['amount']).to_equal(250.0)
         expect(results[2]['amount']).to_equal(200.0)
 
-class TestMultipleCTEs(TestSuite):
+class TestMultipleCTEs(PostgresSuite):
     """Test multiple CTEs in a single query."""
 
     @test
@@ -119,7 +119,7 @@ class TestMultipleCTEs(TestSuite):
         expect(results[1]['user_id']).to_equal(1)
         expect(float(results[1]['total'])).to_equal(300.0)
 
-class TestCTEWithSubquery(TestSuite):
+class TestCTEWithSubquery(PostgresSuite):
     """Test CTE combined with subqueries."""
 
     @test
@@ -149,7 +149,7 @@ class TestCTEWithSubquery(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['name']).to_equal('Eve')
 
-class TestCTEJoiningTables(TestSuite):
+class TestCTEJoiningTables(PostgresSuite):
     """Test CTE that joins multiple tables."""
 
     @test
@@ -170,7 +170,7 @@ class TestCTEJoiningTables(TestSuite):
         expect(results[0]['name']).to_equal('David')
         expect(float(results[0]['total_spent'])).to_equal(550.0)
 
-class TestRecursiveCTE(TestSuite):
+class TestRecursiveCTE(PostgresSuite):
     """Test recursive CTEs."""
 
     @test
@@ -199,7 +199,7 @@ class TestRecursiveCTE(TestSuite):
         finally:
             await execute('DROP TABLE IF EXISTS categories')
 
-class TestCTEEdgeCases(TestSuite):
+class TestCTEEdgeCases(PostgresSuite):
     """Test edge cases and special scenarios."""
 
     @fixture
@@ -258,7 +258,7 @@ class TestCTEEdgeCases(TestSuite):
         expect(float(results[1]['price'])).to_equal(99.99)
         await execute('DROP TABLE IF EXISTS products')
 
-class TestCTEErrorHandling(TestSuite):
+class TestCTEErrorHandling(PostgresSuite):
     """Test error handling for CTEs."""
 
     @test
@@ -285,7 +285,7 @@ class TestCTEErrorHandling(TestSuite):
         with pytest.raises(Exception):
             await query_with_cte('orders_cte', [('orders_cte', 'SELECT * FROM orders WHERE status = $1 AND amount > $2', ['completed'])], select_columns=['id'])
 
-class TestCTEPerformance(TestSuite):
+class TestCTEPerformance(PostgresSuite):
     """Test CTE performance characteristics."""
 
     @test

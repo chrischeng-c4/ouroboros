@@ -8,9 +8,10 @@ Tests cover:
 - Error handling for duplicate keys
 """
 from ouroboros.postgres import init, close, execute, insert_one, insert_many
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestInsertOne(TestSuite):
+class TestInsertOne(PostgresSuite):
     """Test single document insert operations."""
 
     @test
@@ -70,7 +71,7 @@ class TestInsertOne(TestSuite):
         expect(rows[0]['email']).to_be_none()
         expect(rows[0]['age']).to_be_none()
 
-class TestInsertMany(TestSuite):
+class TestInsertMany(PostgresSuite):
     """Test bulk insert operations."""
 
     @test
@@ -142,7 +143,7 @@ class TestInsertMany(TestSuite):
             error_msg = str(e).lower()
             expect('unique' in error_msg or 'duplicate' in error_msg or 'constraint' in error_msg).to_be_true()
 
-class TestInsertErrors(TestSuite):
+class TestInsertErrors(PostgresSuite):
     """Test error handling for insert operations."""
 
     @test

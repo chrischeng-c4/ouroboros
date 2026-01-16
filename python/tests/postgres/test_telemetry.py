@@ -6,9 +6,10 @@ and proper instrumentation when it is available.
 """
 import os
 from unittest.mock import Mock, patch, MagicMock
-from ouroboros.qc import TestSuite, expect, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestTelemetry(TestSuite):
+class TestTelemetry(PostgresSuite):
 
     @test
     def test_import_without_otel(self):

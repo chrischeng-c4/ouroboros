@@ -15,8 +15,8 @@ from decimal import Decimal
 from datetime import date
 from ouroboros.postgres import execute, insert_one, Table, Column
 from ouroboros.postgres.query import WindowSpec
-from ouroboros.qc import TestSuite, expect, fixture, test
-
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 @fixture
 async def sales_table():
     """
@@ -35,7 +35,7 @@ async def sales_table():
         await insert_one('sales', data)
     yield
 
-class TestRowNumberWindow(TestSuite):
+class TestRowNumberWindow(PostgresSuite):
     """Test ROW_NUMBER() window function."""
 
     @test
@@ -68,7 +68,7 @@ class TestRowNumberWindow(TestSuite):
         expect(float(east_sales[0]['amount'])).to_equal(2100.0)
         expect(east_sales[0]['salesperson']).to_equal('Eve')
 
-class TestRankDenseRankWindow(TestSuite):
+class TestRankDenseRankWindow(PostgresSuite):
     """Test RANK() and DENSE_RANK() window functions."""
 
     @test
@@ -90,7 +90,7 @@ class TestRankDenseRankWindow(TestSuite):
         for i in range(1, len(ranks)):
             expect(ranks[i]).to_be_less_than_or_equal(ranks[i - 1] + 1)
 
-class TestLagLeadWindow(TestSuite):
+class TestLagLeadWindow(PostgresSuite):
     """Test LAG() and LEAD() window functions."""
 
     @test
@@ -127,7 +127,7 @@ class TestLagLeadWindow(TestSuite):
         expect(float(results[1]['prev_prev_amount'])).to_equal(0.0)
         expect(float(results[2]['prev_prev_amount'])).to_equal(2200.0)
 
-class TestFirstLastValueWindow(TestSuite):
+class TestFirstLastValueWindow(PostgresSuite):
     """Test FIRST_VALUE() and LAST_VALUE() window functions."""
 
     @test
@@ -148,7 +148,7 @@ class TestFirstLastValueWindow(TestSuite):
         expect(len(last_amounts)).to_equal(1)
         expect(1700.0).to_be_in(last_amounts)
 
-class TestAggregateWindowFunctions(TestSuite):
+class TestAggregateWindowFunctions(PostgresSuite):
     """Test aggregate functions used as window functions."""
 
     @test
@@ -178,7 +178,7 @@ class TestAggregateWindowFunctions(TestSuite):
         expect(float(results[1]['two_sale_total'])).to_equal(2000.0)
         expect(float(results[2]['two_sale_total'])).to_equal(2100.0)
 
-class TestWindowWithWhereAndGroupBy(TestSuite):
+class TestWindowWithWhereAndGroupBy(PostgresSuite):
     """Test window functions combined with WHERE and GROUP BY."""
 
     @test
@@ -211,7 +211,7 @@ class TestWindowWithWhereAndGroupBy(TestSuite):
             region_avgs = {float(r['region_avg']) for r in rows}
             expect(len(region_avgs)).to_equal(1)
 
-class TestMultipleWindowFunctions(TestSuite):
+class TestMultipleWindowFunctions(PostgresSuite):
     """Test multiple window functions in the same query."""
 
     @test
@@ -249,7 +249,7 @@ class TestMultipleWindowFunctions(TestSuite):
                 if i > 1:
                     expect(row['first_sale_date']).to_equal(rows[0]['first_sale_date'])
 
-class TestWindowEdgeCases(TestSuite):
+class TestWindowEdgeCases(PostgresSuite):
     """Test edge cases and special scenarios for window functions."""
 
     @test

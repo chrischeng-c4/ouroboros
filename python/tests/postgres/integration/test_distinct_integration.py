@@ -5,8 +5,8 @@ Tests query_aggregate with distinct and distinct_on parameters using a real Post
 """
 from datetime import date
 from ouroboros.postgres import execute, insert_one, query_aggregate
-from ouroboros.qc import TestSuite, expect, fixture, test
-
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 @fixture
 async def employees_table():
     """Create and populate an employees table for distinct testing."""
@@ -16,7 +16,7 @@ async def employees_table():
         await insert_one('employees', data)
     yield
 
-class TestDistinctSingleColumn(TestSuite):
+class TestDistinctSingleColumn(PostgresSuite):
     """Test DISTINCT on single column."""
 
     @test
@@ -46,7 +46,7 @@ class TestDistinctSingleColumn(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['unique_depts']).to_equal(3)
 
-class TestDistinctMultipleColumns(TestSuite):
+class TestDistinctMultipleColumns(PostgresSuite):
     """Test DISTINCT on multiple columns."""
 
     @test
@@ -65,7 +65,7 @@ class TestDistinctMultipleColumns(TestSuite):
         expect(eng_devs[0]['employee_count']).to_equal(3)
         expect(float(eng_devs[0]['avg_salary'])).to_equal(pytest.approx(82333.33, rel=0.01))
 
-class TestDistinctOn(TestSuite):
+class TestDistinctOn(PostgresSuite):
     """Test PostgreSQL DISTINCT ON functionality."""
 
     @test
@@ -92,7 +92,7 @@ class TestDistinctOn(TestSuite):
         results = await query_aggregate('employees', [('min', 'salary', 'min_salary'), ('count', None, 'count')], group_by=['department', 'role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('role', 'asc')], limit=None, distinct_on=['department', 'role'])
         expect(len(results)).to_equal(7)
 
-class TestDistinctWithAggregates(TestSuite):
+class TestDistinctWithAggregates(PostgresSuite):
     """Test DISTINCT combined with aggregate functions."""
 
     @test
@@ -124,7 +124,7 @@ class TestDistinctWithAggregates(TestSuite):
         expect(len(manager_result)).to_equal(1)
         expect(manager_result[0]['dept_count']).to_equal(3)
 
-class TestDistinctWithWhere(TestSuite):
+class TestDistinctWithWhere(PostgresSuite):
     """Test DISTINCT combined with WHERE conditions."""
 
     @test
@@ -161,7 +161,7 @@ class TestDistinctWithWhere(TestSuite):
         results = await query_aggregate('employees', [('max', 'salary', 'max_salary'), ('count', None, 'count')], group_by=['department'], having=None, where_conditions=[('salary', 'lt', 100000)], order_by=[('department', 'asc')], limit=None, distinct_on=['department'])
         expect(len(results)).to_equal(3)
 
-class TestDistinctEdgeCases(TestSuite):
+class TestDistinctEdgeCases(PostgresSuite):
     """Test edge cases and special scenarios."""
 
     @test

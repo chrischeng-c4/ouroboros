@@ -12,9 +12,9 @@ Run with:
     POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/ouroboros_test"         pytest tests/postgres/integration/test_execute_integration.py -v -m integration
 """
 from ouroboros.postgres import execute
-from ouroboros.qc import expect, fixture, TestSuite, test
-
-class TestExecuteIntegration(TestSuite):
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
+class TestExecuteIntegration(PostgresSuite):
 
     @test
     @fixture
@@ -24,7 +24,7 @@ class TestExecuteIntegration(TestSuite):
         await execute('TRUNCATE TABLE test_execute_users RESTART IDENTITY')
         yield
 
-class TestExecuteIntegration(TestSuite):
+class TestExecuteIntegration(PostgresSuite):
     """Integration tests for execute function with real PostgreSQL."""
 
     @test

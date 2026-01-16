@@ -47,6 +47,10 @@ class PostgresSuite(TestSuite):
             await init(POSTGRES_TEST_URI, min_connections=2, max_connections=10)
             PostgresSuite._db_initialized = True
 
+    async def setup_method(self) -> None:
+        """Automatically initialize DB before each test."""
+        await self.ensure_db()
+
     async def teardown_method(self) -> None:
         """Clean up all test tables after each test for isolation."""
         try:

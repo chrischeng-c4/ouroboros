@@ -3,10 +3,11 @@ Integration tests for subquery support.
 
 Tests subquery functionality (IN, NOT IN, EXISTS, NOT EXISTS) with real PostgreSQL database.
 """
-from ouroboros.qc import expect, fixture, TestSuite, test
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import execute, insert_one, query_aggregate, query_with_cte
 
-class TestSubquery(TestSuite):
+class TestSubquery(PostgresSuite):
 
     @test
     @fixture
@@ -24,7 +25,7 @@ class TestSubquery(TestSuite):
         await execute('DROP TABLE IF EXISTS orders')
         await execute('DROP TABLE IF EXISTS users')
 
-class TestSubqueryIn(TestSuite):
+class TestSubqueryIn(PostgresSuite):
     """Test IN subquery functionality."""
 
     @test
@@ -48,7 +49,7 @@ class TestSubqueryIn(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['total']).to_equal(2)
 
-class TestSubqueryExists(TestSuite):
+class TestSubqueryExists(PostgresSuite):
     """Test EXISTS subquery functionality."""
 
     @test
@@ -72,7 +73,7 @@ class TestSubqueryExists(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['total']).to_equal(1)
 
-class TestSubqueryCombinations(TestSuite):
+class TestSubqueryCombinations(PostgresSuite):
     """Test combining subqueries with other WHERE conditions."""
 
     @test
@@ -89,7 +90,7 @@ class TestSubqueryCombinations(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['total']).to_equal(2)
 
-class TestSubqueryWithCTE(TestSuite):
+class TestSubqueryWithCTE(PostgresSuite):
     """Test subqueries with CTEs."""
 
     @test
@@ -101,7 +102,7 @@ class TestSubqueryWithCTE(TestSuite):
         expect('Alice').to_be_in(names)
         expect('Bob').to_be_in(names)
 
-class TestSubqueryErrors(TestSuite):
+class TestSubqueryErrors(PostgresSuite):
     """Test error handling for subqueries."""
 
     @test

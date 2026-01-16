@@ -4,9 +4,9 @@ This module tests cascade delete operations that handle foreign key relationship
 and cascade rules via the PostgreSQL database.
 """
 from ouroboros.postgres import execute
-from ouroboros.qc import expect, fixture, TestSuite, test
-
-class TestCascadeDelete(TestSuite):
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
+class TestCascadeDelete(PostgresSuite):
 
     @test
     async def test_delete_with_cascade_basic(self, setup_cascade_tables):
@@ -158,7 +158,7 @@ async def setup_cascade_tables():
     await execute('\n        CREATE TABLE IF NOT EXISTS cascade_comments (\n            id SERIAL PRIMARY KEY,\n            post_id INTEGER NOT NULL,\n            user_id INTEGER,\n            text TEXT NOT NULL,\n            FOREIGN KEY (post_id) REFERENCES cascade_posts(id) ON DELETE RESTRICT,\n            FOREIGN KEY (user_id) REFERENCES cascade_users(id) ON DELETE SET NULL\n        );\n    ')
     yield
 
-class TestNestedCascadeDelete(TestSuite):
+class TestNestedCascadeDelete(PostgresSuite):
     """Test nested relationship cascade delete scenarios."""
 
     @test

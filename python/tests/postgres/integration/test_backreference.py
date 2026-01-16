@@ -10,9 +10,10 @@ These tests verify:
 - Class vs instance access patterns
 """
 from ouroboros.postgres import execute, insert_one, BackReference, BackReferenceQuery
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestBackreference(TestSuite):
+class TestBackreference(PostgresSuite):
 
     @test
     async def test_backreference_fetch_all(self):

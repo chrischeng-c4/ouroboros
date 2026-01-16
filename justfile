@@ -143,9 +143,8 @@ test-postgres-setup:
 test-postgres:
     #!/usr/bin/env bash
     echo "Running PostgreSQL integration tests..."
-    just test-postgres-setup
-    POSTGRES_URI="postgresql://rstn:rstn@localhost:5432/data_bridge_test" \
-    uv run pytest python/tests/postgres/integration/ -v -m integration
+    POSTGRES_URI="${POSTGRES_URI:-postgresql://chris.cheng@localhost:5432/postgres}" \
+    ob qc run python/tests/postgres -v
 
 # Run PostgreSQL migration example
 test-postgres-migrations:

@@ -10,9 +10,10 @@ Tests cover:
 - Error handling for invalid inputs
 """
 from ouroboros.postgres import init, close, execute, upsert_one, upsert_many
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestUpsertOne(TestSuite):
+class TestUpsertOne(PostgresSuite):
     """Test single document upsert operations."""
 
     @test
@@ -110,7 +111,7 @@ class TestUpsertOne(TestSuite):
         expect(rows[0]['user_id']).to_equal(100)
         expect(rows[1]['user_id']).to_equal(101)
 
-class TestUpsertMany(TestSuite):
+class TestUpsertMany(PostgresSuite):
     """Test bulk upsert operations."""
 
     @test
@@ -233,7 +234,7 @@ class TestUpsertMany(TestSuite):
         expect(all((row['status'] == 'premium' for row in rows))).to_be_true()
         expect(all((row['name'].endswith('Updated') for row in rows))).to_be_true()
 
-class TestUpsertErrors(TestSuite):
+class TestUpsertErrors(PostgresSuite):
     """Test error handling for upsert operations."""
 
     @test

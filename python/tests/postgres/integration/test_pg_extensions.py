@@ -1,8 +1,9 @@
 """Integration tests for PostgreSQL extensions (Full-Text Search, PostGIS, Arrays)."""
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import Table, Column, init, FullTextSearch, fts, Point, GeoQuery, ArrayOps, raiseload, selectinload, relationship
 
-class TestPgExtensions(TestSuite):
+class TestPgExtensions(PostgresSuite):
 
     @test
     async def test_fulltext_to_tsvector(self):

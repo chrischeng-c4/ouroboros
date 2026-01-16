@@ -1,8 +1,9 @@
 """Unit tests for PostgreSQL transaction support."""
 from ouroboros.postgres import connection
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestTransaction(TestSuite):
+class TestTransaction(PostgresSuite):
 
     @test
     async def test_transaction_basic_flow(self):

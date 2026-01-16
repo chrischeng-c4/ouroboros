@@ -4,8 +4,8 @@ Integration tests for SQL set operations (UNION/INTERSECT/EXCEPT).
 Tests set operation functionality with real PostgreSQL database using raw SQL.
 """
 from ouroboros.postgres import execute, insert_one
-from ouroboros.qc import TestSuite, expect, fixture, test
-
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 @fixture
 async def customers_2023():
     """Create and populate customers_2023 table."""
@@ -26,7 +26,7 @@ async def customers_2024():
     yield
     await execute('DROP TABLE IF EXISTS customers_2024')
 
-class TestBasicSetOperations(TestSuite):
+class TestBasicSetOperations(PostgresSuite):
     """Test basic set operations."""
 
     @test
@@ -73,7 +73,7 @@ class TestBasicSetOperations(TestSuite):
         expect('bob@example.com').to_not_be_in(emails)
         expect('frank@example.com').to_not_be_in(emails)
 
-class TestSetOperationsWithFilters(TestSuite):
+class TestSetOperationsWithFilters(PostgresSuite):
     """Test set operations combined with WHERE conditions."""
 
     @test
@@ -102,7 +102,7 @@ class TestSetOperationsWithFilters(TestSuite):
         expect('david@example.com').to_be_in(emails)
         expect('eve@example.com').to_be_in(emails)
 
-class TestChainedSetOperations(TestSuite):
+class TestChainedSetOperations(PostgresSuite):
     """Test multiple set operations chained together."""
 
     @test
@@ -124,7 +124,7 @@ class TestChainedSetOperations(TestSuite):
         results = await execute('\n            WITH combined AS (\n                SELECT * FROM customers_2023\n                UNION\n                SELECT * FROM customers_2024 WHERE id <= 3\n            )\n            SELECT * FROM combined\n            INTERSECT\n            SELECT * FROM customers_2024\n        ')
         expect(len(results)).to_equal(3)
 
-class TestSetOperationsWithOrderBy(TestSuite):
+class TestSetOperationsWithOrderBy(PostgresSuite):
     """Test set operations with ORDER BY clause."""
 
     @test
@@ -145,7 +145,7 @@ class TestSetOperationsWithOrderBy(TestSuite):
         expect(ids).to_equal(sorted(ids))
         expect(ids).to_equal([1, 2, 3])
 
-class TestSetOperationsWithLimit(TestSuite):
+class TestSetOperationsWithLimit(PostgresSuite):
     """Test set operations with LIMIT clause."""
 
     @test
@@ -162,7 +162,7 @@ class TestSetOperationsWithLimit(TestSuite):
         ids = [r['id'] for r in results]
         expect(min(ids)).to_be_greater_than_or_equal(3)
 
-class TestSetOperationsWithColumns(TestSuite):
+class TestSetOperationsWithColumns(PostgresSuite):
     """Test set operations must have matching column structure."""
 
     @test
@@ -174,7 +174,7 @@ class TestSetOperationsWithColumns(TestSuite):
             expect('id').to_be_in(result)
             expect('name').to_be_in(result)
 
-class TestIntersectAll(TestSuite):
+class TestIntersectAll(PostgresSuite):
     """Test INTERSECT ALL (keeps duplicates)."""
 
     @test
@@ -183,7 +183,7 @@ class TestIntersectAll(TestSuite):
         results = await execute('\n            SELECT * FROM customers_2023\n            INTERSECT ALL\n            SELECT * FROM customers_2024\n        ')
         expect(len(results)).to_equal(3)
 
-class TestExceptAll(TestSuite):
+class TestExceptAll(PostgresSuite):
     """Test EXCEPT ALL (keeps duplicates)."""
 
     @test
@@ -195,7 +195,7 @@ class TestExceptAll(TestSuite):
         expect('david@example.com').to_be_in(emails)
         expect('eve@example.com').to_be_in(emails)
 
-class TestSetOperationsEdgeCases(TestSuite):
+class TestSetOperationsEdgeCases(PostgresSuite):
     """Test edge cases and special scenarios."""
 
     @test

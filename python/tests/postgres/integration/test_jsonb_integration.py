@@ -14,8 +14,8 @@ Tests cover:
 10. JSONB index usage (GIN index)
 """
 from ouroboros.postgres import execute, insert_one, insert_many
-from ouroboros.qc import expect, fixture, TestSuite, test
-
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
 @fixture
 async def products_table():
     """
@@ -33,7 +33,7 @@ async def products_table():
         await execute('INSERT INTO products (name, attributes, metadata) VALUES ($1, $2::jsonb, $3::jsonb)', [product['name'], product['attributes'], product['metadata']])
     yield
 
-class TestJsonbStorageAndRetrieval(TestSuite):
+class TestJsonbStorageAndRetrieval(PostgresSuite):
     """Test basic JSONB storage and retrieval."""
 
     @test
@@ -80,7 +80,7 @@ class TestJsonbStorageAndRetrieval(TestSuite):
         expect(product['metadata']['rating']).to_be_none()
         expect(product['metadata']['inStock']).to_be_true()
 
-class TestJsonbContainmentOperator(TestSuite):
+class TestJsonbContainmentOperator(PostgresSuite):
     """Test JSONB @> containment operator (json_contains)."""
 
     @test
@@ -135,7 +135,7 @@ class TestJsonbContainmentOperator(TestSuite):
         results = await execute('\n            SELECT * FROM products\n            WHERE attributes @> \'{"color": "purple"}\'::jsonb\n            ORDER BY id\n        ')
         expect(len(results)).to_equal(0)
 
-class TestJsonbKeyExistsOperator(TestSuite):
+class TestJsonbKeyExistsOperator(PostgresSuite):
     """Test JSONB ? key exists operator."""
 
     @test
@@ -164,7 +164,7 @@ class TestJsonbKeyExistsOperator(TestSuite):
         results = await execute("\n            SELECT * FROM products\n            WHERE NOT (attributes ? 'limited')\n            ORDER BY id\n        ")
         expect(len(results)).to_equal(6)
 
-class TestJsonbPathExtraction(TestSuite):
+class TestJsonbPathExtraction(PostgresSuite):
     """Test JSONB path extraction operators -> and ->>."""
 
     @test
@@ -208,7 +208,7 @@ class TestJsonbPathExtraction(TestSuite):
         expect(results[0]['name']).to_equal('Laptop Backpack')
         expect(results[0]['compartments']).to_equal(5)
 
-class TestJsonbArrayOperations(TestSuite):
+class TestJsonbArrayOperations(PostgresSuite):
     """Test JSONB array containment and operations."""
 
     @test
@@ -242,7 +242,7 @@ class TestJsonbArrayOperations(TestSuite):
         expect('clothing' in tags).to_be_true()
         expect('sports' in tags).to_be_true()
 
-class TestJsonbWithWhereConditions(TestSuite):
+class TestJsonbWithWhereConditions(PostgresSuite):
     """Test JSONB operators combined with regular WHERE conditions."""
 
     @test
@@ -275,7 +275,7 @@ class TestJsonbWithWhereConditions(TestSuite):
         expect(len(results)).to_equal(1)
         expect(results[0]['name']).to_equal('Running Shoes')
 
-class TestJsonbWithAggregates(TestSuite):
+class TestJsonbWithAggregates(PostgresSuite):
     """Test JSONB combined with aggregate functions."""
 
     @test
@@ -308,7 +308,7 @@ class TestJsonbWithAggregates(TestSuite):
         results = await execute("\n            SELECT\n                metadata->'tags'->0 as primary_tag,\n                COUNT(*) as count\n            FROM products\n            WHERE metadata->'tags'->0 IS NOT NULL\n            GROUP BY metadata->'tags'->0\n            HAVING COUNT(*) > 1\n            ORDER BY count DESC\n        ")
         expect(len(results) >= 1).to_be_true()
 
-class TestJsonbWithOrderBy(TestSuite):
+class TestJsonbWithOrderBy(PostgresSuite):
     """Test JSONB with ORDER BY clauses."""
 
     @test
@@ -344,7 +344,7 @@ class TestJsonbWithOrderBy(TestSuite):
         results = await execute("\n            SELECT\n                name,\n                (metadata->>'inStock')::boolean as in_stock,\n                (metadata->>'rating')::float as rating\n            FROM products\n            WHERE metadata->>'rating' IS NOT NULL\n            ORDER BY\n                (metadata->>'inStock')::boolean DESC NULLS LAST,\n                (metadata->>'rating')::float DESC NULLS LAST\n        ")
         expect(results[0]['in_stock']).to_be_true()
 
-class TestJsonbIndexUsage(TestSuite):
+class TestJsonbIndexUsage(PostgresSuite):
     """Test JSONB GIN index creation and usage."""
 
     @test
@@ -372,7 +372,7 @@ class TestJsonbIndexUsage(TestSuite):
         explain = await execute('\n            EXPLAIN SELECT * FROM products\n            WHERE metadata @> \'{"inStock": true}\'::jsonb\n        ')
         plan_text = ' '.join([row.get('QUERY PLAN', '') for row in explain])
 
-class TestJsonbComplexQueries(TestSuite):
+class TestJsonbComplexQueries(PostgresSuite):
     """Test complex JSONB query scenarios."""
 
     @test
@@ -422,7 +422,7 @@ class TestJsonbComplexQueries(TestSuite):
         expect(results[0]['metadata']['verified']).to_be_true()
         expect(results[0]['metadata']['role']).to_equal('admin')
 
-class TestJsonbEdgeCases(TestSuite):
+class TestJsonbEdgeCases(PostgresSuite):
     """Test JSONB edge cases and special scenarios."""
 
     @test

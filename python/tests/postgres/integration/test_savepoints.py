@@ -1,8 +1,8 @@
 """Integration tests for PostgreSQL savepoint functionality."""
 from ouroboros.postgres import connection, execute
-from ouroboros.qc import expect, fixture, TestSuite, test
-
-class TestSavepoints(TestSuite):
+from ouroboros.qc import expect, fixture, test
+from tests.postgres.base import PostgresSuite
+class TestSavepoints(PostgresSuite):
 
     @test
     @fixture

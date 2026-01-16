@@ -7,9 +7,10 @@ These tests verify:
 - ForeignKeyProxy functionality
 """
 from ouroboros.postgres import execute, get_foreign_keys, find_by_foreign_key, Column, ForeignKeyProxy
-from ouroboros.qc import expect, TestSuite, test
+from ouroboros.qc import expect, test
+from tests.postgres.base import PostgresSuite
 
-class TestRelationships(TestSuite):
+class TestRelationships(PostgresSuite):
 
     @test
     async def test_get_foreign_keys_basic(self):
