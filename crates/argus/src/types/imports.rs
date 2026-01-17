@@ -196,7 +196,6 @@ impl ImportResolver {
 }
 
 /// Parse an import statement from a tree-sitter node
-#[allow(dead_code)]
 pub fn parse_import(source: &str, node: &tree_sitter::Node) -> Option<Import> {
     let node_text = |n: &tree_sitter::Node| -> String {
         n.utf8_text(source.as_bytes())

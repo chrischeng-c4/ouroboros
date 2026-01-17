@@ -721,11 +721,11 @@ impl<'a> TypeChecker<'a> {
                 a.len() == b.len() && a.iter().zip(b).all(|(t1, t2)| self.is_assignable(t1, t2))
             }
 
-            // Class subtyping (simplified)
+            // Class subtyping with inheritance
             (
                 Type::Instance { name: n1, .. },
                 Type::Instance { name: n2, .. },
-            ) => n1 == n2, // TODO: check inheritance
+            ) => n1 == n2 || self.inferencer.is_subclass(n2, n1),
 
             _ => false,
         }
@@ -1005,5 +1005,34 @@ def safe_divide(a: int, b: int) -> int:
 
         // Should not have type errors
         assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
+    }
+
+    #[test]
+    fn test_subclass_assignment() {
+        // Test that subclass instances can be assigned to parent type
+        let diagnostics = check_code(
+            r#"
+class Animal:
+    def speak(self) -> str:
+        return "sound"
+
+class Dog(Animal):
+    def speak(self) -> str:
+        return "woof"
+
+def make_sound(a: Animal) -> str:
+    return a.speak()
+
+d: Dog = Dog()
+a: Animal = d
+make_sound(d)
+"#,
+        );
+
+        // Should not have type mismatch errors for subclass assignment
+        assert!(
+            !diagnostics.iter().any(|d| d.code == "TC001"),
+            "Should allow subclass assignment to parent type"
+        );
     }
 }

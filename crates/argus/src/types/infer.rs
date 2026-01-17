@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use tree_sitter::Node;
 
+use super::imports::{parse_import, ImportResolver};
+use super::stubs::StubLoader;
 use super::ty::{Param, ParamKind, Type, TypeVarId};
 
 /// Information about a class definition
@@ -98,6 +100,11 @@ pub struct TypeInferencer<'a> {
     next_type_var: usize,
     /// Type overrides from narrowing (checked before env)
     type_overrides: Option<HashMap<String, Type>>,
+    /// Stub loader for builtin/typing/collections stubs
+    #[allow(dead_code)]
+    stubs: StubLoader,
+    /// Import resolver for module resolution
+    resolver: ImportResolver,
 }
 
 impl<'a> TypeInferencer<'a> {
@@ -106,6 +113,15 @@ impl<'a> TypeInferencer<'a> {
         // Add builtins
         Self::add_builtins(&mut env);
 
+        // Initialize stubs and resolver
+        let mut stubs = StubLoader::new();
+        stubs.load_builtins();
+
+        let mut resolver = ImportResolver::new();
+        for (path, info) in stubs.modules() {
+            resolver.register_module(path, info.clone());
+        }
+
         Self {
             source,
             env,
@@ -113,6 +129,8 @@ impl<'a> TypeInferencer<'a> {
             type_vars: HashMap::new(),
             next_type_var: 0,
             type_overrides: None,
+            stubs,
+            resolver,
         }
     }
 
@@ -163,6 +181,60 @@ impl<'a> TypeInferencer<'a> {
     /// Get class info by name
     pub fn get_class(&self, name: &str) -> Option<&ClassInfo> {
         self.classes.get(name)
+    }
+
+    /// Get attribute type with inheritance support
+    /// Walks up the inheritance chain to find the attribute
+    pub fn get_attribute_recursive(&self, class_name: &str, attr_name: &str) -> Option<Type> {
+        if let Some(class_info) = self.classes.get(class_name) {
+            // First check the current class
+            if let Some(ty) = class_info.get_attribute(attr_name) {
+                return Some(ty.clone());
+            }
+            // Then check base classes (in order)
+            for base_name in &class_info.bases {
+                if let Some(ty) = self.get_attribute_recursive(base_name, attr_name) {
+                    return Some(ty);
+                }
+            }
+        }
+        None
+    }
+
+    /// Get class-level attribute (class vars, methods) with inheritance support
+    fn get_class_attribute_recursive(&self, class_name: &str, attr_name: &str) -> Option<Type> {
+        if let Some(class_info) = self.classes.get(class_name) {
+            // First check class variables
+            if let Some(ty) = class_info.class_vars.get(attr_name) {
+                return Some(ty.clone());
+            }
+            // Then check methods
+            if let Some(ty) = class_info.methods.get(attr_name) {
+                return Some(ty.clone());
+            }
+            // Then check base classes
+            for base_name in &class_info.bases {
+                if let Some(ty) = self.get_class_attribute_recursive(base_name, attr_name) {
+                    return Some(ty);
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if a class is a subclass of another (including self)
+    pub fn is_subclass(&self, child: &str, parent: &str) -> bool {
+        if child == parent {
+            return true;
+        }
+        if let Some(class_info) = self.classes.get(child) {
+            for base_name in &class_info.bases {
+                if self.is_subclass(base_name, parent) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Add builtin types to the environment
@@ -551,39 +623,23 @@ impl<'a> TypeInferencer<'a> {
 
         match &object_type {
             Type::Instance { name, .. } => {
-                // Look up attribute in class info
-                if let Some(class_info) = self.classes.get(name) {
-                    if let Some(attr_type) = class_info.get_attribute(attr_name) {
-                        return attr_type.clone();
-                    }
-                }
-                Type::Unknown
+                // Look up attribute with inheritance support
+                self.get_attribute_recursive(name, attr_name)
+                    .unwrap_or(Type::Unknown)
             }
             Type::ClassType { name, .. } => {
-                // Class attribute access (static methods, class vars)
-                if let Some(class_info) = self.classes.get(name) {
-                    // First check class variables
-                    if let Some(attr_type) = class_info.class_vars.get(attr_name) {
-                        return attr_type.clone();
-                    }
-                    // Then check methods
-                    if let Some(method_type) = class_info.methods.get(attr_name) {
-                        return method_type.clone();
-                    }
-                }
-                Type::Unknown
+                // Class attribute access (static methods, class vars) with inheritance
+                self.get_class_attribute_recursive(name, attr_name)
+                    .unwrap_or(Type::Unknown)
             }
             Type::Optional(inner) => {
-                // For Optional[T].attr, return the attribute type from T
-                // but note this could be None
+                // For Optional[T].attr, return the attribute type from T with inheritance
                 if let Type::Instance { name, .. } = inner.as_ref() {
-                    if let Some(class_info) = self.classes.get(name) {
-                        if let Some(attr_type) = class_info.get_attribute(attr_name) {
-                            return attr_type.clone();
-                        }
-                    }
+                    self.get_attribute_recursive(name, attr_name)
+                        .unwrap_or(Type::Unknown)
+                } else {
+                    Type::Unknown
                 }
-                Type::Unknown
             }
             _ => Type::Unknown,
         }
@@ -1093,107 +1149,11 @@ impl<'a> TypeInferencer<'a> {
 
     /// Analyze an import statement and add imported names to the environment
     pub fn analyze_import(&mut self, node: &Node) {
-        match node.kind() {
-            "import_statement" => {
-                // import module [as alias]
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    if child.kind() == "dotted_name" {
-                        let module_name = self.node_text(&child).to_string();
-                        // Create a module type placeholder
-                        self.env.bind(module_name.clone(), Type::Instance {
-                            name: format!("module:{}", module_name),
-                            module: Some(module_name),
-                            type_args: vec![],
-                        });
-                    } else if child.kind() == "aliased_import" {
-                        if let Some(name_node) = child.child_by_field_name("name") {
-                            let module_name = self.node_text(&name_node).to_string();
-                            let alias = child.child_by_field_name("alias")
-                                .map(|a| self.node_text(&a).to_string())
-                                .unwrap_or_else(|| module_name.clone());
-                            self.env.bind(alias, Type::Instance {
-                                name: format!("module:{}", module_name),
-                                module: Some(module_name),
-                                type_args: vec![],
-                            });
-                        }
-                    }
-                }
+        if let Some(import) = parse_import(self.source, node) {
+            let resolved = self.resolver.resolve_import(&import);
+            for (name, ty) in resolved {
+                self.env.bind(name, ty);
             }
-            "import_from_statement" => {
-                // from module import name [as alias]
-                let module_name = node.child_by_field_name("module_name")
-                    .map(|n| self.node_text(&n).to_string())
-                    .unwrap_or_default();
-
-                let mut cursor = node.walk();
-                for child in node.children(&mut cursor) {
-                    match child.kind() {
-                        "dotted_name" | "identifier" if child.start_byte() > node.child_by_field_name("module_name").map(|n| n.end_byte()).unwrap_or(0) => {
-                            let name = self.node_text(&child).to_string();
-                            let import_type = self.resolve_import_type(&module_name, &name);
-                            self.env.bind(name, import_type);
-                        }
-                        "aliased_import" => {
-                            if let Some(name_node) = child.child_by_field_name("name") {
-                                let name = self.node_text(&name_node).to_string();
-                                let alias = child.child_by_field_name("alias")
-                                    .map(|a| self.node_text(&a).to_string())
-                                    .unwrap_or_else(|| name.clone());
-                                let import_type = self.resolve_import_type(&module_name, &name);
-                                self.env.bind(alias, import_type);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// Resolve the type for an imported name
-    fn resolve_import_type(&self, module: &str, name: &str) -> Type {
-        // Handle typing module specially
-        match module {
-            "typing" => {
-                match name {
-                    "List" => Type::ClassType { name: "list".to_string(), module: Some("typing".to_string()) },
-                    "Dict" => Type::ClassType { name: "dict".to_string(), module: Some("typing".to_string()) },
-                    "Set" => Type::ClassType { name: "set".to_string(), module: Some("typing".to_string()) },
-                    "Tuple" => Type::ClassType { name: "tuple".to_string(), module: Some("typing".to_string()) },
-                    "Optional" => Type::ClassType { name: "Optional".to_string(), module: Some("typing".to_string()) },
-                    "Union" => Type::ClassType { name: "Union".to_string(), module: Some("typing".to_string()) },
-                    "Callable" => Type::ClassType { name: "Callable".to_string(), module: Some("typing".to_string()) },
-                    "Any" => Type::Any,
-                    "TypeVar" => Type::ClassType { name: "TypeVar".to_string(), module: Some("typing".to_string()) },
-                    "Generic" => Type::ClassType { name: "Generic".to_string(), module: Some("typing".to_string()) },
-                    "Protocol" => Type::ClassType { name: "Protocol".to_string(), module: Some("typing".to_string()) },
-                    _ => Type::Instance {
-                        name: name.to_string(),
-                        module: Some(module.to_string()),
-                        type_args: vec![],
-                    },
-                }
-            }
-            "collections" => {
-                match name {
-                    "deque" | "defaultdict" | "OrderedDict" | "Counter" | "ChainMap" => {
-                        Type::ClassType { name: name.to_string(), module: Some("collections".to_string()) }
-                    }
-                    _ => Type::Instance {
-                        name: name.to_string(),
-                        module: Some(module.to_string()),
-                        type_args: vec![],
-                    },
-                }
-            }
-            _ => Type::Instance {
-                name: name.to_string(),
-                module: Some(module.to_string()),
-                type_args: vec![],
-            },
         }
     }
 }
@@ -1328,5 +1288,150 @@ p.x
         let class_info = class_info.unwrap();
         assert!(class_info.attributes.contains_key("x"));
         assert!(class_info.attributes.contains_key("y"));
+    }
+
+    #[test]
+    fn test_typing_import_integration() {
+        let code = "from typing import List, Optional";
+        let mut parser = MultiParser::new().unwrap();
+        let parsed = parser
+            .parse(code, crate::syntax::Language::Python)
+            .unwrap();
+        let mut inferencer = TypeInferencer::new(code);
+
+        let root = parsed.tree.root_node();
+        if let Some(import_node) = root.child(0) {
+            inferencer.analyze_import(&import_node);
+        }
+
+        // Verify List and Optional are now in env
+        assert!(inferencer.env().lookup("List").is_some());
+        assert!(inferencer.env().lookup("Optional").is_some());
+    }
+
+    #[test]
+    fn test_collections_import_integration() {
+        let code = "from collections import deque, Counter";
+        let mut parser = MultiParser::new().unwrap();
+        let parsed = parser
+            .parse(code, crate::syntax::Language::Python)
+            .unwrap();
+        let mut inferencer = TypeInferencer::new(code);
+
+        let root = parsed.tree.root_node();
+        if let Some(import_node) = root.child(0) {
+            inferencer.analyze_import(&import_node);
+        }
+
+        assert!(inferencer.env().lookup("deque").is_some());
+        assert!(inferencer.env().lookup("Counter").is_some());
+    }
+
+    #[test]
+    fn test_import_with_alias() {
+        let code = "from typing import List as L, Dict as D";
+        let mut parser = MultiParser::new().unwrap();
+        let parsed = parser
+            .parse(code, crate::syntax::Language::Python)
+            .unwrap();
+        let mut inferencer = TypeInferencer::new(code);
+
+        let root = parsed.tree.root_node();
+        if let Some(import_node) = root.child(0) {
+            inferencer.analyze_import(&import_node);
+        }
+
+        // Should be available under aliases
+        assert!(inferencer.env().lookup("L").is_some());
+        assert!(inferencer.env().lookup("D").is_some());
+        // Original names should not be bound
+        assert!(inferencer.env().lookup("List").is_none());
+        assert!(inferencer.env().lookup("Dict").is_none());
+    }
+
+    #[test]
+    fn test_inheritance_attribute_lookup() {
+        let code = r#"
+class Animal:
+    species: str = "unknown"
+
+    def speak(self) -> str:
+        return "sound"
+
+class Dog(Animal):
+    def bark(self) -> str:
+        return "woof"
+"#;
+        let mut parser = MultiParser::new().unwrap();
+        let parsed = parser
+            .parse(code, crate::syntax::Language::Python)
+            .unwrap();
+        let mut inferencer = TypeInferencer::new(code);
+
+        // Analyze all classes
+        let root = parsed.tree.root_node();
+        let mut cursor = root.walk();
+        for child in root.children(&mut cursor) {
+            if child.kind() == "class_definition" {
+                inferencer.analyze_class(&child);
+            }
+        }
+
+        // Dog should have its own method
+        let bark = inferencer.get_attribute_recursive("Dog", "bark");
+        assert!(bark.is_some());
+
+        // Dog should inherit speak from Animal
+        let speak = inferencer.get_attribute_recursive("Dog", "speak");
+        assert!(speak.is_some());
+
+        // Dog should inherit class var from Animal
+        let species = inferencer.get_attribute_recursive("Dog", "species");
+        assert!(species.is_some());
+
+        // Animal should not have bark
+        let animal_bark = inferencer.get_attribute_recursive("Animal", "bark");
+        assert!(animal_bark.is_none());
+    }
+
+    #[test]
+    fn test_is_subclass() {
+        let code = r#"
+class Animal:
+    pass
+
+class Dog(Animal):
+    pass
+
+class Labrador(Dog):
+    pass
+"#;
+        let mut parser = MultiParser::new().unwrap();
+        let parsed = parser
+            .parse(code, crate::syntax::Language::Python)
+            .unwrap();
+        let mut inferencer = TypeInferencer::new(code);
+
+        // Analyze all classes
+        let root = parsed.tree.root_node();
+        let mut cursor = root.walk();
+        for child in root.children(&mut cursor) {
+            if child.kind() == "class_definition" {
+                inferencer.analyze_class(&child);
+            }
+        }
+
+        // Self is a subclass of self
+        assert!(inferencer.is_subclass("Dog", "Dog"));
+
+        // Dog is a subclass of Animal
+        assert!(inferencer.is_subclass("Dog", "Animal"));
+
+        // Labrador is a subclass of Dog and Animal (transitive)
+        assert!(inferencer.is_subclass("Labrador", "Dog"));
+        assert!(inferencer.is_subclass("Labrador", "Animal"));
+
+        // Animal is NOT a subclass of Dog
+        assert!(!inferencer.is_subclass("Animal", "Dog"));
     }
 }
