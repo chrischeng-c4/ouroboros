@@ -141,15 +141,15 @@ impl TypeNarrower {
             }
             NarrowingCondition::Not(inner) => {
                 // Apply the negation of the condition
-                let negated = Self::negate_condition(inner);
+                let negated = Self::negate_condition_internal(inner);
                 self.apply_condition(&negated, original_types);
             }
             NarrowingCondition::Unknown => {}
         }
     }
 
-    /// Negate a condition
-    fn negate_condition(condition: &NarrowingCondition) -> NarrowingCondition {
+    /// Negate a condition (internal use)
+    fn negate_condition_internal(condition: &NarrowingCondition) -> NarrowingCondition {
         match condition {
             NarrowingCondition::IsNone { var_name } => {
                 NarrowingCondition::IsNotNone { var_name: var_name.clone() }
@@ -166,15 +166,15 @@ impl TypeNarrower {
             NarrowingCondition::And(left, right) => {
                 // not (A and B) = (not A) or (not B)
                 NarrowingCondition::Or(
-                    Box::new(Self::negate_condition(left)),
-                    Box::new(Self::negate_condition(right)),
+                    Box::new(Self::negate_condition_internal(left)),
+                    Box::new(Self::negate_condition_internal(right)),
                 )
             }
             NarrowingCondition::Or(left, right) => {
                 // not (A or B) = (not A) and (not B)
                 NarrowingCondition::And(
-                    Box::new(Self::negate_condition(left)),
-                    Box::new(Self::negate_condition(right)),
+                    Box::new(Self::negate_condition_internal(left)),
+                    Box::new(Self::negate_condition_internal(right)),
                 )
             }
             NarrowingCondition::Not(inner) => {
@@ -213,8 +213,44 @@ impl TypeNarrower {
     }
 }
 
+/// Negate a narrowing condition (public helper)
+pub fn negate_condition(condition: &NarrowingCondition) -> NarrowingCondition {
+    match condition {
+        NarrowingCondition::IsNone { var_name } => {
+            NarrowingCondition::IsNotNone { var_name: var_name.clone() }
+        }
+        NarrowingCondition::IsNotNone { var_name } => {
+            NarrowingCondition::IsNone { var_name: var_name.clone() }
+        }
+        NarrowingCondition::Truthy { var_name } => {
+            NarrowingCondition::Falsy { var_name: var_name.clone() }
+        }
+        NarrowingCondition::Falsy { var_name } => {
+            NarrowingCondition::Truthy { var_name: var_name.clone() }
+        }
+        NarrowingCondition::And(left, right) => {
+            // not (A and B) = (not A) or (not B)
+            NarrowingCondition::Or(
+                Box::new(negate_condition(left)),
+                Box::new(negate_condition(right)),
+            )
+        }
+        NarrowingCondition::Or(left, right) => {
+            // not (A or B) = (not A) and (not B)
+            NarrowingCondition::And(
+                Box::new(negate_condition(left)),
+                Box::new(negate_condition(right)),
+            )
+        }
+        NarrowingCondition::Not(inner) => {
+            // not (not x) = x
+            (**inner).clone()
+        }
+        other => other.clone(),
+    }
+}
+
 /// Parse a condition expression into a NarrowingCondition
-#[allow(dead_code)]
 pub fn parse_condition(source: &str, node: &tree_sitter::Node) -> NarrowingCondition {
     let node_text = |n: &tree_sitter::Node| -> &str {
         n.utf8_text(source.as_bytes()).unwrap_or("")

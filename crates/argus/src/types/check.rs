@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use tree_sitter::Node;
 
 use super::infer::TypeInferencer;
+use super::narrow::{self, TypeNarrower};
 use super::ty::{ParamKind, Type};
 use crate::diagnostic::{Diagnostic, DiagnosticCategory, DiagnosticSeverity, Range};
 use crate::syntax::ParsedFile;
@@ -35,6 +36,8 @@ pub struct TypeChecker<'a> {
     source: &'a str,
     /// Stack of function contexts (for nested functions)
     function_stack: Vec<FunctionContext>,
+    /// Type narrower for control flow analysis
+    narrower: TypeNarrower,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -44,6 +47,7 @@ impl<'a> TypeChecker<'a> {
             diagnostics: Vec::new(),
             source,
             function_stack: Vec::new(),
+            narrower: TypeNarrower::new(),
         }
     }
 
@@ -76,6 +80,25 @@ impl<'a> TypeChecker<'a> {
             "function_definition" | "async_function_definition" => {
                 self.check_function(node);
                 return; // check_function handles its own recursion
+            }
+            "if_statement" => {
+                self.check_if_statement(node);
+                return; // check_if_statement handles its own recursion
+            }
+            "while_statement" => {
+                self.check_while_statement(node);
+                return; // handles its own recursion
+            }
+            "for_statement" => {
+                self.check_for_statement(node);
+                return; // handles its own recursion
+            }
+            "try_statement" => {
+                self.check_try_statement(node);
+                return; // handles its own recursion
+            }
+            "import_statement" | "import_from_statement" => {
+                self.inferencer.analyze_import(node);
             }
             "assignment" => {
                 self.check_assignment(node);
@@ -391,6 +414,238 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    /// Check if statement with type narrowing
+    fn check_if_statement(&mut self, node: &Node) {
+        // Get the condition
+        let condition = match node.child_by_field_name("condition") {
+            Some(c) => c,
+            None => return,
+        };
+
+        // Parse the condition into a narrowing condition
+        let narrowing_cond = narrow::parse_condition(self.source, &condition);
+
+        // Collect original types from environment for narrowing
+        let original_types = self.inferencer.get_env_types();
+
+        // Handle the consequence (if branch)
+        if let Some(consequence) = node.child_by_field_name("consequence") {
+            self.narrower.push_scope();
+            self.narrower.apply_condition(&narrowing_cond, &original_types);
+
+            // Set narrowed types as overrides in the inferencer
+            let narrowed_types = self.collect_narrowed_types();
+            self.inferencer.set_type_overrides(narrowed_types);
+
+            // Check the body
+            let mut cursor = consequence.walk();
+            for child in consequence.children(&mut cursor) {
+                self.check_node(&child);
+            }
+
+            self.inferencer.clear_type_overrides();
+            self.narrower.pop_scope();
+        }
+
+        // Handle else/elif branches
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "else_clause" => {
+                    self.narrower.push_scope();
+                    // Apply negated condition for else branch
+                    let negated = narrow::negate_condition(&narrowing_cond);
+                    self.narrower.apply_condition(&negated, &original_types);
+
+                    // Set narrowed types as overrides in the inferencer
+                    let narrowed_types = self.collect_narrowed_types();
+                    self.inferencer.set_type_overrides(narrowed_types);
+
+                    // Check the else body
+                    if let Some(body) = child.child_by_field_name("body") {
+                        let mut body_cursor = body.walk();
+                        for body_child in body.children(&mut body_cursor) {
+                            self.check_node(&body_child);
+                        }
+                    }
+
+                    self.inferencer.clear_type_overrides();
+                    self.narrower.pop_scope();
+                }
+                "elif_clause" => {
+                    // Recursively handle elif as another if
+                    self.check_if_statement(&child);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Collect all narrowed types from the narrower
+    fn collect_narrowed_types(&self) -> HashMap<String, Type> {
+        let mut types = HashMap::new();
+        // Get all narrowed types from the narrower scopes
+        for name in self.inferencer.get_env_types().keys() {
+            if let Some(ty) = self.narrower.get_narrowed(name) {
+                types.insert(name.clone(), ty.clone());
+            }
+        }
+        types
+    }
+
+    /// Check while statement with type narrowing
+    fn check_while_statement(&mut self, node: &Node) {
+        // Get the condition
+        let condition = match node.child_by_field_name("condition") {
+            Some(c) => c,
+            None => return,
+        };
+
+        // Parse the condition for narrowing
+        let narrowing_cond = narrow::parse_condition(self.source, &condition);
+        let original_types = self.inferencer.get_env_types();
+
+        // Handle the body (condition is true inside loop)
+        if let Some(body) = node.child_by_field_name("body") {
+            self.narrower.push_scope();
+            self.narrower.apply_condition(&narrowing_cond, &original_types);
+
+            let narrowed_types = self.collect_narrowed_types();
+            self.inferencer.set_type_overrides(narrowed_types);
+
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                self.check_node(&child);
+            }
+
+            self.inferencer.clear_type_overrides();
+            self.narrower.pop_scope();
+        }
+
+        // Handle else clause (executed when condition becomes false)
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "else_clause" {
+                if let Some(body) = child.child_by_field_name("body") {
+                    let mut body_cursor = body.walk();
+                    for body_child in body.children(&mut body_cursor) {
+                        self.check_node(&body_child);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check for statement - binds loop variable
+    fn check_for_statement(&mut self, node: &Node) {
+        // Get the iterable and infer its element type
+        let iterable = node.child_by_field_name("right");
+        let element_type = if let Some(iter_node) = iterable {
+            let iter_type = self.inferencer.infer_expr(&iter_node);
+            match iter_type {
+                Type::List(elem) => (*elem).clone(),
+                Type::Set(elem) => (*elem).clone(),
+                Type::Dict(key, _) => (*key).clone(), // iterating dict gives keys
+                Type::Tuple(elems) => {
+                    if elems.is_empty() {
+                        Type::Unknown
+                    } else {
+                        Type::union(elems)
+                    }
+                }
+                Type::Str => Type::Str, // iterating str gives chars (single char strings)
+                _ => Type::Unknown,
+            }
+        } else {
+            Type::Unknown
+        };
+
+        // Bind the loop variable
+        if let Some(target) = node.child_by_field_name("left") {
+            self.inferencer.bind_assignment(&target, element_type);
+        }
+
+        // Check the body
+        if let Some(body) = node.child_by_field_name("body") {
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                self.check_node(&child);
+            }
+        }
+
+        // Handle else clause
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "else_clause" {
+                if let Some(body) = child.child_by_field_name("body") {
+                    let mut body_cursor = body.walk();
+                    for body_child in body.children(&mut body_cursor) {
+                        self.check_node(&body_child);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check try statement
+    fn check_try_statement(&mut self, node: &Node) {
+        // Check the try body
+        if let Some(body) = node.child_by_field_name("body") {
+            let mut cursor = body.walk();
+            for child in body.children(&mut cursor) {
+                self.check_node(&child);
+            }
+        }
+
+        // Check exception handlers
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "except_clause" => {
+                    // Bind exception variable if present
+                    if let Some(name) = child.child_by_field_name("name") {
+                        // Exception type - default to BaseException if not specified
+                        let exc_type = if let Some(type_node) = child.child_by_field_name("type") {
+                            self.inferencer.parse_type_annotation(&type_node)
+                        } else {
+                            Type::Instance {
+                                name: "BaseException".to_string(),
+                                module: Some("builtins".to_string()),
+                                type_args: vec![],
+                            }
+                        };
+                        self.inferencer.bind_assignment(&name, exc_type);
+                    }
+
+                    // Check except body
+                    if let Some(body) = child.child_by_field_name("body") {
+                        let mut body_cursor = body.walk();
+                        for body_child in body.children(&mut body_cursor) {
+                            self.check_node(&body_child);
+                        }
+                    }
+                }
+                "finally_clause" => {
+                    if let Some(body) = child.child_by_field_name("body") {
+                        let mut body_cursor = body.walk();
+                        for body_child in body.children(&mut body_cursor) {
+                            self.check_node(&body_child);
+                        }
+                    }
+                }
+                "else_clause" => {
+                    if let Some(body) = child.child_by_field_name("body") {
+                        let mut body_cursor = body.walk();
+                        for body_child in body.children(&mut body_cursor) {
+                            self.check_node(&body_child);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Check attribute access
     fn check_attribute(&mut self, node: &Node) {
         let object = match node.child_by_field_name("object") {
@@ -634,5 +889,121 @@ p = Point(1, 2)
         // Basic class definition should not have errors
         // (might have TC002 for missing __init__ return type hint but that's fine)
         assert!(!diagnostics.iter().any(|d| d.code == "TC001"));
+    }
+
+    #[test]
+    fn test_none_check_narrowing() {
+        // Test that `if x is not None` properly narrows Optional[str] to str
+        let diagnostics = check_code(
+            r#"
+def process(x: str | None) -> str:
+    if x is not None:
+        return x
+    return "default"
+"#,
+        );
+
+        // Should NOT have type errors - x is narrowed to str in the if branch
+        assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
+    }
+
+    #[test]
+    fn test_if_statement_basic() {
+        // Test basic if statement processing
+        let diagnostics = check_code(
+            r#"
+def test(x: int) -> int:
+    if x > 0:
+        return x
+    else:
+        return 0
+"#,
+        );
+
+        // Should not have errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
+    }
+
+    #[test]
+    fn test_import_statement() {
+        // Test that import statements are processed without errors
+        let diagnostics = check_code(
+            r#"
+from typing import List, Optional
+
+def foo(items: List[int]) -> Optional[int]:
+    if items:
+        return items[0]
+    return None
+"#,
+        );
+
+        // Should not have type mismatch errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC001"));
+    }
+
+    #[test]
+    fn test_import_module() {
+        // Test regular import statement
+        let diagnostics = check_code(
+            r#"
+import os
+
+x = os
+"#,
+        );
+
+        // Should not have errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC001"));
+    }
+
+    #[test]
+    fn test_for_loop() {
+        // Test for loop processes without errors
+        let diagnostics = check_code(
+            r#"
+def process(items: list[int]) -> int:
+    total = 0
+    for item in items:
+        total = total + item
+    return total
+"#,
+        );
+
+        // Should not have type errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
+    }
+
+    #[test]
+    fn test_while_loop() {
+        // Test while loop processes without errors
+        let diagnostics = check_code(
+            r#"
+def countdown(n: int) -> int:
+    while n > 0:
+        n = n - 1
+    return n
+"#,
+        );
+
+        // Should not have type errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
+    }
+
+    #[test]
+    fn test_try_except() {
+        // Test try/except processes without errors
+        let diagnostics = check_code(
+            r#"
+def safe_divide(a: int, b: int) -> int:
+    try:
+        return a // b
+    except ZeroDivisionError:
+        return 0
+"#,
+        );
+
+        // Should not have type errors
+        assert!(!diagnostics.iter().any(|d| d.code == "TC003" && d.message.contains("Incompatible")));
     }
 }

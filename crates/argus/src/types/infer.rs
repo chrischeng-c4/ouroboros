@@ -96,6 +96,8 @@ pub struct TypeInferencer<'a> {
     type_vars: HashMap<String, Type>,
     /// Counter for generating fresh type variables
     next_type_var: usize,
+    /// Type overrides from narrowing (checked before env)
+    type_overrides: Option<HashMap<String, Type>>,
 }
 
 impl<'a> TypeInferencer<'a> {
@@ -110,7 +112,18 @@ impl<'a> TypeInferencer<'a> {
             classes: HashMap::new(),
             type_vars: HashMap::new(),
             next_type_var: 0,
+            type_overrides: None,
         }
+    }
+
+    /// Set type overrides from narrowing (used for control flow analysis)
+    pub fn set_type_overrides(&mut self, overrides: HashMap<String, Type>) {
+        self.type_overrides = Some(overrides);
+    }
+
+    /// Clear type overrides
+    pub fn clear_type_overrides(&mut self) {
+        self.type_overrides = None;
     }
 
     /// Register a TypeVar definition
@@ -263,6 +276,12 @@ impl<'a> TypeInferencer<'a> {
             // Identifier lookup
             "identifier" => {
                 let name = self.node_text(node);
+                // Check type overrides first (from narrowing)
+                if let Some(ref overrides) = self.type_overrides {
+                    if let Some(ty) = overrides.get(name) {
+                        return ty.clone();
+                    }
+                }
                 self.env.lookup(name).cloned().unwrap_or(Type::Unknown)
             }
 
@@ -1059,6 +1078,123 @@ impl<'a> TypeInferencer<'a> {
     /// Get the current environment (for testing)
     pub fn env(&self) -> &TypeEnv {
         &self.env
+    }
+
+    /// Get all variable types from the current environment
+    pub fn get_env_types(&self) -> HashMap<String, Type> {
+        let mut types = HashMap::new();
+        for scope in &self.env.scopes {
+            for (name, ty) in scope {
+                types.insert(name.clone(), ty.clone());
+            }
+        }
+        types
+    }
+
+    /// Analyze an import statement and add imported names to the environment
+    pub fn analyze_import(&mut self, node: &Node) {
+        match node.kind() {
+            "import_statement" => {
+                // import module [as alias]
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    if child.kind() == "dotted_name" {
+                        let module_name = self.node_text(&child).to_string();
+                        // Create a module type placeholder
+                        self.env.bind(module_name.clone(), Type::Instance {
+                            name: format!("module:{}", module_name),
+                            module: Some(module_name),
+                            type_args: vec![],
+                        });
+                    } else if child.kind() == "aliased_import" {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let module_name = self.node_text(&name_node).to_string();
+                            let alias = child.child_by_field_name("alias")
+                                .map(|a| self.node_text(&a).to_string())
+                                .unwrap_or_else(|| module_name.clone());
+                            self.env.bind(alias, Type::Instance {
+                                name: format!("module:{}", module_name),
+                                module: Some(module_name),
+                                type_args: vec![],
+                            });
+                        }
+                    }
+                }
+            }
+            "import_from_statement" => {
+                // from module import name [as alias]
+                let module_name = node.child_by_field_name("module_name")
+                    .map(|n| self.node_text(&n).to_string())
+                    .unwrap_or_default();
+
+                let mut cursor = node.walk();
+                for child in node.children(&mut cursor) {
+                    match child.kind() {
+                        "dotted_name" | "identifier" if child.start_byte() > node.child_by_field_name("module_name").map(|n| n.end_byte()).unwrap_or(0) => {
+                            let name = self.node_text(&child).to_string();
+                            let import_type = self.resolve_import_type(&module_name, &name);
+                            self.env.bind(name, import_type);
+                        }
+                        "aliased_import" => {
+                            if let Some(name_node) = child.child_by_field_name("name") {
+                                let name = self.node_text(&name_node).to_string();
+                                let alias = child.child_by_field_name("alias")
+                                    .map(|a| self.node_text(&a).to_string())
+                                    .unwrap_or_else(|| name.clone());
+                                let import_type = self.resolve_import_type(&module_name, &name);
+                                self.env.bind(alias, import_type);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Resolve the type for an imported name
+    fn resolve_import_type(&self, module: &str, name: &str) -> Type {
+        // Handle typing module specially
+        match module {
+            "typing" => {
+                match name {
+                    "List" => Type::ClassType { name: "list".to_string(), module: Some("typing".to_string()) },
+                    "Dict" => Type::ClassType { name: "dict".to_string(), module: Some("typing".to_string()) },
+                    "Set" => Type::ClassType { name: "set".to_string(), module: Some("typing".to_string()) },
+                    "Tuple" => Type::ClassType { name: "tuple".to_string(), module: Some("typing".to_string()) },
+                    "Optional" => Type::ClassType { name: "Optional".to_string(), module: Some("typing".to_string()) },
+                    "Union" => Type::ClassType { name: "Union".to_string(), module: Some("typing".to_string()) },
+                    "Callable" => Type::ClassType { name: "Callable".to_string(), module: Some("typing".to_string()) },
+                    "Any" => Type::Any,
+                    "TypeVar" => Type::ClassType { name: "TypeVar".to_string(), module: Some("typing".to_string()) },
+                    "Generic" => Type::ClassType { name: "Generic".to_string(), module: Some("typing".to_string()) },
+                    "Protocol" => Type::ClassType { name: "Protocol".to_string(), module: Some("typing".to_string()) },
+                    _ => Type::Instance {
+                        name: name.to_string(),
+                        module: Some(module.to_string()),
+                        type_args: vec![],
+                    },
+                }
+            }
+            "collections" => {
+                match name {
+                    "deque" | "defaultdict" | "OrderedDict" | "Counter" | "ChainMap" => {
+                        Type::ClassType { name: name.to_string(), module: Some("collections".to_string()) }
+                    }
+                    _ => Type::Instance {
+                        name: name.to_string(),
+                        module: Some(module.to_string()),
+                        type_args: vec![],
+                    },
+                }
+            }
+            _ => Type::Instance {
+                name: name.to_string(),
+                module: Some(module.to_string()),
+                type_args: vec![],
+            },
+        }
     }
 }
 
