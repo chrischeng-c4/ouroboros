@@ -1,5 +1,6 @@
 //! Core type definitions for the Argus type system
 
+use std::collections::HashMap;
 use std::fmt;
 
 /// Unique identifier for type variables
@@ -310,6 +311,91 @@ impl Type {
         }
     }
 
+    /// Unify this type (pattern) with a concrete type, collecting TypeVar bindings
+    /// Returns Some(substitutions) on success, None on failure
+    pub fn unify(&self, concrete: &Type, subs: &mut HashMap<TypeVarId, Type>) -> bool {
+        match (self, concrete) {
+            // TypeVar: bind it to the concrete type
+            (Type::TypeVar { id, .. }, _) => {
+                if let Some(existing) = subs.get(id) {
+                    // Already bound - check consistency
+                    existing == concrete
+                } else {
+                    subs.insert(*id, concrete.clone());
+                    true
+                }
+            }
+
+            // Same primitive types
+            (Type::Never, Type::Never)
+            | (Type::None, Type::None)
+            | (Type::Bool, Type::Bool)
+            | (Type::Int, Type::Int)
+            | (Type::Float, Type::Float)
+            | (Type::Str, Type::Str)
+            | (Type::Bytes, Type::Bytes)
+            | (Type::Any, _)
+            | (_, Type::Any)
+            | (Type::Unknown, _)
+            | (_, Type::Unknown) => true,
+
+            // Numeric widening: int -> float
+            (Type::Float, Type::Int) => true,
+
+            // Container types: unify element types
+            (Type::List(a), Type::List(b)) => a.unify(b, subs),
+            (Type::Set(a), Type::Set(b)) => a.unify(b, subs),
+            (Type::Optional(a), Type::Optional(b)) => a.unify(b, subs),
+            (Type::Optional(a), b) if !matches!(b, Type::None) => a.unify(b, subs),
+
+            (Type::Dict(k1, v1), Type::Dict(k2, v2)) => {
+                k1.unify(k2, subs) && v1.unify(v2, subs)
+            }
+
+            (Type::Tuple(a), Type::Tuple(b)) if a.len() == b.len() => {
+                a.iter().zip(b.iter()).all(|(t1, t2)| t1.unify(t2, subs))
+            }
+
+            // Callable: unify params and return
+            (
+                Type::Callable { params: p1, ret: r1 },
+                Type::Callable { params: p2, ret: r2 },
+            ) if p1.len() == p2.len() => {
+                let params_ok = p1
+                    .iter()
+                    .zip(p2.iter())
+                    .all(|(a, b)| a.ty.unify(&b.ty, subs));
+                params_ok && r1.unify(r2, subs)
+            }
+
+            // Instance types: same name, unify type args
+            (
+                Type::Instance { name: n1, type_args: a1, .. },
+                Type::Instance { name: n2, type_args: a2, .. },
+            ) if n1 == n2 && a1.len() == a2.len() => {
+                a1.iter().zip(a2.iter()).all(|(t1, t2)| t1.unify(t2, subs))
+            }
+
+            // Union: concrete must unify with at least one member
+            (Type::Union(types), concrete) => {
+                types.iter().any(|t| {
+                    let mut temp_subs = subs.clone();
+                    if t.unify(concrete, &mut temp_subs) {
+                        *subs = temp_subs;
+                        true
+                    } else {
+                        false
+                    }
+                })
+            }
+
+            // Same type exactly
+            (a, b) if a == b => true,
+
+            _ => false,
+        }
+    }
+
     /// Create a TypeVar
     pub fn type_var(id: usize, name: &str) -> Type {
         Type::TypeVar {
@@ -545,5 +631,60 @@ mod tests {
             }
             _ => panic!("Expected Callable"),
         }
+    }
+
+    #[test]
+    fn test_unify_type_var() {
+        use std::collections::HashMap;
+
+        // Unify T with int -> T=int
+        let t = Type::type_var(0, "T");
+        let mut subs = HashMap::new();
+
+        assert!(t.unify(&Type::Int, &mut subs));
+        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Int));
+    }
+
+    #[test]
+    fn test_unify_list() {
+        use std::collections::HashMap;
+
+        // Unify list[T] with list[str] -> T=str
+        let t = Type::type_var(0, "T");
+        let list_t = Type::list(t);
+        let mut subs = HashMap::new();
+
+        assert!(list_t.unify(&Type::list(Type::Str), &mut subs));
+        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
+    }
+
+    #[test]
+    fn test_unify_dict() {
+        use std::collections::HashMap;
+
+        // Unify dict[K, V] with dict[str, int] -> K=str, V=int
+        let k = Type::type_var(0, "K");
+        let v = Type::type_var(1, "V");
+        let dict_kv = Type::dict(k, v);
+        let mut subs = HashMap::new();
+
+        assert!(dict_kv.unify(&Type::dict(Type::Str, Type::Int), &mut subs));
+        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
+        assert_eq!(subs.get(&TypeVarId(1)), Some(&Type::Int));
+    }
+
+    #[test]
+    fn test_unify_consistency() {
+        use std::collections::HashMap;
+
+        // Unify T with int, then T with int again -> ok
+        let t = Type::type_var(0, "T");
+        let mut subs = HashMap::new();
+
+        assert!(t.unify(&Type::Int, &mut subs));
+        assert!(t.unify(&Type::Int, &mut subs)); // Same binding, ok
+
+        // Unify T with str after binding to int -> fail
+        assert!(!t.unify(&Type::Str, &mut subs));
     }
 }

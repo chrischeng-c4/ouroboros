@@ -576,7 +576,7 @@ impl<'a> TypeInferencer<'a> {
         }
     }
 
-    /// Infer function call result type
+    /// Infer function call result type with generic type inference
     fn infer_call(&mut self, node: &Node) -> Type {
         let func = match node.child_by_field_name("function") {
             Some(f) => f,
@@ -586,7 +586,26 @@ impl<'a> TypeInferencer<'a> {
         let func_ty = self.infer_expr(&func);
 
         match &func_ty {
-            Type::Callable { ret, .. } => (**ret).clone(),
+            Type::Callable { params, ret } => {
+                // Collect argument types
+                let arg_types = self.collect_call_arguments(node);
+
+                // Check if return type has type variables
+                let type_vars = ret.type_vars();
+                if type_vars.is_empty() {
+                    // No generics, just return the declared return type
+                    return (**ret).clone();
+                }
+
+                // Unify parameter types with argument types to infer TypeVars
+                let mut substitutions = HashMap::new();
+                for (param, arg_ty) in params.iter().zip(arg_types.iter()) {
+                    param.ty.unify(arg_ty, &mut substitutions);
+                }
+
+                // Apply substitutions to the return type
+                ret.substitute(&substitutions)
+            }
             Type::Instance { name, .. } => {
                 // Constructor call returns instance
                 Type::Instance {
@@ -605,6 +624,31 @@ impl<'a> TypeInferencer<'a> {
             }
             _ => Type::Unknown,
         }
+    }
+
+    /// Collect argument types from a call expression
+    fn collect_call_arguments(&mut self, node: &Node) -> Vec<Type> {
+        let mut arg_types = Vec::new();
+
+        if let Some(args_node) = node.child_by_field_name("arguments") {
+            let mut cursor = args_node.walk();
+            for child in args_node.children(&mut cursor) {
+                match child.kind() {
+                    "(" | ")" | "," => continue,
+                    "keyword_argument" => {
+                        // Skip keyword for now, just get the value
+                        if let Some(value) = child.child_by_field_name("value") {
+                            arg_types.push(self.infer_expr(&value));
+                        }
+                    }
+                    _ => {
+                        arg_types.push(self.infer_expr(&child));
+                    }
+                }
+            }
+        }
+
+        arg_types
     }
 
     /// Infer attribute access type
@@ -1433,5 +1477,52 @@ class Labrador(Dog):
 
         // Animal is NOT a subclass of Dog
         assert!(!inferencer.is_subclass("Animal", "Dog"));
+    }
+
+    #[test]
+    fn test_generic_call_inference() {
+        use crate::types::ty::{Param, ParamKind};
+
+        // Test that calling a generic function infers type arguments
+        // We'll manually create a generic function and test the inference
+
+        // Create a generic identity function: def identity(x: T) -> T
+        let t = Type::type_var(0, "T");
+        let identity_fn = Type::Callable {
+            params: vec![Param {
+                name: "x".to_string(),
+                ty: t.clone(),
+                has_default: false,
+                kind: ParamKind::Positional,
+            }],
+            ret: Box::new(t),
+        };
+
+        // Simulate unifying with Int argument
+        let mut subs = HashMap::new();
+        let param_ty = &identity_fn;
+        if let Type::Callable { params, ret } = param_ty {
+            // Unify parameter T with Int
+            params[0].ty.unify(&Type::Int, &mut subs);
+
+            // Apply substitution to return type
+            let inferred_ret = ret.substitute(&subs);
+            assert_eq!(inferred_ret, Type::Int);
+        }
+    }
+
+    #[test]
+    fn test_generic_list_inference() {
+        use crate::types::ty::TypeVarId;
+
+        // Test inferring element type from list[T] -> list[str]
+        let t = Type::type_var(0, "T");
+        let list_t = Type::list(t);
+
+        let mut subs = HashMap::new();
+        list_t.unify(&Type::list(Type::Str), &mut subs);
+
+        // T should be inferred as Str
+        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
     }
 }
