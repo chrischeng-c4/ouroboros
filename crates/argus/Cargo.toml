@@ -1,0 +1,44 @@
+[package]
+name = "argus"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Argus - Unified multi-language code analysis tool (LSP + Linting)"
+
+[lib]
+name = "argus"
+
+[dependencies]
+# Tree-sitter core
+tree-sitter = "0.24"
+
+# Language grammars
+tree-sitter-python = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-rust = "0.23"
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Utilities
+jwalk.workspace = true
+tracing.workspace = true
+
+# Config
+toml = "0.8"
+
+# LSP Server
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+
+# Async utilities
+async-trait = "0.1"
+
+[dev-dependencies]
+tempfile = "3"

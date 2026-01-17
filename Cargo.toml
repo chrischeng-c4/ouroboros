@@ -2,6 +2,7 @@
 members = [
     "crates/ouroboros",
     "crates/ouroboros-cli",
+    "crates/argus",
     "crates/ouroboros-mongodb",
     "crates/ouroboros-postgres",
     "crates/ouroboros-http",

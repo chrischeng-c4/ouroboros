@@ -1,0 +1,549 @@
+//! Core type definitions for the Argus type system
+
+use std::fmt;
+
+/// Unique identifier for type variables
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeVarId(pub usize);
+
+/// Parameter kind in function signatures
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamKind {
+    /// Regular positional parameter
+    Positional,
+    /// Positional-only parameter (before /)
+    PositionalOnly,
+    /// Keyword-only parameter (after *)
+    KeywordOnly,
+    /// *args parameter
+    VarPositional,
+    /// **kwargs parameter
+    VarKeyword,
+}
+
+/// Function parameter
+#[derive(Debug, Clone, PartialEq)]
+pub struct Param {
+    pub name: String,
+    pub ty: Type,
+    pub has_default: bool,
+    pub kind: ParamKind,
+}
+
+/// Literal value for Literal types
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiteralValue {
+    Int(i64),
+    Float(f64),
+    Str(String),
+    Bool(bool),
+    None,
+}
+
+/// The core Type enum representing all possible types
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    // === Primitive types ===
+    /// The bottom type (NoReturn in Python, never in TypeScript)
+    Never,
+    /// None / null / unit type
+    None,
+    /// Boolean
+    Bool,
+    /// Integer (Python int, TypeScript number)
+    Int,
+    /// Floating point (Python float, TypeScript number)
+    Float,
+    /// String
+    Str,
+    /// Bytes (Python only)
+    Bytes,
+
+    // === Container types ===
+    /// List / Array
+    List(Box<Type>),
+    /// Dictionary / Map / Object
+    Dict(Box<Type>, Box<Type>),
+    /// Set
+    Set(Box<Type>),
+    /// Tuple with fixed element types
+    Tuple(Vec<Type>),
+
+    // === Composite types ===
+    /// Optional type (T | None)
+    Optional(Box<Type>),
+    /// Union type (T | U | V)
+    Union(Vec<Type>),
+    /// Intersection type (T & U) - TypeScript only
+    Intersection(Vec<Type>),
+
+    // === Callable types ===
+    /// Function / Callable type
+    Callable {
+        params: Vec<Param>,
+        ret: Box<Type>,
+    },
+
+    // === Class types ===
+    /// Class / Interface / Struct instance
+    Instance {
+        name: String,
+        module: Option<String>,
+        type_args: Vec<Type>,
+    },
+    /// Class type itself (for type[T])
+    ClassType {
+        name: String,
+        module: Option<String>,
+    },
+
+    // === Generic types ===
+    /// Type variable (T, K, V, etc.)
+    TypeVar {
+        id: TypeVarId,
+        name: String,
+        bound: Option<Box<Type>>,
+        constraints: Vec<Type>,
+    },
+
+    // === Special types ===
+    /// Any type - disables type checking
+    Any,
+    /// Unknown type - not yet inferred
+    Unknown,
+    /// Literal type (Literal["foo"], Literal[42])
+    Literal(LiteralValue),
+    /// Self type (for method return types)
+    SelfType,
+
+    // === Error type ===
+    /// Type error placeholder (allows continued analysis)
+    Error,
+}
+
+impl Type {
+    /// Create an Optional type
+    pub fn optional(inner: Type) -> Self {
+        Type::Optional(Box::new(inner))
+    }
+
+    /// Create a List type
+    pub fn list(element: Type) -> Self {
+        Type::List(Box::new(element))
+    }
+
+    /// Create a Dict type
+    pub fn dict(key: Type, value: Type) -> Self {
+        Type::Dict(Box::new(key), Box::new(value))
+    }
+
+    /// Create a Union type, flattening nested unions
+    pub fn union(types: Vec<Type>) -> Self {
+        let mut flattened = Vec::new();
+        for ty in types {
+            match ty {
+                Type::Union(inner) => flattened.extend(inner),
+                Type::Never => {} // Never is identity for union
+                other => {
+                    if !flattened.contains(&other) {
+                        flattened.push(other);
+                    }
+                }
+            }
+        }
+        match flattened.len() {
+            0 => Type::Never,
+            1 => flattened.pop().unwrap(),
+            _ => Type::Union(flattened),
+        }
+    }
+
+    /// Create a simple Callable type
+    pub fn callable(params: Vec<Type>, ret: Type) -> Self {
+        let params = params
+            .into_iter()
+            .enumerate()
+            .map(|(i, ty)| Param {
+                name: format!("_{}", i),
+                ty,
+                has_default: false,
+                kind: ParamKind::Positional,
+            })
+            .collect();
+        Type::Callable {
+            params,
+            ret: Box::new(ret),
+        }
+    }
+
+    /// Check if this type is a subtype of Any
+    pub fn is_any(&self) -> bool {
+        matches!(self, Type::Any)
+    }
+
+    /// Check if this type is Unknown
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Type::Unknown)
+    }
+
+    /// Check if this type is an error
+    pub fn is_error(&self) -> bool {
+        matches!(self, Type::Error)
+    }
+
+    /// Check if this type contains None
+    pub fn contains_none(&self) -> bool {
+        match self {
+            Type::None => true,
+            Type::Optional(_) => true,
+            Type::Union(types) => types.iter().any(|t| t.contains_none()),
+            _ => false,
+        }
+    }
+
+    /// Remove None from this type
+    pub fn without_none(&self) -> Type {
+        match self {
+            Type::None => Type::Never,
+            Type::Optional(inner) => (**inner).clone(),
+            Type::Union(types) => {
+                let filtered: Vec<_> = types
+                    .iter()
+                    .filter(|t| !matches!(t, Type::None))
+                    .cloned()
+                    .collect();
+                Type::union(filtered)
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// Substitute type variables with concrete types
+    pub fn substitute(&self, substitutions: &std::collections::HashMap<TypeVarId, Type>) -> Type {
+        match self {
+            Type::TypeVar { id, .. } => {
+                substitutions.get(id).cloned().unwrap_or_else(|| self.clone())
+            }
+            Type::List(elem) => Type::List(Box::new(elem.substitute(substitutions))),
+            Type::Dict(k, v) => Type::Dict(
+                Box::new(k.substitute(substitutions)),
+                Box::new(v.substitute(substitutions)),
+            ),
+            Type::Set(elem) => Type::Set(Box::new(elem.substitute(substitutions))),
+            Type::Tuple(elems) => {
+                Type::Tuple(elems.iter().map(|t| t.substitute(substitutions)).collect())
+            }
+            Type::Optional(inner) => Type::Optional(Box::new(inner.substitute(substitutions))),
+            Type::Union(types) => {
+                Type::union(types.iter().map(|t| t.substitute(substitutions)).collect())
+            }
+            Type::Intersection(types) => Type::Intersection(
+                types.iter().map(|t| t.substitute(substitutions)).collect(),
+            ),
+            Type::Callable { params, ret } => Type::Callable {
+                params: params
+                    .iter()
+                    .map(|p| Param {
+                        name: p.name.clone(),
+                        ty: p.ty.substitute(substitutions),
+                        has_default: p.has_default,
+                        kind: p.kind,
+                    })
+                    .collect(),
+                ret: Box::new(ret.substitute(substitutions)),
+            },
+            Type::Instance {
+                name,
+                module,
+                type_args,
+            } => Type::Instance {
+                name: name.clone(),
+                module: module.clone(),
+                type_args: type_args
+                    .iter()
+                    .map(|t| t.substitute(substitutions))
+                    .collect(),
+            },
+            // Other types are unchanged
+            other => other.clone(),
+        }
+    }
+
+    /// Collect all type variables in this type
+    pub fn type_vars(&self) -> Vec<TypeVarId> {
+        let mut vars = Vec::new();
+        self.collect_type_vars(&mut vars);
+        vars
+    }
+
+    fn collect_type_vars(&self, vars: &mut Vec<TypeVarId>) {
+        match self {
+            Type::TypeVar { id, .. } => {
+                if !vars.contains(id) {
+                    vars.push(*id);
+                }
+            }
+            Type::List(elem) | Type::Set(elem) | Type::Optional(elem) => {
+                elem.collect_type_vars(vars);
+            }
+            Type::Dict(k, v) => {
+                k.collect_type_vars(vars);
+                v.collect_type_vars(vars);
+            }
+            Type::Tuple(elems) | Type::Union(elems) | Type::Intersection(elems) => {
+                for elem in elems {
+                    elem.collect_type_vars(vars);
+                }
+            }
+            Type::Callable { params, ret } => {
+                for param in params {
+                    param.ty.collect_type_vars(vars);
+                }
+                ret.collect_type_vars(vars);
+            }
+            Type::Instance { type_args, .. } => {
+                for arg in type_args {
+                    arg.collect_type_vars(vars);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Create a TypeVar
+    pub fn type_var(id: usize, name: &str) -> Type {
+        Type::TypeVar {
+            id: TypeVarId(id),
+            name: name.to_string(),
+            bound: None,
+            constraints: vec![],
+        }
+    }
+
+    /// Create a TypeVar with a bound
+    pub fn type_var_bounded(id: usize, name: &str, bound: Type) -> Type {
+        Type::TypeVar {
+            id: TypeVarId(id),
+            name: name.to_string(),
+            bound: Some(Box::new(bound)),
+            constraints: vec![],
+        }
+    }
+}
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Never => write!(f, "Never"),
+            Type::None => write!(f, "None"),
+            Type::Bool => write!(f, "bool"),
+            Type::Int => write!(f, "int"),
+            Type::Float => write!(f, "float"),
+            Type::Str => write!(f, "str"),
+            Type::Bytes => write!(f, "bytes"),
+
+            Type::List(elem) => write!(f, "list[{}]", elem),
+            Type::Dict(k, v) => write!(f, "dict[{}, {}]", k, v),
+            Type::Set(elem) => write!(f, "set[{}]", elem),
+            Type::Tuple(elems) => {
+                write!(f, "tuple[")?;
+                for (i, elem) in elems.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", elem)?;
+                }
+                write!(f, "]")
+            }
+
+            Type::Optional(inner) => write!(f, "{} | None", inner),
+            Type::Union(types) => {
+                for (i, ty) in types.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " | ")?;
+                    }
+                    write!(f, "{}", ty)?;
+                }
+                Ok(())
+            }
+            Type::Intersection(types) => {
+                for (i, ty) in types.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " & ")?;
+                    }
+                    write!(f, "{}", ty)?;
+                }
+                Ok(())
+            }
+
+            Type::Callable { params, ret } => {
+                write!(f, "(")?;
+                for (i, param) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", param.ty)?;
+                }
+                write!(f, ") -> {}", ret)
+            }
+
+            Type::Instance { name, type_args, .. } => {
+                write!(f, "{}", name)?;
+                if !type_args.is_empty() {
+                    write!(f, "[")?;
+                    for (i, arg) in type_args.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", arg)?;
+                    }
+                    write!(f, "]")?;
+                }
+                Ok(())
+            }
+            Type::ClassType { name, .. } => write!(f, "type[{}]", name),
+
+            Type::TypeVar { name, .. } => write!(f, "{}", name),
+
+            Type::Any => write!(f, "Any"),
+            Type::Unknown => write!(f, "Unknown"),
+            Type::Literal(lit) => match lit {
+                LiteralValue::Int(n) => write!(f, "Literal[{}]", n),
+                LiteralValue::Float(n) => write!(f, "Literal[{}]", n),
+                LiteralValue::Str(s) => write!(f, "Literal[\"{}\"]", s),
+                LiteralValue::Bool(b) => write!(f, "Literal[{}]", b),
+                LiteralValue::None => write!(f, "Literal[None]"),
+            },
+            Type::SelfType => write!(f, "Self"),
+
+            Type::Error => write!(f, "<error>"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_type_display() {
+        assert_eq!(Type::Int.to_string(), "int");
+        assert_eq!(Type::optional(Type::Str).to_string(), "str | None");
+        assert_eq!(Type::list(Type::Int).to_string(), "list[int]");
+        assert_eq!(
+            Type::dict(Type::Str, Type::Int).to_string(),
+            "dict[str, int]"
+        );
+    }
+
+    #[test]
+    fn test_union_flattening() {
+        let union = Type::union(vec![
+            Type::Int,
+            Type::Union(vec![Type::Str, Type::Float]),
+            Type::Int, // duplicate
+        ]);
+
+        match union {
+            Type::Union(types) => {
+                assert_eq!(types.len(), 3);
+                assert!(types.contains(&Type::Int));
+                assert!(types.contains(&Type::Str));
+                assert!(types.contains(&Type::Float));
+            }
+            _ => panic!("Expected Union"),
+        }
+    }
+
+    #[test]
+    fn test_without_none() {
+        let optional = Type::optional(Type::Str);
+        assert_eq!(optional.without_none(), Type::Str);
+
+        let union = Type::Union(vec![Type::Int, Type::None, Type::Str]);
+        let without = union.without_none();
+        match without {
+            Type::Union(types) => {
+                assert_eq!(types.len(), 2);
+                assert!(!types.contains(&Type::None));
+            }
+            _ => panic!("Expected Union"),
+        }
+    }
+
+    #[test]
+    fn test_type_var_substitution() {
+        use std::collections::HashMap;
+
+        // Create a generic type: List[T]
+        let t = Type::type_var(0, "T");
+        let list_t = Type::list(t);
+
+        // Substitute T -> Int
+        let mut subs = HashMap::new();
+        subs.insert(TypeVarId(0), Type::Int);
+
+        let result = list_t.substitute(&subs);
+        assert_eq!(result, Type::list(Type::Int));
+    }
+
+    #[test]
+    fn test_type_vars_collection() {
+        // Create Dict[K, V]
+        let k = Type::type_var(0, "K");
+        let v = Type::type_var(1, "V");
+        let dict_kv = Type::dict(k, v);
+
+        let vars = dict_kv.type_vars();
+        assert_eq!(vars.len(), 2);
+        assert!(vars.contains(&TypeVarId(0)));
+        assert!(vars.contains(&TypeVarId(1)));
+    }
+
+    #[test]
+    fn test_nested_substitution() {
+        use std::collections::HashMap;
+
+        // Create Optional[List[T]]
+        let t = Type::type_var(0, "T");
+        let list_t = Type::list(t);
+        let optional_list_t = Type::optional(list_t);
+
+        // Substitute T -> Str
+        let mut subs = HashMap::new();
+        subs.insert(TypeVarId(0), Type::Str);
+
+        let result = optional_list_t.substitute(&subs);
+        assert_eq!(result, Type::optional(Type::list(Type::Str)));
+    }
+
+    #[test]
+    fn test_callable_substitution() {
+        use std::collections::HashMap;
+
+        // Create Callable[[T], T]
+        let t = Type::type_var(0, "T");
+        let callable = Type::Callable {
+            params: vec![Param {
+                name: "x".to_string(),
+                ty: t.clone(),
+                has_default: false,
+                kind: ParamKind::Positional,
+            }],
+            ret: Box::new(t),
+        };
+
+        // Substitute T -> Int
+        let mut subs = HashMap::new();
+        subs.insert(TypeVarId(0), Type::Int);
+
+        let result = callable.substitute(&subs);
+        match result {
+            Type::Callable { params, ret } => {
+                assert_eq!(params[0].ty, Type::Int);
+                assert_eq!(*ret, Type::Int);
+            }
+            _ => panic!("Expected Callable"),
+        }
+    }
+}
