@@ -107,6 +107,16 @@ pub enum Type {
         constraints: Vec<Type>,
     },
 
+    // === Protocol types ===
+    /// Protocol type (structural subtyping)
+    /// A type conforms to a Protocol if it has all required members
+    Protocol {
+        name: String,
+        module: Option<String>,
+        /// Required members (method/attribute name -> type)
+        members: Vec<(String, Type)>,
+    },
+
     // === Special types ===
     /// Any type - disables type checking
     Any,
@@ -489,6 +499,21 @@ impl fmt::Display for Type {
             }
             Type::ClassType { name, .. } => write!(f, "type[{}]", name),
 
+            Type::Protocol { name, members, .. } => {
+                write!(f, "Protocol[{}]", name)?;
+                if !members.is_empty() {
+                    write!(f, "{{")?;
+                    for (i, (member_name, _)) in members.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", member_name)?;
+                    }
+                    write!(f, "}}")?;
+                }
+                Ok(())
+            }
+
             Type::TypeVar { name, .. } => write!(f, "{}", name),
 
             Type::Any => write!(f, "Any"),
@@ -686,5 +711,25 @@ mod tests {
 
         // Unify T with str after binding to int -> fail
         assert!(!t.unify(&Type::Str, &mut subs));
+    }
+
+    #[test]
+    fn test_protocol_display() {
+        let protocol = Type::Protocol {
+            name: "Sized".to_string(),
+            module: Some("typing".to_string()),
+            members: vec![
+                ("__len__".to_string(), Type::callable(vec![], Type::Int)),
+            ],
+        };
+        assert_eq!(protocol.to_string(), "Protocol[Sized]{__len__}");
+
+        // Empty protocol
+        let empty_proto = Type::Protocol {
+            name: "Empty".to_string(),
+            module: None,
+            members: vec![],
+        };
+        assert_eq!(empty_proto.to_string(), "Protocol[Empty]");
     }
 }

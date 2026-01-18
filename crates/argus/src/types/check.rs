@@ -727,6 +727,25 @@ impl<'a> TypeChecker<'a> {
                 Type::Instance { name: n2, .. },
             ) => n1 == n2 || self.inferencer.is_subclass(n2, n1),
 
+            // Protocol structural subtyping
+            // A type is assignable to a Protocol if it has all required members
+            (Type::Protocol { members, .. }, Type::Instance { name, .. }) => {
+                // Check that the source type has all required protocol members
+                members.iter().all(|(member_name, member_ty)| {
+                    if let Some(attr_ty) = self.inferencer.get_attribute_recursive(name, member_name) {
+                        self.is_assignable(member_ty, &attr_ty)
+                    } else {
+                        false
+                    }
+                })
+            }
+
+            // Callable to Protocol with __call__
+            (Type::Protocol { members, .. }, Type::Callable { .. }) => {
+                // A Callable can match a Protocol if the Protocol only requires __call__
+                members.len() == 1 && members.iter().any(|(name, _)| name == "__call__")
+            }
+
             _ => false,
         }
     }
