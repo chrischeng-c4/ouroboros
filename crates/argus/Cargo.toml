@@ -35,6 +35,7 @@ rayon.workspace = true
 
 # Config
 toml = "0.8"
+regex-lite = "0.1"
 
 # LSP Server
 tower-lsp = "0.20"
