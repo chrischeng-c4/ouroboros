@@ -13,6 +13,7 @@ use crate::diagnostic::{Diagnostic as ArgusDiagnostic, DiagnosticSeverity as Arg
 use crate::lint::CheckerRegistry;
 use crate::semantic::{SymbolTable, SymbolTableBuilder};
 use crate::syntax::{MultiParser, ParsedFile};
+use crate::types::{StubLoader, TypeChecker};
 use crate::{LintConfig, Language};
 
 /// Document state tracked by the server
@@ -37,17 +38,22 @@ pub struct ArgusServer {
     analyses: Arc<RwLock<HashMap<Url, DocumentAnalysis>>>,
     registry: Arc<CheckerRegistry>,
     config: Arc<LintConfig>,
+    stubs: Arc<RwLock<StubLoader>>,
 }
 
 impl ArgusServer {
     /// Create a new Argus server
     pub fn new(client: Client) -> Self {
+        let mut stubs = StubLoader::new();
+        stubs.load_builtins();
+
         Self {
             client,
             documents: Arc::new(RwLock::new(HashMap::new())),
             analyses: Arc::new(RwLock::new(HashMap::new())),
             registry: Arc::new(CheckerRegistry::new()),
             config: Arc::new(LintConfig::default()),
+            stubs: Arc::new(RwLock::new(stubs)),
         }
     }
 
@@ -188,6 +194,12 @@ impl LanguageServer for ArgusServer {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
+                // Completion
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
+                    resolve_provider: Some(false),
+                    ..Default::default()
+                }),
                 // Code actions (quick fixes)
                 code_action_provider: Some(CodeActionProviderCapability::Options(
                     CodeActionOptions {
@@ -454,9 +466,235 @@ impl LanguageServer for ArgusServer {
             Ok(Some(actions))
         }
     }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+
+        // Get document content
+        let doc_content = {
+            let documents = self.documents.read().await;
+            documents.get(uri).map(|d| (d.content.clone(), d.language))
+        };
+
+        let Some((content, language)) = doc_content else {
+            return Ok(None);
+        };
+
+        // Only provide Python completions for now
+        if language != Language::Python {
+            return Ok(None);
+        }
+
+        // Get the line and figure out what we're completing
+        let lines: Vec<&str> = content.lines().collect();
+        let line_idx = position.line as usize;
+
+        if line_idx >= lines.len() {
+            return Ok(None);
+        }
+
+        let line = lines[line_idx];
+        let col = position.character as usize;
+        let prefix = &line[..col.min(line.len())];
+
+        // Check if this is a dot completion
+        let items = if prefix.ends_with('.') {
+            // Get word before the dot
+            self.complete_attribute(prefix).await
+        } else if let Some(trigger) = params.context.and_then(|c| c.trigger_character) {
+            if trigger == "." {
+                self.complete_attribute(prefix).await
+            } else {
+                self.complete_identifiers(prefix).await
+            }
+        } else {
+            self.complete_identifiers(prefix).await
+        };
+
+        if items.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(CompletionResponse::Array(items)))
+        }
+    }
 }
 
 impl ArgusServer {
+    /// Complete attributes after a dot
+    async fn complete_attribute(&self, prefix: &str) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        // Find the object name before the dot
+        let prefix = prefix.trim_end_matches('.');
+        let obj_name = prefix.split_whitespace().last().unwrap_or("");
+
+        // Get completions from stubs for known modules
+        let stubs = self.stubs.read().await;
+
+        // Check if this might be a module access
+        if let Some(module_info) = stubs.get_stub(obj_name) {
+            for (name, ty) in &module_info.exports {
+                items.push(CompletionItem {
+                    label: name.clone(),
+                    kind: Some(self.type_to_completion_kind(ty)),
+                    detail: Some(ty.to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+
+        // Add common completions for known types
+        if obj_name.ends_with("str") || obj_name.ends_with('"') || obj_name.ends_with('\'') {
+            items.extend(self.string_completions());
+        } else if obj_name.ends_with(']') {
+            items.extend(self.list_completions());
+        } else if obj_name.ends_with('}') {
+            items.extend(self.dict_completions());
+        }
+
+        items
+    }
+
+    /// Complete identifiers (builtins, imports, local variables)
+    async fn complete_identifiers(&self, prefix: &str) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        // Extract the partial identifier being typed
+        let partial = prefix.split_whitespace().last().unwrap_or("");
+        let partial_lower = partial.to_lowercase();
+
+        // Get completions from builtins
+        let stubs = self.stubs.read().await;
+
+        if let Some(builtins) = stubs.get_stub("builtins") {
+            for (name, ty) in &builtins.exports {
+                if name.to_lowercase().starts_with(&partial_lower) {
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(self.type_to_completion_kind(ty)),
+                        detail: Some(ty.to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        // Add keywords
+        let keywords = [
+            "def", "class", "if", "elif", "else", "for", "while", "try",
+            "except", "finally", "with", "return", "yield", "import", "from",
+            "as", "pass", "break", "continue", "raise", "assert", "global",
+            "nonlocal", "lambda", "True", "False", "None", "and", "or", "not",
+            "in", "is", "async", "await", "match", "case",
+        ];
+
+        for kw in keywords {
+            if kw.to_lowercase().starts_with(&partial_lower) {
+                items.push(CompletionItem {
+                    label: kw.to_string(),
+                    kind: Some(CompletionItemKind::KEYWORD),
+                    ..Default::default()
+                });
+            }
+        }
+
+        items
+    }
+
+    /// Common string method completions
+    fn string_completions(&self) -> Vec<CompletionItem> {
+        let methods = [
+            ("upper", "() -> str", "Convert to uppercase"),
+            ("lower", "() -> str", "Convert to lowercase"),
+            ("strip", "() -> str", "Remove leading/trailing whitespace"),
+            ("split", "(sep=None) -> list[str]", "Split string"),
+            ("join", "(iterable) -> str", "Join strings"),
+            ("replace", "(old, new) -> str", "Replace occurrences"),
+            ("startswith", "(prefix) -> bool", "Check if starts with"),
+            ("endswith", "(suffix) -> bool", "Check if ends with"),
+            ("find", "(sub) -> int", "Find substring index"),
+            ("format", "(*args, **kwargs) -> str", "Format string"),
+        ];
+
+        methods
+            .into_iter()
+            .map(|(name, sig, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some(sig.to_string()),
+                documentation: Some(Documentation::String(doc.to_string())),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    /// Common list method completions
+    fn list_completions(&self) -> Vec<CompletionItem> {
+        let methods = [
+            ("append", "(x)", "Add item to end"),
+            ("extend", "(iterable)", "Extend with iterable"),
+            ("insert", "(i, x)", "Insert at index"),
+            ("remove", "(x)", "Remove first occurrence"),
+            ("pop", "(i=-1)", "Remove and return item"),
+            ("clear", "()", "Remove all items"),
+            ("index", "(x)", "Return index of x"),
+            ("count", "(x)", "Count occurrences"),
+            ("sort", "()", "Sort in place"),
+            ("reverse", "()", "Reverse in place"),
+            ("copy", "()", "Return shallow copy"),
+        ];
+
+        methods
+            .into_iter()
+            .map(|(name, sig, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some(sig.to_string()),
+                documentation: Some(Documentation::String(doc.to_string())),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    /// Common dict method completions
+    fn dict_completions(&self) -> Vec<CompletionItem> {
+        let methods = [
+            ("get", "(key, default=None)", "Get value with default"),
+            ("keys", "()", "Return keys view"),
+            ("values", "()", "Return values view"),
+            ("items", "()", "Return items view"),
+            ("pop", "(key, default=None)", "Remove and return value"),
+            ("update", "(other)", "Update from dict/iterable"),
+            ("setdefault", "(key, default=None)", "Get or set default"),
+            ("clear", "()", "Remove all items"),
+            ("copy", "()", "Return shallow copy"),
+        ];
+
+        methods
+            .into_iter()
+            .map(|(name, sig, doc)| CompletionItem {
+                label: name.to_string(),
+                kind: Some(CompletionItemKind::METHOD),
+                detail: Some(sig.to_string()),
+                documentation: Some(Documentation::String(doc.to_string())),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    /// Convert Argus type to LSP completion item kind
+    fn type_to_completion_kind(&self, ty: &crate::types::Type) -> CompletionItemKind {
+        use crate::types::Type;
+
+        match ty {
+            Type::Callable { .. } => CompletionItemKind::FUNCTION,
+            Type::ClassType { .. } => CompletionItemKind::CLASS,
+            Type::Instance { .. } => CompletionItemKind::VARIABLE,
+            _ => CompletionItemKind::VALUE,
+        }
+    }
+
     /// Check if two ranges overlap
     fn ranges_overlap(a: &Range, b: &Range) -> bool {
         // a starts before b ends AND a ends after b starts
