@@ -3,88 +3,11 @@
 use std::collections::HashMap;
 use tree_sitter::Node;
 
+use super::class_info::ClassInfo;
 use super::imports::{parse_import, ImportResolver};
 use super::stubs::StubLoader;
 use super::ty::{Param, ParamKind, Type, TypeVarId};
-
-/// Information about a class definition
-#[derive(Debug, Clone, Default)]
-pub struct ClassInfo {
-    /// Class name
-    pub name: String,
-    /// Base classes
-    pub bases: Vec<String>,
-    /// Instance attributes (name -> type)
-    pub attributes: HashMap<String, Type>,
-    /// Methods (name -> callable type)
-    pub methods: HashMap<String, Type>,
-    /// Class variables (name -> type)
-    pub class_vars: HashMap<String, Type>,
-}
-
-impl ClassInfo {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            bases: Vec::new(),
-            attributes: HashMap::new(),
-            methods: HashMap::new(),
-            class_vars: HashMap::new(),
-        }
-    }
-
-    /// Get attribute type (checks instance attrs, then methods, then class vars)
-    pub fn get_attribute(&self, name: &str) -> Option<&Type> {
-        self.attributes
-            .get(name)
-            .or_else(|| self.methods.get(name))
-            .or_else(|| self.class_vars.get(name))
-    }
-}
-
-/// Type environment mapping names to types
-#[derive(Debug, Clone, Default)]
-pub struct TypeEnv {
-    /// Stack of scopes, innermost last
-    scopes: Vec<HashMap<String, Type>>,
-}
-
-impl TypeEnv {
-    pub fn new() -> Self {
-        Self {
-            scopes: vec![HashMap::new()],
-        }
-    }
-
-    /// Push a new scope
-    pub fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new());
-    }
-
-    /// Pop the innermost scope
-    pub fn pop_scope(&mut self) {
-        if self.scopes.len() > 1 {
-            self.scopes.pop();
-        }
-    }
-
-    /// Bind a name to a type in the current scope
-    pub fn bind(&mut self, name: String, ty: Type) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name, ty);
-        }
-    }
-
-    /// Look up a name, searching from innermost to outermost scope
-    pub fn lookup(&self, name: &str) -> Option<&Type> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.get(name) {
-                return Some(ty);
-            }
-        }
-        None
-    }
-}
+use super::type_env::TypeEnv;
 
 /// Type inferencer for Python code
 pub struct TypeInferencer<'a> {
@@ -1182,13 +1105,7 @@ impl<'a> TypeInferencer<'a> {
 
     /// Get all variable types from the current environment
     pub fn get_env_types(&self) -> HashMap<String, Type> {
-        let mut types = HashMap::new();
-        for scope in &self.env.scopes {
-            for (name, ty) in scope {
-                types.insert(name.clone(), ty.clone());
-            }
-        }
-        types
+        self.env.get_all_types()
     }
 
     /// Analyze an import statement and add imported names to the environment
