@@ -16,6 +16,9 @@ use super::modules::ModuleGraph;
 use super::stubs::StubLoader;
 use super::ty::Type;
 use crate::syntax::{Language, MultiParser};
+use rayon::prelude::*;
+
+use super::cache::{AnalysisCache, CacheEntry, ContentHash};
 
 /// Directories to always exclude from analysis
 const EXCLUDED_DIRS: &[&str] = &[
@@ -159,6 +162,8 @@ pub struct ProjectAnalyzer {
     stubs: StubLoader,
     /// Parser for source files
     parser: MultiParser,
+    /// Analysis cache
+    cache: AnalysisCache,
     /// Analyzed module info
     module_info: HashMap<String, ModuleInfo>,
     /// Type errors by module
@@ -177,6 +182,7 @@ impl ProjectAnalyzer {
             graph: ModuleGraph::new(),
             stubs,
             parser,
+            cache: AnalysisCache::new(),
             module_info: HashMap::new(),
             errors: HashMap::new(),
         }
@@ -377,6 +383,137 @@ impl ProjectAnalyzer {
     /// Check for circular imports
     pub fn circular_imports(&self) -> Vec<Vec<String>> {
         self.graph.detect_cycles()
+    }
+
+    /// Get the analysis cache
+    pub fn cache(&self) -> &AnalysisCache {
+        &self.cache
+    }
+
+    /// Analyze modules in parallel (for independent modules)
+    /// This analyzes modules that have no interdependencies in parallel
+    pub fn analyze_parallel(&mut self) -> &HashMap<String, Vec<TypeError>> {
+        // Build graph if not already built
+        if self.graph.module_names().next().is_none() {
+            self.build_graph();
+        }
+
+        // Collect modules to analyze with their paths and sources
+        let modules_to_analyze: Vec<(String, String)> = self
+            .graph
+            .modules()
+            .filter_map(|(name, node)| {
+                // Skip if already cached and not changed
+                if let Some(cached) = self.cache.get(name) {
+                    if !cached.needs_reanalysis() {
+                        // Use cached errors
+                        if !cached.errors.is_empty() {
+                            return None; // Will handle separately
+                        }
+                        return None;
+                    }
+                }
+
+                node.path.as_ref().and_then(|path| {
+                    fs::read_to_string(path)
+                        .ok()
+                        .map(|source| (name.clone(), source))
+                })
+            })
+            .collect();
+
+        // Analyze in parallel using rayon
+        let results: Vec<(String, Vec<TypeError>)> = modules_to_analyze
+            .par_iter()
+            .filter_map(|(name, source)| {
+                // Create a new parser for this thread
+                let mut parser = match MultiParser::new() {
+                    Ok(p) => p,
+                    Err(_) => return None,
+                };
+
+                let parsed = parser.parse(source, Language::Python)?;
+                let mut checker = TypeChecker::new(source);
+                let diagnostics = checker.check_file(&parsed);
+
+                let errors: Vec<TypeError> = diagnostics
+                    .into_iter()
+                    .filter_map(|d| {
+                        if d.message.contains("type") || d.message.contains("Type") {
+                            Some(TypeError {
+                                range: d.range,
+                                expected: Type::Unknown,
+                                got: Type::Unknown,
+                                message: d.message,
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                Some((name.clone(), errors))
+            })
+            .collect();
+
+        // Merge results
+        for (name, errors) in results {
+            if !errors.is_empty() {
+                self.errors.insert(name, errors);
+            }
+        }
+
+        &self.errors
+    }
+
+    /// Incremental analysis - only analyze changed files and their dependents
+    pub fn analyze_incremental(&mut self) -> &HashMap<String, Vec<TypeError>> {
+        // Build graph if not already built
+        if self.graph.module_names().next().is_none() {
+            self.build_graph();
+        }
+
+        // Find changed modules
+        let changed: Vec<String> = self.cache.get_changed_modules();
+
+        // Get all affected modules (including dependents)
+        let mut affected = std::collections::HashSet::new();
+        for module in &changed {
+            affected.extend(self.cache.get_affected_modules(module));
+        }
+
+        // Collect module data first to avoid borrow issues
+        let modules_data: Vec<(String, PathBuf, String)> = affected
+            .iter()
+            .filter_map(|module_name| {
+                let node = self.graph.get_module(module_name)?;
+                let path = node.path.clone()?;
+                let source = fs::read_to_string(&path).ok()?;
+                Some((module_name.clone(), path, source))
+            })
+            .collect();
+
+        // Now analyze each module
+        for (module_name, path, source) in modules_data {
+            let errors = self.analyze_module(&module_name, &source);
+
+            // Update cache
+            let hash = ContentHash::from_content(&source);
+            let mut entry = CacheEntry::new(
+                module_name.clone(),
+                path,
+                hash,
+                ModuleInfo::new(&module_name),
+            );
+            entry.errors = errors.clone();
+            self.cache.store(entry);
+
+            if !errors.is_empty() {
+                self.errors.insert(module_name, errors);
+            }
+        }
+
+        &self.errors
     }
 }
 

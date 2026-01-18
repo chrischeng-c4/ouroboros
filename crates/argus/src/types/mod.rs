@@ -15,6 +15,7 @@ mod stubs;
 mod typeshed;
 mod modules;
 mod project;
+mod cache;
 
 pub use ty::{LiteralValue, Param, ParamKind, Type, TypeVarId};
 pub use class_info::ClassInfo;
@@ -26,3 +27,4 @@ pub use imports::{Import, ImportResolver, ImportedName, ModuleInfo};
 pub use stubs::StubLoader;
 pub use modules::{ModuleGraph, ModuleNode};
 pub use project::{ProjectAnalyzer, ProjectConfig};
+pub use cache::{AnalysisCache, CacheEntry, ContentHash};

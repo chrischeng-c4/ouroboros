@@ -30,6 +30,9 @@ anyhow.workspace = true
 jwalk.workspace = true
 tracing.workspace = true
 
+# Parallel processing
+rayon.workspace = true
+
 # Config
 toml = "0.8"
 
