@@ -8,7 +8,7 @@ use super::builtins::add_builtins;
 use super::class_info::ClassInfo;
 use super::imports::{parse_import, ImportResolver};
 use super::stubs::StubLoader;
-use super::ty::{Param, ParamKind, Type, TypeVarId};
+use super::ty::{Param, ParamKind, Type, TypeVarId, Variance};
 use super::type_env::TypeEnv;
 
 /// Type inferencer for Python code
@@ -77,6 +77,17 @@ impl<'a> TypeInferencer<'a> {
 
     /// Register a TypeVar definition
     pub fn register_type_var(&mut self, name: &str, bound: Option<Type>, constraints: Vec<Type>) {
+        self.register_type_var_with_variance(name, bound, constraints, Variance::Invariant);
+    }
+
+    /// Register a TypeVar definition with specific variance
+    pub fn register_type_var_with_variance(
+        &mut self,
+        name: &str,
+        bound: Option<Type>,
+        constraints: Vec<Type>,
+        variance: Variance,
+    ) {
         let id = TypeVarId(self.next_type_var);
         self.next_type_var += 1;
         let tv = Type::TypeVar {
@@ -84,6 +95,7 @@ impl<'a> TypeInferencer<'a> {
             name: name.to_string(),
             bound: bound.map(Box::new),
             constraints,
+            variance,
         };
         self.type_vars.insert(name.to_string(), tv.clone());
         self.env.bind(name.to_string(), tv);
@@ -168,7 +180,7 @@ impl<'a> TypeInferencer<'a> {
         false
     }
 
-    /// Generate a fresh type variable
+    /// Generate a fresh type variable (invariant by default)
     #[allow(dead_code)]
     fn fresh_type_var(&mut self, name: &str) -> Type {
         let id = TypeVarId(self.next_type_var);
@@ -178,6 +190,7 @@ impl<'a> TypeInferencer<'a> {
             name: name.to_string(),
             bound: None,
             constraints: vec![],
+            variance: Variance::Invariant,
         }
     }
 
@@ -186,9 +199,47 @@ impl<'a> TypeInferencer<'a> {
         node.utf8_text(self.source.as_bytes()).unwrap_or("")
     }
 
+    /// Check if a node is inside an error region (has an error ancestor)
+    ///
+    /// This is used for error recovery - expressions inside error regions
+    /// should not trigger cascading type errors.
+    fn is_in_error_region(&self, node: &Node) -> bool {
+        let mut current = *node;
+        while let Some(parent) = current.parent() {
+            if parent.is_error() {
+                return true;
+            }
+            current = parent;
+        }
+        false
+    }
+
+    /// Return appropriate fallback type based on context
+    ///
+    /// Returns Error type in error regions, Unknown otherwise.
+    fn fallback_type(&self, node: &Node) -> Type {
+        if self.is_in_error_region(node) {
+            Type::Error
+        } else {
+            Type::Unknown
+        }
+    }
+
     /// Infer the type of an expression
+    ///
+    /// Returns `Type::Error` for error nodes (from parser recovery) to prevent
+    /// cascading errors in downstream type checking.
     pub fn infer_expr(&mut self, node: &Node) -> Type {
+        // Error recovery: return Error type for ERROR nodes from tree-sitter
+        // This prevents cascading type errors when parsing fails
+        if node.is_error() || node.is_missing() {
+            return Type::Error;
+        }
+
         match node.kind() {
+            // Explicit ERROR node kind (fallback check)
+            "ERROR" => Type::Error,
+
             // Literals
             "integer" => Type::Int,
             "float" => Type::Float,
@@ -206,6 +257,8 @@ impl<'a> TypeInferencer<'a> {
                         return ty.clone();
                     }
                 }
+                // Use Error type for unresolved identifiers in error regions
+                // This helps prevent cascading errors
                 self.env.lookup(name).cloned().unwrap_or(Type::Unknown)
             }
 
@@ -1271,6 +1324,139 @@ impl<'a> TypeInferencer<'a> {
             }
         }
     }
+
+    /// Parse a TypeVar(...) call and extract variance, bounds, and constraints
+    ///
+    /// Handles patterns like:
+    /// - `TypeVar("T")`
+    /// - `TypeVar("T", covariant=True)`
+    /// - `TypeVar("T", contravariant=True)`
+    /// - `TypeVar("T", bound=SomeType)`
+    /// - `TypeVar("T", int, str)` (constraints)
+    pub fn parse_typevar_call(&self, node: &Node) -> Option<TypeVarInfo> {
+        // Must be a call expression
+        if node.kind() != "call" {
+            return None;
+        }
+
+        // Get function being called
+        let func = node.child_by_field_name("function")?;
+        let func_name = self.node_text(&func);
+
+        // Must be a TypeVar call
+        if func_name != "TypeVar" {
+            return None;
+        }
+
+        // Get arguments
+        let args = node.child_by_field_name("arguments")?;
+        let mut cursor = args.walk();
+
+        let mut name: Option<String> = None;
+        let mut variance = Variance::Invariant;
+        let mut bound: Option<Type> = None;
+        let mut constraints: Vec<Type> = Vec::new();
+        let mut positional_count = 0;
+
+        for child in args.children(&mut cursor) {
+            match child.kind() {
+                "string" => {
+                    // First string is the TypeVar name
+                    if name.is_none() {
+                        let text = self.node_text(&child);
+                        // Remove quotes
+                        let text = text.trim_matches(|c| c == '"' || c == '\'');
+                        name = Some(text.to_string());
+                    }
+                    positional_count += 1;
+                }
+                "identifier" | "subscript" | "attribute" => {
+                    // Positional type constraints (not the first string name)
+                    if positional_count > 0 {
+                        let ty = parse_type_annotation(self.source, &child);
+                        constraints.push(ty);
+                    }
+                    positional_count += 1;
+                }
+                "keyword_argument" => {
+                    // Parse keyword arguments: covariant, contravariant, bound
+                    if let Some(arg_name) = child.child_by_field_name("name") {
+                        let key = self.node_text(&arg_name);
+                        if let Some(value_node) = child.child_by_field_name("value") {
+                            let value = self.node_text(&value_node);
+                            match key {
+                                "covariant" if value == "True" => {
+                                    variance = Variance::Covariant;
+                                }
+                                "contravariant" if value == "True" => {
+                                    variance = Variance::Contravariant;
+                                }
+                                "bound" => {
+                                    bound = Some(parse_type_annotation(self.source, &value_node));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Some(TypeVarInfo {
+            name: name?,
+            variance,
+            bound,
+            constraints,
+        })
+    }
+
+    /// Handle an assignment that might be a TypeVar declaration
+    /// Returns true if a TypeVar was registered
+    pub fn try_register_typevar_assignment(&mut self, node: &Node) -> bool {
+        // Pattern: T = TypeVar("T", ...)
+        if node.kind() != "assignment" {
+            return false;
+        }
+
+        let left = match node.child_by_field_name("left") {
+            Some(l) if l.kind() == "identifier" => l,
+            _ => return false,
+        };
+
+        let right = match node.child_by_field_name("right") {
+            Some(r) if r.kind() == "call" => r,
+            _ => return false,
+        };
+
+        let var_name = self.node_text(&left).to_string();
+
+        if let Some(info) = self.parse_typevar_call(&right) {
+            // Register the TypeVar with extracted variance
+            self.register_type_var_with_variance(
+                &var_name,
+                info.bound,
+                info.constraints,
+                info.variance,
+            );
+            return true;
+        }
+
+        false
+    }
+}
+
+/// Information extracted from a TypeVar(...) call
+#[derive(Debug, Clone)]
+pub struct TypeVarInfo {
+    /// The name of the TypeVar (e.g., "T" from TypeVar("T", ...))
+    pub name: String,
+    /// Variance: covariant, contravariant, or invariant
+    pub variance: Variance,
+    /// Optional upper bound
+    pub bound: Option<Type>,
+    /// Type constraints (TypeVar can only be one of these types)
+    pub constraints: Vec<Type>,
 }
 
 #[cfg(test)]

@@ -269,6 +269,124 @@ impl ModuleGraph {
         deps
     }
 
+    /// Get all modules that transitively depend on the given module
+    ///
+    /// This is the reverse of `get_transitive_dependencies` and is used
+    /// for incremental invalidation - when a module changes, all modules
+    /// that (transitively) import it need to be re-analyzed.
+    pub fn get_transitive_dependents(&self, name: &str) -> HashSet<String> {
+        let mut dependents = HashSet::new();
+        let mut queue: VecDeque<String> = VecDeque::new();
+
+        if let Some(node) = self.modules.get(name) {
+            for importer in &node.imported_by {
+                queue.push_back(importer.clone());
+            }
+        }
+
+        while let Some(current) = queue.pop_front() {
+            if dependents.insert(current.clone()) {
+                if let Some(node) = self.modules.get(&current) {
+                    for importer in &node.imported_by {
+                        if !dependents.contains(importer) {
+                            queue.push_back(importer.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        dependents
+    }
+
+    /// Get all modules affected by a change to the given module
+    ///
+    /// Returns the changed module plus all its transitive dependents,
+    /// sorted in reverse topological order (dependents before dependencies)
+    /// for proper re-analysis ordering.
+    pub fn get_affected_modules(&self, changed: &str) -> Vec<String> {
+        let mut affected = self.get_transitive_dependents(changed);
+        affected.insert(changed.to_string());
+
+        // Sort in reverse topological order so dependents are analyzed after
+        // the modules they depend on
+        let mut sorted: Vec<String> = affected.into_iter().collect();
+        sorted.sort_by(|a, b| {
+            // If a imports b (a depends on b), b should come first
+            // So if a's dependencies include b, a > b (a comes after b)
+            let a_depends_on_b = self
+                .get_module(a)
+                .map(|n| n.imports.contains(b))
+                .unwrap_or(false);
+            let b_depends_on_a = self
+                .get_module(b)
+                .map(|n| n.imports.contains(a))
+                .unwrap_or(false);
+
+            if a_depends_on_b && !b_depends_on_a {
+                std::cmp::Ordering::Greater
+            } else if b_depends_on_a && !a_depends_on_b {
+                std::cmp::Ordering::Less
+            } else {
+                a.cmp(b)
+            }
+        });
+
+        sorted
+    }
+
+    /// Remove a module from the graph (e.g., when a file is deleted)
+    pub fn remove_module(&mut self, name: &str) {
+        // Remove from other modules' imports/imported_by
+        if let Some(node) = self.modules.remove(name) {
+            // Remove this module from the imports of modules it imports
+            for import in &node.imports {
+                if let Some(imported) = self.modules.get_mut(import) {
+                    imported.imported_by.remove(name);
+                }
+            }
+            // Remove this module from the imported_by of modules that import it
+            for importer in &node.imported_by {
+                if let Some(importing) = self.modules.get_mut(importer) {
+                    importing.imports.remove(name);
+                }
+            }
+        }
+
+        self.roots.remove(name);
+    }
+
+    /// Update module info
+    pub fn set_module_info(&mut self, name: &str, info: ModuleInfo) {
+        if let Some(node) = self.modules.get_mut(name) {
+            node.info = Some(info);
+        }
+    }
+
+    /// Clear all imports for a module (before re-analyzing)
+    pub fn clear_imports(&mut self, name: &str) {
+        if let Some(node) = self.modules.get_mut(name) {
+            // Remove from imported_by of modules this module imports
+            let imports: Vec<String> = node.imports.drain().collect();
+            for import in imports {
+                if let Some(imported) = self.modules.get_mut(&import) {
+                    imported.imported_by.remove(name);
+                }
+            }
+        }
+    }
+
+    /// Find module by file path
+    pub fn find_by_path(&self, path: &Path) -> Option<&String> {
+        self.modules.iter().find_map(|(name, node)| {
+            if node.path.as_deref() == Some(path) {
+                Some(name)
+            } else {
+                None
+            }
+        })
+    }
+
     /// Convert a file path to a module name
     pub fn path_to_module_name(path: &Path, root: &Path) -> Option<String> {
         let relative = path.strip_prefix(root).ok()?;
@@ -523,5 +641,89 @@ mod tests {
             resolve_relative_import(".", "mypackage.submodule"),
             Some("mypackage".to_string())
         );
+    }
+
+    #[test]
+    fn test_transitive_dependents() {
+        let mut graph = ModuleGraph::new();
+
+        // app -> services -> models -> base
+        graph.add_import("app", "services");
+        graph.add_import("services", "models");
+        graph.add_import("models", "base");
+
+        // If base changes, models, services, and app all need re-analysis
+        let dependents = graph.get_transitive_dependents("base");
+        assert!(dependents.contains("models"));
+        assert!(dependents.contains("services"));
+        assert!(dependents.contains("app"));
+
+        // If services changes, only app needs re-analysis
+        let dependents = graph.get_transitive_dependents("services");
+        assert!(dependents.contains("app"));
+        assert!(!dependents.contains("models")); // models doesn't import services
+    }
+
+    #[test]
+    fn test_get_affected_modules() {
+        let mut graph = ModuleGraph::new();
+
+        graph.add_import("app", "services");
+        graph.add_import("services", "models");
+        graph.add_import("app", "models"); // app also imports models directly
+
+        let affected = graph.get_affected_modules("models");
+        assert!(affected.contains(&"models".to_string()));
+        assert!(affected.contains(&"services".to_string()));
+        assert!(affected.contains(&"app".to_string()));
+
+        // Models should come before services and app in the order
+        let models_pos = affected.iter().position(|n| n == "models");
+        let services_pos = affected.iter().position(|n| n == "services");
+        let app_pos = affected.iter().position(|n| n == "app");
+
+        assert!(models_pos.is_some());
+        assert!(services_pos.is_some());
+        assert!(app_pos.is_some());
+    }
+
+    #[test]
+    fn test_remove_module() {
+        let mut graph = ModuleGraph::new();
+
+        graph.add_import("app", "services");
+        graph.add_import("app", "models");
+        graph.add_import("services", "models");
+
+        // Remove models
+        graph.remove_module("models");
+
+        // models should no longer exist
+        assert!(!graph.has_module("models"));
+
+        // app and services should no longer import models
+        let app = graph.get_module("app").unwrap();
+        assert!(!app.imports.contains("models"));
+
+        let services = graph.get_module("services").unwrap();
+        assert!(!services.imports.contains("models"));
+    }
+
+    #[test]
+    fn test_clear_imports() {
+        let mut graph = ModuleGraph::new();
+
+        graph.add_import("app", "services");
+        graph.add_import("app", "models");
+
+        // Clear app's imports
+        graph.clear_imports("app");
+
+        let app = graph.get_module("app").unwrap();
+        assert!(app.imports.is_empty());
+
+        // services and models should no longer list app as importer
+        let services = graph.get_module("services").unwrap();
+        assert!(!services.imported_by.contains("app"));
     }
 }

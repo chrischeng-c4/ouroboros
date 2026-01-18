@@ -92,6 +92,9 @@ pub enum TypeInfo {
     Unknown,
     /// Any type
     Any,
+    /// Error type - placeholder for unresolved expressions in error contexts
+    /// Used to prevent cascading errors when the parser encounters syntax errors
+    Error,
 }
 
 impl TypeInfo {
@@ -116,6 +119,7 @@ impl TypeInfo {
             }
             TypeInfo::Unknown => "unknown".to_string(),
             TypeInfo::Any => "any".to_string(),
+            TypeInfo::Error => "<error>".to_string(),
         }
     }
 
@@ -406,6 +410,11 @@ impl SymbolTableBuilder {
     }
 
     fn visit_python_node(&mut self, node: &tree_sitter::Node<'_>, file: &ParsedFile) {
+        // Error recovery: skip ERROR nodes but continue processing siblings
+        if node.is_error() || node.is_missing() {
+            return;
+        }
+
         match node.kind() {
             "function_definition" | "async_function_definition" => {
                 self.visit_python_function(node, file);
@@ -431,10 +440,13 @@ impl SymbolTableBuilder {
             _ => {}
         }
 
-        // Visit children
+        // Visit children (with error recovery - skip error nodes)
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.visit_python_node(&child, file);
+            // Skip ERROR nodes at any level
+            if !child.is_error() && !child.is_missing() {
+                self.visit_python_node(&child, file);
+            }
         }
     }
 

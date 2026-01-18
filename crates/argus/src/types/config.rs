@@ -52,6 +52,37 @@ pub struct ArgusConfig {
 
     /// Plugins to enable
     pub plugins: Vec<String>,
+
+    // === Typeshed configuration ===
+
+    /// Custom path to a local typeshed copy (takes precedence over downloads)
+    pub typeshed_path: Option<PathBuf>,
+
+    /// Directory to store downloaded typeshed stubs (default: ~/.cache/argus)
+    pub typeshed_cache_dir: Option<PathBuf>,
+
+    /// Disable network requests for typeshed downloads (offline mode)
+    #[serde(default)]
+    pub typeshed_offline: bool,
+
+    /// Cache TTL in days for typeshed stubs (default: 7)
+    #[serde(default = "default_typeshed_ttl")]
+    pub typeshed_ttl_days: u32,
+
+    /// Optional commit hash to pin typeshed version
+    pub typeshed_commit: Option<String>,
+
+    /// Stub precedence order: "local", "typeshed", "bundled" (default: local > typeshed > bundled)
+    #[serde(default = "default_stub_precedence")]
+    pub stub_precedence: Vec<String>,
+}
+
+fn default_typeshed_ttl() -> u32 {
+    7
+}
+
+fn default_stub_precedence() -> Vec<String> {
+    vec!["local".to_string(), "typeshed".to_string(), "bundled".to_string()]
 }
 
 /// Per-directory configuration override
@@ -89,6 +120,24 @@ impl ArgusConfig {
     /// Create a new config with defaults
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Get the Python version for stub resolution (defaults to "3.11")
+    pub fn python_version_or_default(&self) -> String {
+        self.python_version.clone().unwrap_or_else(|| "3.11".to_string())
+    }
+
+    /// Get the typeshed cache directory (defaults to ~/.cache/argus)
+    pub fn typeshed_cache_dir_or_default(&self) -> PathBuf {
+        self.typeshed_cache_dir.clone().unwrap_or_else(|| {
+            if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(".cache").join("argus")
+            } else if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
+                PathBuf::from(cache).join("argus")
+            } else {
+                PathBuf::from(".argus-cache")
+            }
+        })
     }
 
     /// Create a strict configuration

@@ -30,6 +30,12 @@ anyhow.workspace = true
 jwalk.workspace = true
 tracing.workspace = true
 
+# HTTP client for typeshed downloads
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+# File system watching
+notify = "7"
+
 # Parallel processing
 rayon.workspace = true
 
