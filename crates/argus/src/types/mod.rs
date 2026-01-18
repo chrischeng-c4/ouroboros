@@ -13,6 +13,8 @@ mod narrow;
 mod imports;
 mod stubs;
 mod typeshed;
+mod modules;
+mod project;
 
 pub use ty::{LiteralValue, Param, ParamKind, Type, TypeVarId};
 pub use class_info::ClassInfo;
@@ -22,3 +24,5 @@ pub use check::{TypeChecker, TypeError};
 pub use narrow::{NarrowingCondition, TypeNarrower};
 pub use imports::{Import, ImportResolver, ImportedName, ModuleInfo};
 pub use stubs::StubLoader;
+pub use modules::{ModuleGraph, ModuleNode};
+pub use project::{ProjectAnalyzer, ProjectConfig};
