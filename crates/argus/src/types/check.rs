@@ -5,7 +5,7 @@ use tree_sitter::Node;
 
 use super::infer::TypeInferencer;
 use super::narrow::{self, TypeNarrower};
-use super::ty::{ParamKind, Type};
+use super::ty::{LiteralValue, ParamKind, Type};
 use crate::diagnostic::{Diagnostic, DiagnosticCategory, DiagnosticSeverity, Range};
 use crate::syntax::ParsedFile;
 
@@ -745,6 +745,17 @@ impl<'a> TypeChecker<'a> {
                 // A Callable can match a Protocol if the Protocol only requires __call__
                 members.len() == 1 && members.iter().any(|(name, _)| name == "__call__")
             }
+
+            // Literal types are assignable to their base types
+            (Type::Int, Type::Literal(LiteralValue::Int(_))) => true,
+            (Type::Float, Type::Literal(LiteralValue::Float(_))) => true,
+            (Type::Float, Type::Literal(LiteralValue::Int(_))) => true, // int literal -> float
+            (Type::Str, Type::Literal(LiteralValue::Str(_))) => true,
+            (Type::Bool, Type::Literal(LiteralValue::Bool(_))) => true,
+            (Type::None, Type::Literal(LiteralValue::None)) => true,
+
+            // Literal to Literal (same value)
+            (Type::Literal(a), Type::Literal(b)) => a == b,
 
             _ => false,
         }

@@ -732,4 +732,24 @@ mod tests {
         };
         assert_eq!(empty_proto.to_string(), "Protocol[Empty]");
     }
+
+    #[test]
+    fn test_literal_display() {
+        assert_eq!(
+            Type::Literal(LiteralValue::Int(42)).to_string(),
+            "Literal[42]"
+        );
+        assert_eq!(
+            Type::Literal(LiteralValue::Str("hello".to_string())).to_string(),
+            "Literal[\"hello\"]"
+        );
+        assert_eq!(
+            Type::Literal(LiteralValue::Bool(true)).to_string(),
+            "Literal[true]"
+        );
+        assert_eq!(
+            Type::Literal(LiteralValue::None).to_string(),
+            "Literal[None]"
+        );
+    }
 }
