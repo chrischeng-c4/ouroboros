@@ -3,6 +3,8 @@
 //! This module provides type inference and checking for Python, TypeScript, and Rust.
 
 mod ty;
+mod annotation;
+mod builtins;
 mod class_info;
 mod type_env;
 mod infer;

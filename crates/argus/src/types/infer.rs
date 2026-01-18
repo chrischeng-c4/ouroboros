@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use tree_sitter::Node;
 
+use super::annotation::parse_type_annotation;
+use super::builtins::add_builtins;
 use super::class_info::ClassInfo;
 use super::imports::{parse_import, ImportResolver};
 use super::stubs::StubLoader;
@@ -34,7 +36,7 @@ impl<'a> TypeInferencer<'a> {
     pub fn new(source: &'a str) -> Self {
         let mut env = TypeEnv::new();
         // Add builtins
-        Self::add_builtins(&mut env);
+        add_builtins(&mut env);
 
         // Initialize stubs and resolver
         let mut stubs = StubLoader::new();
@@ -158,85 +160,6 @@ impl<'a> TypeInferencer<'a> {
             }
         }
         false
-    }
-
-    /// Add builtin types to the environment
-    fn add_builtins(env: &mut TypeEnv) {
-        // Builtin functions
-        env.bind(
-            "len".to_string(),
-            Type::callable(vec![Type::Any], Type::Int),
-        );
-        env.bind(
-            "str".to_string(),
-            Type::callable(vec![Type::Any], Type::Str),
-        );
-        env.bind(
-            "int".to_string(),
-            Type::callable(vec![Type::Any], Type::Int),
-        );
-        env.bind(
-            "float".to_string(),
-            Type::callable(vec![Type::Any], Type::Float),
-        );
-        env.bind(
-            "bool".to_string(),
-            Type::callable(vec![Type::Any], Type::Bool),
-        );
-        env.bind(
-            "list".to_string(),
-            Type::callable(vec![], Type::list(Type::Unknown)),
-        );
-        env.bind(
-            "dict".to_string(),
-            Type::callable(vec![], Type::dict(Type::Unknown, Type::Unknown)),
-        );
-        env.bind(
-            "set".to_string(),
-            Type::callable(vec![], Type::Set(Box::new(Type::Unknown))),
-        );
-        env.bind(
-            "print".to_string(),
-            Type::Callable {
-                params: vec![Param {
-                    name: "values".to_string(),
-                    ty: Type::Any,
-                    has_default: false,
-                    kind: ParamKind::VarPositional,
-                }],
-                ret: Box::new(Type::None),
-            },
-        );
-        env.bind(
-            "range".to_string(),
-            Type::callable(vec![Type::Int], Type::list(Type::Int)),
-        );
-        env.bind(
-            "enumerate".to_string(),
-            Type::callable(
-                vec![Type::list(Type::Unknown)],
-                Type::list(Type::Tuple(vec![Type::Int, Type::Unknown])),
-            ),
-        );
-        env.bind(
-            "zip".to_string(),
-            Type::callable(
-                vec![Type::list(Type::Unknown), Type::list(Type::Unknown)],
-                Type::list(Type::Tuple(vec![Type::Unknown, Type::Unknown])),
-            ),
-        );
-        env.bind(
-            "isinstance".to_string(),
-            Type::callable(vec![Type::Any, Type::Any], Type::Bool),
-        );
-        env.bind(
-            "hasattr".to_string(),
-            Type::callable(vec![Type::Any, Type::Str], Type::Bool),
-        );
-        env.bind(
-            "getattr".to_string(),
-            Type::callable(vec![Type::Any, Type::Str], Type::Any),
-        );
     }
 
     /// Generate a fresh type variable
@@ -712,7 +635,7 @@ impl<'a> TypeInferencer<'a> {
 
         // Parse return type annotation
         if let Some(return_node) = node.child_by_field_name("return_type") {
-            return_type = self.parse_type_annotation(&return_node);
+            return_type = parse_type_annotation(self.source, &return_node);
         }
 
         let func_type = Type::Callable {
@@ -802,7 +725,7 @@ impl<'a> TypeInferencer<'a> {
 
         // Parse return type
         if let Some(return_node) = node.child_by_field_name("return_type") {
-            return_type = self.parse_type_annotation(&return_node);
+            return_type = parse_type_annotation(self.source, &return_node);
         }
 
         // Handle special return type for __init__
@@ -843,7 +766,7 @@ impl<'a> TypeInferencer<'a> {
 
                             // Get type from annotation or infer from value
                             let attr_type = if let Some(type_node) = node.child_by_field_name("type") {
-                                self.parse_type_annotation(&type_node)
+                                parse_type_annotation(self.source, &type_node)
                             } else if let Some(value) = node.child_by_field_name("right") {
                                 self.infer_expr(&value)
                             } else {
@@ -868,7 +791,7 @@ impl<'a> TypeInferencer<'a> {
                         if left.kind() == "identifier" {
                             let attr_name = self.node_text(&left).to_string();
                             let attr_type = if let Some(type_node) = expr.child_by_field_name("type") {
-                                self.parse_type_annotation(&type_node)
+                                parse_type_annotation(self.source, &type_node)
                             } else if let Some(value) = expr.child_by_field_name("right") {
                                 self.infer_expr(&value)
                             } else {
@@ -906,7 +829,7 @@ impl<'a> TypeInferencer<'a> {
                         .unwrap_or_default();
                     let ty = child
                         .child_by_field_name("type")
-                        .map(|t| self.parse_type_annotation(&t))
+                        .map(|t| parse_type_annotation(self.source, &t))
                         .unwrap_or(Type::Unknown);
                     params.push(Param {
                         name,
@@ -922,7 +845,7 @@ impl<'a> TypeInferencer<'a> {
                         .unwrap_or_default();
                     let ty = child
                         .child_by_field_name("type")
-                        .map(|t| self.parse_type_annotation(&t))
+                        .map(|t| parse_type_annotation(self.source, &t))
                         .unwrap_or(Type::Unknown);
                     params.push(Param {
                         name,
@@ -958,138 +881,6 @@ impl<'a> TypeInferencer<'a> {
         params
     }
 
-    /// Parse a type annotation
-    pub fn parse_type_annotation(&self, node: &Node) -> Type {
-        let text = self.node_text(node);
-
-        match node.kind() {
-            "identifier" | "type" => self.parse_simple_type(text),
-            "subscript" => self.parse_generic_type(node),
-            "binary_operator" => {
-                // Union type: X | Y
-                let left = node.child_by_field_name("left");
-                let right = node.child_by_field_name("right");
-                match (left, right) {
-                    (Some(l), Some(r)) => {
-                        let left_ty = self.parse_type_annotation(&l);
-                        let right_ty = self.parse_type_annotation(&r);
-                        Type::union(vec![left_ty, right_ty])
-                    }
-                    _ => Type::Unknown,
-                }
-            }
-            "none" => Type::None,
-            _ => self.parse_simple_type(text),
-        }
-    }
-
-    /// Parse a simple type name
-    fn parse_simple_type(&self, name: &str) -> Type {
-        match name {
-            "int" => Type::Int,
-            "float" => Type::Float,
-            "str" => Type::Str,
-            "bool" => Type::Bool,
-            "bytes" => Type::Bytes,
-            "None" => Type::None,
-            "Any" => Type::Any,
-            "object" => Type::Any,
-            _ => Type::Instance {
-                name: name.to_string(),
-                module: None,
-                type_args: vec![],
-            },
-        }
-    }
-
-    /// Parse a generic type like list[int], dict[str, int]
-    fn parse_generic_type(&self, node: &Node) -> Type {
-        let base = node
-            .child_by_field_name("value")
-            .map(|n| self.node_text(&n))
-            .unwrap_or("");
-
-        let args = self.parse_type_args(node);
-
-        match base {
-            "list" | "List" => {
-                Type::list(args.first().cloned().unwrap_or(Type::Unknown))
-            }
-            "dict" | "Dict" => {
-                let key = args.first().cloned().unwrap_or(Type::Unknown);
-                let val = args.get(1).cloned().unwrap_or(Type::Unknown);
-                Type::dict(key, val)
-            }
-            "set" | "Set" => {
-                Type::Set(Box::new(args.first().cloned().unwrap_or(Type::Unknown)))
-            }
-            "tuple" | "Tuple" => Type::Tuple(args),
-            "Optional" => {
-                let inner = args.first().cloned().unwrap_or(Type::Unknown);
-                Type::optional(inner)
-            }
-            "Union" => Type::union(args),
-            "Callable" => {
-                // Callable[[arg_types], return_type]
-                if args.len() >= 2 {
-                    let ret = args.last().cloned().unwrap_or(Type::Unknown);
-                    let params: Vec<_> = args[..args.len() - 1]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, ty)| Param {
-                            name: format!("_{}", i),
-                            ty: ty.clone(),
-                            has_default: false,
-                            kind: ParamKind::Positional,
-                        })
-                        .collect();
-                    Type::Callable {
-                        params,
-                        ret: Box::new(ret),
-                    }
-                } else {
-                    Type::Unknown
-                }
-            }
-            "type" => {
-                let inner = args.first().cloned().unwrap_or(Type::Unknown);
-                if let Type::Instance { name, module, .. } = inner {
-                    Type::ClassType { name, module }
-                } else {
-                    Type::Unknown
-                }
-            }
-            _ => Type::Instance {
-                name: base.to_string(),
-                module: None,
-                type_args: args,
-            },
-        }
-    }
-
-    /// Parse type arguments from a subscript node
-    fn parse_type_args(&self, node: &Node) -> Vec<Type> {
-        let mut args = Vec::new();
-
-        if let Some(subscript) = node.child_by_field_name("subscript") {
-            match subscript.kind() {
-                "tuple" | "expression_list" => {
-                    let mut cursor = subscript.walk();
-                    for child in subscript.children(&mut cursor) {
-                        if child.kind() != "," && child.kind() != "(" && child.kind() != ")" {
-                            args.push(self.parse_type_annotation(&child));
-                        }
-                    }
-                }
-                _ => {
-                    args.push(self.parse_type_annotation(&subscript));
-                }
-            }
-        }
-
-        args
-    }
-
     /// Bind a variable to a type based on assignment
     pub fn bind_assignment(&mut self, target: &Node, value_type: Type) {
         if target.kind() == "identifier" {
@@ -1120,326 +911,5 @@ impl<'a> TypeInferencer<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::syntax::MultiParser;
-
-    fn infer_type(code: &str) -> Type {
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        // Find first expression
-        let root = parsed.tree.root_node();
-        if let Some(stmt) = root.child(0) {
-            if stmt.kind() == "expression_statement" {
-                if let Some(expr) = stmt.child(0) {
-                    return inferencer.infer_expr(&expr);
-                }
-            }
-        }
-        Type::Unknown
-    }
-
-    #[test]
-    fn test_infer_literals() {
-        assert_eq!(infer_type("42"), Type::Int);
-        assert_eq!(infer_type("3.14"), Type::Float);
-        assert_eq!(infer_type("\"hello\""), Type::Str);
-        assert_eq!(infer_type("True"), Type::Bool);
-        assert_eq!(infer_type("None"), Type::None);
-    }
-
-    #[test]
-    fn test_infer_binary_ops() {
-        assert_eq!(infer_type("1 + 2"), Type::Int);
-        assert_eq!(infer_type("1.0 + 2"), Type::Float);
-        assert_eq!(infer_type("\"a\" + \"b\""), Type::Str);
-        assert_eq!(infer_type("10 / 3"), Type::Float);
-        assert_eq!(infer_type("10 // 3"), Type::Int);
-    }
-
-    #[test]
-    fn test_infer_containers() {
-        assert_eq!(infer_type("[1, 2, 3]"), Type::list(Type::Int));
-        assert_eq!(
-            infer_type("{\"a\": 1}"),
-            Type::dict(Type::Str, Type::Int)
-        );
-        assert_eq!(
-            infer_type("(1, \"a\")"),
-            Type::Tuple(vec![Type::Int, Type::Str])
-        );
-    }
-
-    #[test]
-    fn test_class_analysis() {
-        let code = r#"
-class Person:
-    name: str
-    age: int = 0
-
-    def __init__(self, name: str, age: int) -> None:
-        self.name = name
-        self.age = age
-
-    def greet(self) -> str:
-        return "Hello, " + self.name
-"#;
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        // Find class definition
-        let root = parsed.tree.root_node();
-        if let Some(class_node) = root.child(0) {
-            if class_node.kind() == "class_definition" {
-                let class_info = inferencer.analyze_class(&class_node);
-
-                assert_eq!(class_info.name, "Person");
-
-                // Check class variables
-                assert!(class_info.class_vars.contains_key("name"));
-                assert!(class_info.class_vars.contains_key("age"));
-
-                // Check methods
-                assert!(class_info.methods.contains_key("__init__"));
-                assert!(class_info.methods.contains_key("greet"));
-
-                // Check __init__ sets instance attributes
-                assert!(class_info.attributes.contains_key("name"));
-                assert!(class_info.attributes.contains_key("age"));
-            }
-        }
-    }
-
-    #[test]
-    fn test_class_attribute_inference() {
-        let code = r#"
-class Point:
-    def __init__(self, x: int, y: int) -> None:
-        self.x = x
-        self.y = y
-
-p = Point(1, 2)
-p.x
-"#;
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        // Walk through the code to analyze class and assignments
-        let root = parsed.tree.root_node();
-        let mut cursor = root.walk();
-        for child in root.children(&mut cursor) {
-            if child.kind() == "class_definition" {
-                inferencer.analyze_class(&child);
-            }
-        }
-
-        // Check that Point class was registered
-        let class_info = inferencer.get_class("Point");
-        assert!(class_info.is_some());
-        let class_info = class_info.unwrap();
-        assert!(class_info.attributes.contains_key("x"));
-        assert!(class_info.attributes.contains_key("y"));
-    }
-
-    #[test]
-    fn test_typing_import_integration() {
-        let code = "from typing import List, Optional";
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        let root = parsed.tree.root_node();
-        if let Some(import_node) = root.child(0) {
-            inferencer.analyze_import(&import_node);
-        }
-
-        // Verify List and Optional are now in env
-        assert!(inferencer.env().lookup("List").is_some());
-        assert!(inferencer.env().lookup("Optional").is_some());
-    }
-
-    #[test]
-    fn test_collections_import_integration() {
-        let code = "from collections import deque, Counter";
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        let root = parsed.tree.root_node();
-        if let Some(import_node) = root.child(0) {
-            inferencer.analyze_import(&import_node);
-        }
-
-        assert!(inferencer.env().lookup("deque").is_some());
-        assert!(inferencer.env().lookup("Counter").is_some());
-    }
-
-    #[test]
-    fn test_import_with_alias() {
-        let code = "from typing import List as L, Dict as D";
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        let root = parsed.tree.root_node();
-        if let Some(import_node) = root.child(0) {
-            inferencer.analyze_import(&import_node);
-        }
-
-        // Should be available under aliases
-        assert!(inferencer.env().lookup("L").is_some());
-        assert!(inferencer.env().lookup("D").is_some());
-        // Original names should not be bound
-        assert!(inferencer.env().lookup("List").is_none());
-        assert!(inferencer.env().lookup("Dict").is_none());
-    }
-
-    #[test]
-    fn test_inheritance_attribute_lookup() {
-        let code = r#"
-class Animal:
-    species: str = "unknown"
-
-    def speak(self) -> str:
-        return "sound"
-
-class Dog(Animal):
-    def bark(self) -> str:
-        return "woof"
-"#;
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        // Analyze all classes
-        let root = parsed.tree.root_node();
-        let mut cursor = root.walk();
-        for child in root.children(&mut cursor) {
-            if child.kind() == "class_definition" {
-                inferencer.analyze_class(&child);
-            }
-        }
-
-        // Dog should have its own method
-        let bark = inferencer.get_attribute_recursive("Dog", "bark");
-        assert!(bark.is_some());
-
-        // Dog should inherit speak from Animal
-        let speak = inferencer.get_attribute_recursive("Dog", "speak");
-        assert!(speak.is_some());
-
-        // Dog should inherit class var from Animal
-        let species = inferencer.get_attribute_recursive("Dog", "species");
-        assert!(species.is_some());
-
-        // Animal should not have bark
-        let animal_bark = inferencer.get_attribute_recursive("Animal", "bark");
-        assert!(animal_bark.is_none());
-    }
-
-    #[test]
-    fn test_is_subclass() {
-        let code = r#"
-class Animal:
-    pass
-
-class Dog(Animal):
-    pass
-
-class Labrador(Dog):
-    pass
-"#;
-        let mut parser = MultiParser::new().unwrap();
-        let parsed = parser
-            .parse(code, crate::syntax::Language::Python)
-            .unwrap();
-        let mut inferencer = TypeInferencer::new(code);
-
-        // Analyze all classes
-        let root = parsed.tree.root_node();
-        let mut cursor = root.walk();
-        for child in root.children(&mut cursor) {
-            if child.kind() == "class_definition" {
-                inferencer.analyze_class(&child);
-            }
-        }
-
-        // Self is a subclass of self
-        assert!(inferencer.is_subclass("Dog", "Dog"));
-
-        // Dog is a subclass of Animal
-        assert!(inferencer.is_subclass("Dog", "Animal"));
-
-        // Labrador is a subclass of Dog and Animal (transitive)
-        assert!(inferencer.is_subclass("Labrador", "Dog"));
-        assert!(inferencer.is_subclass("Labrador", "Animal"));
-
-        // Animal is NOT a subclass of Dog
-        assert!(!inferencer.is_subclass("Animal", "Dog"));
-    }
-
-    #[test]
-    fn test_generic_call_inference() {
-        use crate::types::ty::{Param, ParamKind};
-
-        // Test that calling a generic function infers type arguments
-        // We'll manually create a generic function and test the inference
-
-        // Create a generic identity function: def identity(x: T) -> T
-        let t = Type::type_var(0, "T");
-        let identity_fn = Type::Callable {
-            params: vec![Param {
-                name: "x".to_string(),
-                ty: t.clone(),
-                has_default: false,
-                kind: ParamKind::Positional,
-            }],
-            ret: Box::new(t),
-        };
-
-        // Simulate unifying with Int argument
-        let mut subs = HashMap::new();
-        let param_ty = &identity_fn;
-        if let Type::Callable { params, ret } = param_ty {
-            // Unify parameter T with Int
-            params[0].ty.unify(&Type::Int, &mut subs);
-
-            // Apply substitution to return type
-            let inferred_ret = ret.substitute(&subs);
-            assert_eq!(inferred_ret, Type::Int);
-        }
-    }
-
-    #[test]
-    fn test_generic_list_inference() {
-        use crate::types::ty::TypeVarId;
-
-        // Test inferring element type from list[T] -> list[str]
-        let t = Type::type_var(0, "T");
-        let list_t = Type::list(t);
-
-        let mut subs = HashMap::new();
-        list_t.unify(&Type::list(Type::Str), &mut subs);
-
-        // T should be inferred as Str
-        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
-    }
-}
+#[path = "infer_tests.rs"]
+mod tests;
