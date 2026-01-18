@@ -42,6 +42,15 @@ pub enum NarrowingCondition {
     Or(Box<NarrowingCondition>, Box<NarrowingCondition>),
     /// Negation: not cond
     Not(Box<NarrowingCondition>),
+    /// hasattr(x, "attr") - checks if object has an attribute
+    HasAttr {
+        var_name: String,
+        attr_name: String,
+    },
+    /// callable(x) - checks if object is callable
+    IsCallable { var_name: String },
+    /// not callable(x)
+    NotCallable { var_name: String },
     /// Unknown/unanalyzable condition
     Unknown,
 }
@@ -144,6 +153,36 @@ impl TypeNarrower {
                 let negated = Self::negate_condition_internal(inner);
                 self.apply_condition(&negated, original_types);
             }
+            NarrowingCondition::HasAttr { var_name, attr_name } => {
+                // hasattr() doesn't narrow the type itself, but we record it
+                // so that attribute access on the variable is considered valid
+                // For now, we just mark that we know it has this attribute
+                if let Some(original) = original_types.get(var_name) {
+                    // If the type has a structural attribute, narrow to that
+                    // For now, keep the original type but mark narrowing happened
+                    self.narrow_var(var_name, Type::Instance {
+                        name: format!("HasAttr[{}, {}]", original, attr_name),
+                        module: None,
+                        type_args: vec![],
+                    });
+                }
+            }
+            NarrowingCondition::IsCallable { var_name } => {
+                // callable() narrows to Callable type
+                if let Some(_original) = original_types.get(var_name) {
+                    self.narrow_var(var_name, Type::Callable {
+                        params: vec![],
+                        ret: Box::new(Type::Any),
+                    });
+                }
+            }
+            NarrowingCondition::NotCallable { var_name } => {
+                // not callable() - we know it's not callable, but we can't really
+                // narrow the type further without more context
+                if let Some(original) = original_types.get(var_name) {
+                    self.narrow_var(var_name, original.clone());
+                }
+            }
             NarrowingCondition::Unknown => {}
         }
     }
@@ -180,6 +219,12 @@ impl TypeNarrower {
             NarrowingCondition::Not(inner) => {
                 // not (not x) = x
                 (**inner).clone()
+            }
+            NarrowingCondition::IsCallable { var_name } => {
+                NarrowingCondition::NotCallable { var_name: var_name.clone() }
+            }
+            NarrowingCondition::NotCallable { var_name } => {
+                NarrowingCondition::IsCallable { var_name: var_name.clone() }
             }
             other => other.clone(),
         }
@@ -245,6 +290,12 @@ pub fn negate_condition(condition: &NarrowingCondition) -> NarrowingCondition {
         NarrowingCondition::Not(inner) => {
             // not (not x) = x
             (**inner).clone()
+        }
+        NarrowingCondition::IsCallable { var_name } => {
+            NarrowingCondition::NotCallable { var_name: var_name.clone() }
+        }
+        NarrowingCondition::NotCallable { var_name } => {
+            NarrowingCondition::IsCallable { var_name: var_name.clone() }
         }
         other => other.clone(),
     }
@@ -370,28 +421,59 @@ fn parse_call_condition(source: &str, node: &tree_sitter::Node) -> NarrowingCond
 
     let func_name = node_text(&func);
 
-    if func_name == "isinstance" {
-        let args = match node.child_by_field_name("arguments") {
-            Some(a) => a,
-            None => return NarrowingCondition::Unknown,
-        };
+    let args = match node.child_by_field_name("arguments") {
+        Some(a) => a,
+        None => return NarrowingCondition::Unknown,
+    };
 
-        let mut cursor = args.walk();
-        let arg_nodes: Vec<_> = args
-            .children(&mut cursor)
-            .filter(|n| n.kind() != "(" && n.kind() != ")" && n.kind() != ",")
-            .collect();
+    let mut cursor = args.walk();
+    let arg_nodes: Vec<_> = args
+        .children(&mut cursor)
+        .filter(|n| n.kind() != "(" && n.kind() != ")" && n.kind() != ",")
+        .collect();
 
-        if arg_nodes.len() >= 2 {
-            let var_node = &arg_nodes[0];
-            let type_node = &arg_nodes[1];
+    match func_name {
+        "isinstance" => {
+            if arg_nodes.len() >= 2 {
+                let var_node = &arg_nodes[0];
+                let type_node = &arg_nodes[1];
 
-            if var_node.kind() == "identifier" {
-                let var_name = node_text(var_node).to_string();
-                let types = parse_isinstance_types(source, type_node);
-                return NarrowingCondition::IsInstance { var_name, types };
+                if var_node.kind() == "identifier" {
+                    let var_name = node_text(var_node).to_string();
+                    let types = parse_isinstance_types(source, type_node);
+                    return NarrowingCondition::IsInstance { var_name, types };
+                }
             }
         }
+        "hasattr" => {
+            // hasattr(x, "attr_name")
+            if arg_nodes.len() >= 2 {
+                let var_node = &arg_nodes[0];
+                let attr_node = &arg_nodes[1];
+
+                if var_node.kind() == "identifier" && attr_node.kind() == "string" {
+                    let var_name = node_text(var_node).to_string();
+                    // Extract string content without quotes
+                    let attr_text = node_text(attr_node);
+                    let attr_name = attr_text
+                        .trim_start_matches(|c| c == '"' || c == '\'')
+                        .trim_end_matches(|c| c == '"' || c == '\'')
+                        .to_string();
+                    return NarrowingCondition::HasAttr { var_name, attr_name };
+                }
+            }
+        }
+        "callable" => {
+            // callable(x)
+            if !arg_nodes.is_empty() {
+                let var_node = &arg_nodes[0];
+                if var_node.kind() == "identifier" {
+                    let var_name = node_text(var_node).to_string();
+                    return NarrowingCondition::IsCallable { var_name };
+                }
+            }
+        }
+        _ => {}
     }
 
     NarrowingCondition::Unknown
@@ -519,5 +601,59 @@ mod tests {
 
         narrower.pop_scope();
         assert_eq!(narrower.get_narrowed("x"), None);
+    }
+
+    #[test]
+    fn test_callable_narrowing() {
+        let mut narrower = TypeNarrower::new();
+        narrower.push_scope();
+
+        let original_types: HashMap<String, Type> = [("f".to_string(), Type::Any)]
+            .into_iter()
+            .collect();
+
+        let condition = NarrowingCondition::IsCallable {
+            var_name: "f".to_string(),
+        };
+
+        narrower.apply_condition(&condition, &original_types);
+
+        let narrowed = narrower.get_narrowed("f").unwrap();
+        assert!(matches!(narrowed, Type::Callable { .. }));
+    }
+
+    #[test]
+    fn test_hasattr_narrowing() {
+        let mut narrower = TypeNarrower::new();
+        narrower.push_scope();
+
+        let original_types: HashMap<String, Type> = [("obj".to_string(), Type::Any)]
+            .into_iter()
+            .collect();
+
+        let condition = NarrowingCondition::HasAttr {
+            var_name: "obj".to_string(),
+            attr_name: "foo".to_string(),
+        };
+
+        narrower.apply_condition(&condition, &original_types);
+
+        // HasAttr creates a marker type
+        let narrowed = narrower.get_narrowed("obj").unwrap();
+        assert!(matches!(narrowed, Type::Instance { name, .. } if name.contains("HasAttr")));
+    }
+
+    #[test]
+    fn test_callable_negation() {
+        // Test that not callable(x) produces NotCallable
+        let cond = NarrowingCondition::IsCallable {
+            var_name: "f".to_string(),
+        };
+        let negated = negate_condition(&cond);
+        assert!(matches!(&negated, NarrowingCondition::NotCallable { var_name } if var_name == "f"));
+
+        // And back
+        let double_neg = negate_condition(&negated);
+        assert!(matches!(&double_neg, NarrowingCondition::IsCallable { var_name } if var_name == "f"));
     }
 }
