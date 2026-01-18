@@ -757,6 +757,39 @@ impl<'a> TypeChecker<'a> {
             // Literal to Literal (same value)
             (Type::Literal(a), Type::Literal(b)) => a == b,
 
+            // TypedDict structural subtyping
+            // A dict is assignable to TypedDict if it has all required keys
+            (Type::TypedDict { fields, .. }, Type::Dict(key_ty, val_ty)) => {
+                // For a generic dict to be assignable to TypedDict,
+                // key must be str and value must be compatible with all field types
+                if !self.is_assignable(&Type::Str, key_ty) {
+                    return false;
+                }
+                fields.iter().all(|(_, field_ty, _)| {
+                    self.is_assignable(field_ty, val_ty)
+                })
+            }
+
+            // TypedDict to TypedDict: all required fields must match
+            (
+                Type::TypedDict { fields: target_fields, .. },
+                Type::TypedDict { fields: source_fields, .. },
+            ) => {
+                // Check all required target fields exist in source with compatible types
+                target_fields.iter().all(|(name, ty, required)| {
+                    if let Some((_, src_ty, _)) = source_fields.iter().find(|(n, _, _)| n == name) {
+                        self.is_assignable(ty, src_ty)
+                    } else {
+                        !required // Missing field is ok only if not required
+                    }
+                })
+            }
+
+            // TypedDict is a subtype of Dict[str, Union[field_types]]
+            (Type::Dict(key_ty, _), Type::TypedDict { .. }) => {
+                self.is_assignable(key_ty, &Type::Str)
+            }
+
             _ => false,
         }
     }

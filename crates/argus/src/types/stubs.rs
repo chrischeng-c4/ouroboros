@@ -275,6 +275,12 @@ fn create_typing_stub() -> ModuleInfo {
         module: Some("typing".to_string()),
     });
 
+    // TypedDict
+    info.exports.insert("TypedDict".to_string(), Type::ClassType {
+        name: "TypedDict".to_string(),
+        module: Some("typing".to_string()),
+    });
+
     // Other typing utilities
     info.exports.insert("ClassVar".to_string(), Type::ClassType {
         name: "ClassVar".to_string(),

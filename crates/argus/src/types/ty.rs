@@ -117,6 +117,16 @@ pub enum Type {
         members: Vec<(String, Type)>,
     },
 
+    // === TypedDict ===
+    /// TypedDict type - dictionary with specific keys and types
+    TypedDict {
+        name: String,
+        /// Fields with their types and whether they are required
+        fields: Vec<(String, Type, bool)>, // (name, type, required)
+        /// Whether all fields are required by default
+        total: bool,
+    },
+
     // === Special types ===
     /// Any type - disables type checking
     Any,
@@ -514,6 +524,25 @@ impl fmt::Display for Type {
                 Ok(())
             }
 
+            Type::TypedDict { name, fields, .. } => {
+                write!(f, "TypedDict[{}]", name)?;
+                if !fields.is_empty() {
+                    write!(f, "{{")?;
+                    for (i, (field_name, field_ty, required)) in fields.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        if *required {
+                            write!(f, "{}: {}", field_name, field_ty)?;
+                        } else {
+                            write!(f, "{}?: {}", field_name, field_ty)?;
+                        }
+                    }
+                    write!(f, "}}")?;
+                }
+                Ok(())
+            }
+
             Type::TypeVar { name, .. } => write!(f, "{}", name),
 
             Type::Any => write!(f, "Any"),
@@ -751,5 +780,30 @@ mod tests {
             Type::Literal(LiteralValue::None).to_string(),
             "Literal[None]"
         );
+    }
+
+    #[test]
+    fn test_typed_dict_display() {
+        let td = Type::TypedDict {
+            name: "Person".to_string(),
+            fields: vec![
+                ("name".to_string(), Type::Str, true),
+                ("age".to_string(), Type::Int, true),
+                ("email".to_string(), Type::Str, false), // optional
+            ],
+            total: true,
+        };
+        assert_eq!(
+            td.to_string(),
+            "TypedDict[Person]{name: str, age: int, email?: str}"
+        );
+
+        // Empty TypedDict
+        let empty_td = Type::TypedDict {
+            name: "Empty".to_string(),
+            fields: vec![],
+            total: true,
+        };
+        assert_eq!(empty_td.to_string(), "TypedDict[Empty]");
     }
 }
