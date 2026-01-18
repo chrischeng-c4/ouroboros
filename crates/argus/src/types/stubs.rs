@@ -6,10 +6,14 @@
 //! - Third-party stubs (typeshed)
 
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use tree_sitter::{Node, Parser};
+
+use super::annotation::parse_type_annotation;
 use super::imports::ModuleInfo;
-use super::ty::Type;
+use super::ty::{Param, ParamKind, Type};
 
 /// Stub file loader and cache
 #[derive(Debug, Default)]
@@ -55,7 +59,48 @@ impl StubLoader {
         self.stubs.insert("collections".to_string(), create_collections_stub());
         self.stubs.insert("collections.abc".to_string(), create_collections_abc_stub());
 
+        // Load bundled typeshed stubs
+        use super::typeshed::*;
+        self.stubs.insert("os".to_string(), create_os_stub());
+        self.stubs.insert("os.path".to_string(), create_os_path_stub());
+        self.stubs.insert("sys".to_string(), create_sys_stub());
+        self.stubs.insert("io".to_string(), create_io_stub());
+        self.stubs.insert("re".to_string(), create_re_stub());
+        self.stubs.insert("json".to_string(), create_json_stub());
+        self.stubs.insert("pathlib".to_string(), create_pathlib_stub());
+        self.stubs.insert("functools".to_string(), create_functools_stub());
+        self.stubs.insert("itertools".to_string(), create_itertools_stub());
+        self.stubs.insert("datetime".to_string(), create_datetime_stub());
+
         self.builtins_loaded = true;
+    }
+
+    /// Get or load a stub for a module (loads from .pyi files if not cached)
+    /// Returns None if no stub exists for the module
+    /// Caller should check inline types first for proper priority:
+    /// Priority: inline types > .pyi stubs > typeshed > inferred
+    pub fn get_or_load_stub(&mut self, module_path: &str) -> Option<&ModuleInfo> {
+        // Check already loaded stubs
+        if self.stubs.contains_key(module_path) {
+            return self.stubs.get(module_path);
+        }
+
+        // Try to load from stub paths (.pyi files)
+        if let Some(stub_path) = self.find_stub_file(module_path) {
+            if let Some(info) = self.parse_stub_file(&stub_path) {
+                self.stubs.insert(module_path.to_string(), info);
+                return self.stubs.get(module_path);
+            }
+        }
+
+        // Return bundled typeshed stub if available
+        self.stubs.get(module_path)
+    }
+
+    /// Check if a package is typed (has py.typed marker)
+    #[allow(dead_code)]
+    pub fn is_typed_package(&self, package_path: &Path) -> bool {
+        package_path.join("py.typed").exists()
     }
 
     /// Get stub for a module
@@ -108,12 +153,332 @@ impl StubLoader {
         None
     }
 
-    /// Parse a stub file (simplified - just structure)
-    #[allow(dead_code)]
-    fn parse_stub_file(&self, _path: &Path) -> Option<ModuleInfo> {
-        // TODO: Implement full stub file parsing using tree-sitter
-        // For now, return None to indicate stub parsing not implemented
+    /// Parse a stub file using tree-sitter
+    fn parse_stub_file(&self, path: &Path) -> Option<ModuleInfo> {
+        let source = fs::read_to_string(path).ok()?;
+        let module_name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .ok()?;
+
+        let tree = parser.parse(&source, None)?;
+        let root = tree.root_node();
+
+        let mut info = ModuleInfo::new(module_name);
+        self.parse_stub_definitions(&source, &root, &mut info);
+
+        Some(info)
+    }
+
+    /// Parse stub definitions from AST
+    fn parse_stub_definitions(&self, source: &str, node: &Node, info: &mut ModuleInfo) {
+        let mut cursor = node.walk();
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "function_definition" => {
+                    if let Some((name, ty)) = self.parse_function_stub(source, &child) {
+                        // Check for @overload decorator
+                        if self.has_overload_decorator(source, &child) {
+                            // Add to overload signatures
+                            if let Some(existing) = info.exports.get_mut(&name) {
+                                if let Type::Overloaded { signatures } = existing {
+                                    signatures.push(ty);
+                                } else {
+                                    // Convert to overloaded
+                                    let old = existing.clone();
+                                    *existing = Type::Overloaded {
+                                        signatures: vec![old, ty],
+                                    };
+                                }
+                            } else {
+                                info.exports.insert(name, ty);
+                            }
+                        } else {
+                            info.exports.insert(name, ty);
+                        }
+                    }
+                }
+                "class_definition" => {
+                    if let Some((name, ty)) = self.parse_class_stub(source, &child) {
+                        info.exports.insert(name, ty);
+                    }
+                }
+                "expression_statement" => {
+                    // Type alias: Name = Type or Name: TypeAlias = Type
+                    if let Some((name, ty)) = self.parse_type_alias(source, &child) {
+                        info.exports.insert(name, ty);
+                    }
+                }
+                "import_from_statement" | "import_statement" => {
+                    // Track re-exports for __init__.pyi files
+                    self.parse_import_export(source, &child, info);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Check if function has @overload decorator
+    fn has_overload_decorator(&self, source: &str, node: &Node) -> bool {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "decorator" {
+                let text = self.node_text(source, &child);
+                if text.contains("overload") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Parse a function stub
+    fn parse_function_stub(&self, source: &str, node: &Node) -> Option<(String, Type)> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(source, &name_node).to_string();
+
+        let params_node = node.child_by_field_name("parameters")?;
+        let params = self.parse_parameters(source, &params_node);
+
+        let return_type = node
+            .child_by_field_name("return_type")
+            .map(|n| parse_type_annotation(source, &n))
+            .unwrap_or(Type::Any);
+
+        Some((
+            name,
+            Type::Callable {
+                params,
+                ret: Box::new(return_type),
+            },
+        ))
+    }
+
+    /// Parse function parameters
+    fn parse_parameters(&self, source: &str, node: &Node) -> Vec<Param> {
+        let mut params = Vec::new();
+        let mut cursor = node.walk();
+        let mut positional_only = false;
+        let mut keyword_only = false;
+
+        for child in node.children(&mut cursor) {
+            match child.kind() {
+                "identifier" => {
+                    // Simple parameter without annotation
+                    let name = self.node_text(source, &child).to_string();
+                    if name != "self" && name != "cls" {
+                        let kind = if keyword_only {
+                            ParamKind::KeywordOnly
+                        } else if positional_only {
+                            ParamKind::PositionalOnly
+                        } else {
+                            ParamKind::Positional
+                        };
+                        params.push(Param {
+                            name,
+                            ty: Type::Any,
+                            has_default: false,
+                            kind,
+                        });
+                    }
+                }
+                "typed_parameter" | "typed_default_parameter" => {
+                    if let Some(param) = self.parse_typed_param(source, &child, keyword_only, positional_only) {
+                        params.push(param);
+                    }
+                }
+                "default_parameter" => {
+                    if let Some(param) = self.parse_default_param(source, &child, keyword_only, positional_only) {
+                        params.push(param);
+                    }
+                }
+                "list_splat_pattern" => {
+                    // *args
+                    if let Some(name_node) = child.child(1) {
+                        let name = self.node_text(source, &name_node).to_string();
+                        params.push(Param {
+                            name,
+                            ty: Type::Any,
+                            has_default: false,
+                            kind: ParamKind::VarPositional,
+                        });
+                    }
+                    keyword_only = true;
+                }
+                "dictionary_splat_pattern" => {
+                    // **kwargs
+                    if let Some(name_node) = child.child(1) {
+                        let name = self.node_text(source, &name_node).to_string();
+                        params.push(Param {
+                            name,
+                            ty: Type::Any,
+                            has_default: false,
+                            kind: ParamKind::VarKeyword,
+                        });
+                    }
+                }
+                "/" => {
+                    positional_only = true;
+                }
+                "*" => {
+                    keyword_only = true;
+                }
+                _ => {}
+            }
+        }
+
+        params
+    }
+
+    /// Parse a typed parameter
+    fn parse_typed_param(
+        &self,
+        source: &str,
+        node: &Node,
+        keyword_only: bool,
+        positional_only: bool,
+    ) -> Option<Param> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(source, &name_node).to_string();
+
+        if name == "self" || name == "cls" {
+            return None;
+        }
+
+        let ty = node
+            .child_by_field_name("type")
+            .map(|n| parse_type_annotation(source, &n))
+            .unwrap_or(Type::Any);
+
+        let has_default = node.child_by_field_name("value").is_some();
+
+        let kind = if keyword_only {
+            ParamKind::KeywordOnly
+        } else if positional_only {
+            ParamKind::PositionalOnly
+        } else {
+            ParamKind::Positional
+        };
+
+        Some(Param {
+            name,
+            ty,
+            has_default,
+            kind,
+        })
+    }
+
+    /// Parse a default parameter (no type annotation)
+    fn parse_default_param(
+        &self,
+        source: &str,
+        node: &Node,
+        keyword_only: bool,
+        positional_only: bool,
+    ) -> Option<Param> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(source, &name_node).to_string();
+
+        if name == "self" || name == "cls" {
+            return None;
+        }
+
+        let kind = if keyword_only {
+            ParamKind::KeywordOnly
+        } else if positional_only {
+            ParamKind::PositionalOnly
+        } else {
+            ParamKind::Positional
+        };
+
+        Some(Param {
+            name,
+            ty: Type::Any,
+            has_default: true,
+            kind,
+        })
+    }
+
+    /// Parse a class stub
+    fn parse_class_stub(&self, source: &str, node: &Node) -> Option<(String, Type)> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(source, &name_node).to_string();
+
+        // For now, return a ClassType
+        // In the future, we could parse methods and attributes
+        Some((
+            name.clone(),
+            Type::ClassType {
+                name,
+                module: None,
+            },
+        ))
+    }
+
+    /// Parse a type alias
+    fn parse_type_alias(&self, source: &str, node: &Node) -> Option<(String, Type)> {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "assignment" {
+                let left = child.child_by_field_name("left")?;
+                let right = child.child_by_field_name("right")?;
+
+                if left.kind() == "identifier" {
+                    let name = self.node_text(source, &left).to_string();
+                    let ty = parse_type_annotation(source, &right);
+                    return Some((name, ty));
+                }
+            }
+        }
         None
+    }
+
+    /// Parse import/export for re-exports
+    fn parse_import_export(&self, source: &str, node: &Node, info: &mut ModuleInfo) {
+        if node.kind() == "import_from_statement" {
+            // from module import name -> re-export
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "dotted_name" || child.kind() == "identifier" {
+                    let text = self.node_text(source, &child);
+                    // Skip the module name, just track imported names
+                    if child.prev_sibling().map(|n| n.kind()) == Some("import") {
+                        info.exports.insert(
+                            text.to_string(),
+                            Type::Instance {
+                                name: text.to_string(),
+                                module: None,
+                                type_args: vec![],
+                            },
+                        );
+                    }
+                }
+                if child.kind() == "aliased_import" {
+                    if let Some(alias) = child.child_by_field_name("alias") {
+                        let name = self.node_text(source, &alias);
+                        info.exports.insert(
+                            name.to_string(),
+                            Type::Instance {
+                                name: name.to_string(),
+                                module: None,
+                                type_args: vec![],
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get text of a node
+    fn node_text<'a>(&self, source: &'a str, node: &Node) -> &'a str {
+        node.utf8_text(source.as_bytes()).unwrap_or("")
     }
 
     /// Get all loaded modules
@@ -451,5 +816,152 @@ mod tests {
         // Adding same path again shouldn't duplicate
         loader.add_stub_path(PathBuf::from("/usr/lib/python3/stubs"));
         assert_eq!(loader.stub_paths.len(), 2);
+    }
+
+    // Phase C tests: Typeshed integration
+
+    #[test]
+    fn test_typeshed_os_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let os = loader.get_stub("os").unwrap();
+        assert!(os.exports.contains_key("getcwd"));
+        assert!(os.exports.contains_key("getenv"));
+        assert!(os.exports.contains_key("listdir"));
+        assert!(os.exports.contains_key("makedirs"));
+        assert!(os.exports.contains_key("remove"));
+    }
+
+    #[test]
+    fn test_typeshed_os_path_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let os_path = loader.get_stub("os.path").unwrap();
+        assert!(os_path.exports.contains_key("exists"));
+        assert!(os_path.exports.contains_key("join"));
+        assert!(os_path.exports.contains_key("dirname"));
+        assert!(os_path.exports.contains_key("basename"));
+        assert!(os_path.exports.contains_key("isfile"));
+        assert!(os_path.exports.contains_key("isdir"));
+    }
+
+    #[test]
+    fn test_typeshed_sys_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let sys = loader.get_stub("sys").unwrap();
+        assert!(sys.exports.contains_key("argv"));
+        assert!(sys.exports.contains_key("path"));
+        assert!(sys.exports.contains_key("version"));
+        assert!(sys.exports.contains_key("exit"));
+    }
+
+    #[test]
+    fn test_typeshed_io_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let io = loader.get_stub("io").unwrap();
+        assert!(io.exports.contains_key("StringIO"));
+        assert!(io.exports.contains_key("BytesIO"));
+        assert!(io.exports.contains_key("open"));
+    }
+
+    #[test]
+    fn test_typeshed_json_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let json = loader.get_stub("json").unwrap();
+        assert!(json.exports.contains_key("loads"));
+        assert!(json.exports.contains_key("dumps"));
+        assert!(json.exports.contains_key("load"));
+        assert!(json.exports.contains_key("dump"));
+    }
+
+    #[test]
+    fn test_typeshed_pathlib_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let pathlib = loader.get_stub("pathlib").unwrap();
+        assert!(pathlib.exports.contains_key("Path"));
+        assert!(pathlib.exports.contains_key("PurePath"));
+    }
+
+    #[test]
+    fn test_get_or_load_stub() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        // Should return existing stub
+        let builtins = loader.get_or_load_stub("builtins");
+        assert!(builtins.is_some());
+        assert!(builtins.unwrap().exports.contains_key("int"));
+
+        // Should return None for non-existent module (no stub paths configured)
+        let nonexistent = loader.get_or_load_stub("nonexistent_module");
+        assert!(nonexistent.is_none());
+
+        // Should return typeshed stubs
+        let os = loader.get_or_load_stub("os");
+        assert!(os.is_some());
+        assert!(os.unwrap().exports.contains_key("getcwd"));
+    }
+
+    #[test]
+    fn test_all_typeshed_modules_loaded() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        // Verify all expected typeshed modules are available
+        let expected_modules = [
+            "builtins", "typing", "collections", "collections.abc",
+            "os", "os.path", "sys", "io", "re", "json",
+            "pathlib", "functools", "itertools", "datetime",
+        ];
+
+        for module in expected_modules {
+            assert!(
+                loader.has_stub(module),
+                "Expected module '{}' to be available",
+                module
+            );
+        }
+    }
+
+    #[test]
+    fn test_typing_advanced_features() {
+        let mut loader = StubLoader::new();
+        loader.load_builtins();
+
+        let typing = loader.get_stub("typing").unwrap();
+
+        // PEP 612: ParamSpec
+        assert!(typing.exports.contains_key("ParamSpec"));
+        assert!(typing.exports.contains_key("Concatenate"));
+
+        // PEP 646: TypeVarTuple
+        assert!(typing.exports.contains_key("TypeVarTuple"));
+        assert!(typing.exports.contains_key("Unpack"));
+
+        // PEP 675: LiteralString
+        assert!(typing.exports.contains_key("LiteralString"));
+
+        // PEP 647: TypeGuard
+        assert!(typing.exports.contains_key("TypeGuard"));
+
+        // PEP 742: TypeIs
+        assert!(typing.exports.contains_key("TypeIs"));
+
+        // Self type
+        assert!(typing.exports.contains_key("Self"));
+
+        // Final and Annotated
+        assert!(typing.exports.contains_key("Final"));
+        assert!(typing.exports.contains_key("Annotated"));
     }
 }

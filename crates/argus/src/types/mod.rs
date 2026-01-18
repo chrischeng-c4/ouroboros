@@ -12,6 +12,7 @@ mod check;
 mod narrow;
 mod imports;
 mod stubs;
+mod typeshed;
 
 pub use ty::{LiteralValue, Param, ParamKind, Type, TypeVarId};
 pub use class_info::ClassInfo;
