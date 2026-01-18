@@ -1,0 +1,109 @@
+project_name = "ouroboros"
+scripts_dir = "agentd/scripts"
+
+[workflow]
+format_iterations = 2
+planning_iterations = 2
+implementation_iterations = 2
+archive_iterations = 1
+script_retries = 3
+retry_delay_secs = 5
+
+[gemini]
+command = "gemini"
+default = "flash"
+
+[[gemini.models]]
+id = "flash"
+model = "gemini-3-flash-preview"
+complexity = "medium"
+cost_per_1m_input = 0.1
+cost_per_1m_output = 0.4
+
+[[gemini.models]]
+id = "pro"
+model = "gemini-3-pro-preview"
+complexity = "critical"
+cost_per_1m_input = 1.25
+cost_per_1m_output = 10.0
+
+[codex]
+command = "codex"
+default = "balanced"
+
+[[codex.models]]
+id = "fast"
+model = "gpt-5.2-codex"
+reasoning = "low"
+complexity = "low"
+cost_per_1m_input = 2.0
+cost_per_1m_output = 8.0
+
+[[codex.models]]
+id = "balanced"
+model = "gpt-5.2-codex"
+reasoning = "medium"
+complexity = "medium"
+cost_per_1m_input = 2.0
+cost_per_1m_output = 8.0
+
+[[codex.models]]
+id = "deep"
+model = "gpt-5.2-codex"
+reasoning = "high"
+complexity = "high"
+cost_per_1m_input = 2.0
+cost_per_1m_output = 8.0
+
+[[codex.models]]
+id = "max"
+model = "gpt-5.2-codex"
+reasoning = "extra high"
+complexity = "critical"
+cost_per_1m_input = 2.0
+cost_per_1m_output = 8.0
+
+[claude]
+command = "claude"
+default = "balanced"
+
+[[claude.models]]
+id = "fast"
+model = "haiku"
+complexity = "low"
+cost_per_1m_input = 0.8
+cost_per_1m_output = 4.0
+
+[[claude.models]]
+id = "balanced"
+model = "sonnet"
+complexity = "medium"
+cost_per_1m_input = 3.0
+cost_per_1m_output = 15.0
+
+[[claude.models]]
+id = "deep"
+model = "opus"
+complexity = "critical"
+cost_per_1m_input = 15.0
+cost_per_1m_output = 75.0
+
+[validation]
+required_headings = [
+    "Overview",
+    "Acceptance Criteria",
+]
+requirement_pattern = ""
+scenario_pattern = 'WHEN\s.*THEN\s'
+scenario_min_count = 1
+require_when_then = true
+when_pattern = 'WHEN\s'
+then_pattern = 'THEN\s'
+
+[validation.severity_map]
+missing_heading = "High"
+invalid_requirement_format = "High"
+missing_scenario = "High"
+missing_when_then = "High"
+duplicate_requirement = "High"
+broken_reference = "Medium"
