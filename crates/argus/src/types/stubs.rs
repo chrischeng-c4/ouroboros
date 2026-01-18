@@ -321,6 +321,18 @@ fn create_typing_stub() -> ModuleInfo {
     // PEP 675: LiteralString
     info.exports.insert("LiteralString".to_string(), Type::LiteralString);
 
+    // PEP 647: TypeGuard
+    info.exports.insert("TypeGuard".to_string(), Type::ClassType {
+        name: "TypeGuard".to_string(),
+        module: Some("typing".to_string()),
+    });
+
+    // PEP 742: TypeIs
+    info.exports.insert("TypeIs".to_string(), Type::ClassType {
+        name: "TypeIs".to_string(),
+        module: Some("typing".to_string()),
+    });
+
     // Functions
     info.exports.insert("cast".to_string(), Type::callable(
         vec![Type::Any, Type::Any],

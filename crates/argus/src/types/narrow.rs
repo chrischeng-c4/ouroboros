@@ -51,6 +51,28 @@ pub enum NarrowingCondition {
     IsCallable { var_name: String },
     /// not callable(x)
     NotCallable { var_name: String },
+    /// TypeGuard function call (PEP 647)
+    /// Narrows type only in positive branch
+    TypeGuard {
+        var_name: String,
+        narrowed_type: Type,
+    },
+    /// TypeIs function call (PEP 742)
+    /// Narrows type in both positive and negative branches
+    TypeIs {
+        var_name: String,
+        narrowed_type: Type,
+    },
+    /// type(x) is T
+    TypeCheck {
+        var_name: String,
+        target_type: Type,
+    },
+    /// type(x) is not T
+    NotTypeCheck {
+        var_name: String,
+        target_type: Type,
+    },
     /// Unknown/unanalyzable condition
     Unknown,
 }
@@ -183,6 +205,26 @@ impl TypeNarrower {
                     self.narrow_var(var_name, original.clone());
                 }
             }
+            NarrowingCondition::TypeGuard { var_name, narrowed_type } => {
+                // TypeGuard[T] narrows only in positive branch
+                self.narrow_var(var_name, narrowed_type.clone());
+            }
+            NarrowingCondition::TypeIs { var_name, narrowed_type } => {
+                // TypeIs[T] also narrows in positive branch
+                // The negative branch narrowing happens in negate_condition
+                self.narrow_var(var_name, narrowed_type.clone());
+            }
+            NarrowingCondition::TypeCheck { var_name, target_type } => {
+                // type(x) is T - narrow to exact type
+                self.narrow_var(var_name, target_type.clone());
+            }
+            NarrowingCondition::NotTypeCheck { var_name, target_type: _ } => {
+                // type(x) is not T - can't narrow much without more context
+                // Keep original type for now
+                if let Some(original) = original_types.get(var_name) {
+                    self.narrow_var(var_name, original.clone());
+                }
+            }
             NarrowingCondition::Unknown => {}
         }
     }
@@ -225,6 +267,30 @@ impl TypeNarrower {
             }
             NarrowingCondition::NotCallable { var_name } => {
                 NarrowingCondition::IsCallable { var_name: var_name.clone() }
+            }
+            // TypeGuard doesn't narrow in negative branch (PEP 647)
+            NarrowingCondition::TypeGuard { .. } => NarrowingCondition::Unknown,
+            // TypeIs narrows in both branches (PEP 742)
+            // In negative branch, we exclude the narrowed type
+            NarrowingCondition::TypeIs { var_name, narrowed_type } => {
+                // Negation creates an "exclude this type" condition
+                // For now, we represent this as Unknown and handle specially
+                NarrowingCondition::Not(Box::new(NarrowingCondition::TypeIs {
+                    var_name: var_name.clone(),
+                    narrowed_type: narrowed_type.clone(),
+                }))
+            }
+            NarrowingCondition::TypeCheck { var_name, target_type } => {
+                NarrowingCondition::NotTypeCheck {
+                    var_name: var_name.clone(),
+                    target_type: target_type.clone(),
+                }
+            }
+            NarrowingCondition::NotTypeCheck { var_name, target_type } => {
+                NarrowingCondition::TypeCheck {
+                    var_name: var_name.clone(),
+                    target_type: target_type.clone(),
+                }
             }
             other => other.clone(),
         }
@@ -297,8 +363,168 @@ pub fn negate_condition(condition: &NarrowingCondition) -> NarrowingCondition {
         NarrowingCondition::NotCallable { var_name } => {
             NarrowingCondition::IsCallable { var_name: var_name.clone() }
         }
+        // TypeGuard doesn't narrow in negative branch (PEP 647)
+        NarrowingCondition::TypeGuard { .. } => NarrowingCondition::Unknown,
+        // TypeIs narrows in both branches (PEP 742)
+        NarrowingCondition::TypeIs { var_name, narrowed_type } => {
+            NarrowingCondition::Not(Box::new(NarrowingCondition::TypeIs {
+                var_name: var_name.clone(),
+                narrowed_type: narrowed_type.clone(),
+            }))
+        }
+        NarrowingCondition::TypeCheck { var_name, target_type } => {
+            NarrowingCondition::NotTypeCheck {
+                var_name: var_name.clone(),
+                target_type: target_type.clone(),
+            }
+        }
+        NarrowingCondition::NotTypeCheck { var_name, target_type } => {
+            NarrowingCondition::TypeCheck {
+                var_name: var_name.clone(),
+                target_type: target_type.clone(),
+            }
+        }
         other => other.clone(),
     }
+}
+
+/// Represents a match case pattern for type narrowing (PEP 634)
+#[derive(Debug, Clone)]
+pub enum MatchPattern {
+    /// Literal pattern: case 42, case "hello"
+    Literal(Type),
+    /// Class pattern: case int(), case str()
+    Class(Type),
+    /// Capture pattern: case x
+    Capture(String),
+    /// Wildcard pattern: case _
+    Wildcard,
+    /// Or pattern: case 1 | 2 | 3
+    Or(Vec<MatchPattern>),
+    /// Sequence pattern: case [x, y, z]
+    Sequence(Vec<MatchPattern>),
+    /// Mapping pattern: case {"key": value}
+    Mapping(Vec<(String, MatchPattern)>),
+    /// As pattern: case int() as n
+    As(Box<MatchPattern>, String),
+    /// Guard: case x if x > 0
+    Guard(Box<MatchPattern>, String), // guard expr as string
+}
+
+/// Parse a match case pattern and derive narrowing condition
+pub fn parse_match_pattern(
+    source: &str,
+    subject_var: &str,
+    pattern_node: &tree_sitter::Node,
+) -> NarrowingCondition {
+    let node_text = |n: &tree_sitter::Node| -> &str {
+        n.utf8_text(source.as_bytes()).unwrap_or("")
+    };
+
+    match pattern_node.kind() {
+        // Class pattern: case int(), case str(), case MyClass()
+        "class_pattern" => {
+            if let Some(class_node) = pattern_node.child_by_field_name("class") {
+                let class_name = node_text(&class_node);
+                let target_type = parse_simple_type_name(class_name);
+                return NarrowingCondition::IsInstance {
+                    var_name: subject_var.to_string(),
+                    types: vec![target_type],
+                };
+            }
+        }
+        // Literal pattern: case 42, case "hello", case None
+        "none" => {
+            return NarrowingCondition::IsNone {
+                var_name: subject_var.to_string(),
+            };
+        }
+        "integer" | "float" | "string" | "true" | "false" => {
+            let _pattern_text = node_text(pattern_node);
+            let ty = match pattern_node.kind() {
+                "integer" => Type::Int,
+                "float" => Type::Float,
+                "string" => Type::Str,
+                "true" | "false" => Type::Bool,
+                _ => Type::Unknown,
+            };
+            return NarrowingCondition::Equals {
+                var_name: subject_var.to_string(),
+                value: ty,
+            };
+        }
+        // As pattern: case int() as n
+        "as_pattern" => {
+            // Get the inner pattern and recurse
+            if let Some(pattern) = pattern_node.child_by_field_name("pattern") {
+                return parse_match_pattern(source, subject_var, &pattern);
+            }
+        }
+        // Or pattern: case int | str
+        "or_pattern" | "union_pattern" => {
+            let mut types = Vec::new();
+            let mut cursor = pattern_node.walk();
+            for child in pattern_node.children(&mut cursor) {
+                if child.kind() != "|" {
+                    // Try to get type from each alternative
+                    if let NarrowingCondition::IsInstance { types: t, .. } =
+                        parse_match_pattern(source, subject_var, &child)
+                    {
+                        types.extend(t);
+                    }
+                }
+            }
+            if !types.is_empty() {
+                return NarrowingCondition::IsInstance {
+                    var_name: subject_var.to_string(),
+                    types,
+                };
+            }
+        }
+        // Wildcard or capture doesn't narrow
+        "wildcard_pattern" | "capture_pattern" => {
+            return NarrowingCondition::Unknown;
+        }
+        _ => {}
+    }
+
+    NarrowingCondition::Unknown
+}
+
+/// Parse a match statement and get the subject variable
+pub fn get_match_subject(source: &str, node: &tree_sitter::Node) -> Option<String> {
+    if node.kind() != "match_statement" {
+        return None;
+    }
+
+    if let Some(subject) = node.child_by_field_name("subject") {
+        if subject.kind() == "identifier" {
+            let text = subject.utf8_text(source.as_bytes()).ok()?;
+            return Some(text.to_string());
+        }
+    }
+
+    None
+}
+
+/// Parse an assert statement and extract the narrowing condition
+/// e.g., `assert isinstance(x, int)` -> IsInstance { var_name: "x", types: [int] }
+/// e.g., `assert x is not None` -> IsNotNone { var_name: "x" }
+pub fn parse_assert(source: &str, node: &tree_sitter::Node) -> NarrowingCondition {
+    // assert statements have the condition as the first child
+    if node.kind() != "assert_statement" {
+        return NarrowingCondition::Unknown;
+    }
+
+    // Get the condition (skip "assert" keyword)
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        if child.kind() != "assert" {
+            return parse_condition(source, &child);
+        }
+    }
+
+    NarrowingCondition::Unknown
 }
 
 /// Parse a condition expression into a NarrowingCondition
@@ -352,12 +578,20 @@ fn parse_comparison(source: &str, node: &tree_sitter::Node) -> NarrowingConditio
                         var_name: left_text.to_string(),
                     };
                 }
+                // Handle type(x) is T
+                if let Some(type_check) = parse_type_check(source, left, right, false) {
+                    return type_check;
+                }
             }
             "is not" => {
                 if right_text == "None" && left.kind() == "identifier" {
                     return NarrowingCondition::IsNotNone {
                         var_name: left_text.to_string(),
                     };
+                }
+                // Handle type(x) is not T
+                if let Some(type_check) = parse_type_check(source, left, right, true) {
+                    return type_check;
                 }
             }
             "==" => {
@@ -379,6 +613,53 @@ fn parse_comparison(source: &str, node: &tree_sitter::Node) -> NarrowingConditio
     }
 
     NarrowingCondition::Unknown
+}
+
+/// Parse type(x) is T or type(x) is not T patterns
+#[allow(dead_code)]
+fn parse_type_check(
+    source: &str,
+    left: &tree_sitter::Node,
+    right: &tree_sitter::Node,
+    negated: bool,
+) -> Option<NarrowingCondition> {
+    let node_text = |n: &tree_sitter::Node| -> &str {
+        n.utf8_text(source.as_bytes()).unwrap_or("")
+    };
+
+    // Check if left is type(x)
+    if left.kind() == "call" {
+        if let Some(func) = left.child_by_field_name("function") {
+            if node_text(&func) == "type" {
+                if let Some(args) = left.child_by_field_name("arguments") {
+                    let mut cursor = args.walk();
+                    let arg_nodes: Vec<_> = args
+                        .children(&mut cursor)
+                        .filter(|n| n.kind() != "(" && n.kind() != ")" && n.kind() != ",")
+                        .collect();
+
+                    if !arg_nodes.is_empty() && arg_nodes[0].kind() == "identifier" {
+                        let var_name = node_text(&arg_nodes[0]).to_string();
+                        let target_type = parse_simple_type_name(node_text(right));
+
+                        if negated {
+                            return Some(NarrowingCondition::NotTypeCheck {
+                                var_name,
+                                target_type,
+                            });
+                        } else {
+                            return Some(NarrowingCondition::TypeCheck {
+                                var_name,
+                                target_type,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[allow(dead_code)]
@@ -525,135 +806,5 @@ fn parse_simple_type_name(name: &str) -> Type {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_is_none_narrowing() {
-        let mut narrower = TypeNarrower::new();
-        narrower.push_scope();
-
-        let original_types: HashMap<String, Type> = [("x".to_string(), Type::optional(Type::Str))]
-            .into_iter()
-            .collect();
-
-        let condition = NarrowingCondition::IsNone {
-            var_name: "x".to_string(),
-        };
-
-        narrower.apply_condition(&condition, &original_types);
-
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::None));
-    }
-
-    #[test]
-    fn test_is_not_none_narrowing() {
-        let mut narrower = TypeNarrower::new();
-        narrower.push_scope();
-
-        let original_types: HashMap<String, Type> = [("x".to_string(), Type::optional(Type::Str))]
-            .into_iter()
-            .collect();
-
-        let condition = NarrowingCondition::IsNotNone {
-            var_name: "x".to_string(),
-        };
-
-        narrower.apply_condition(&condition, &original_types);
-
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::Str));
-    }
-
-    #[test]
-    fn test_isinstance_narrowing() {
-        let mut narrower = TypeNarrower::new();
-        narrower.push_scope();
-
-        let original_types: HashMap<String, Type> =
-            [("x".to_string(), Type::union(vec![Type::Int, Type::Str]))]
-                .into_iter()
-                .collect();
-
-        let condition = NarrowingCondition::IsInstance {
-            var_name: "x".to_string(),
-            types: vec![Type::Int],
-        };
-
-        narrower.apply_condition(&condition, &original_types);
-
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::Int));
-    }
-
-    #[test]
-    fn test_scope_stack() {
-        let mut narrower = TypeNarrower::new();
-
-        narrower.push_scope();
-        narrower.narrow_var("x", Type::Int);
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::Int));
-
-        narrower.push_scope();
-        narrower.narrow_var("x", Type::Str);
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::Str));
-
-        narrower.pop_scope();
-        assert_eq!(narrower.get_narrowed("x"), Some(&Type::Int));
-
-        narrower.pop_scope();
-        assert_eq!(narrower.get_narrowed("x"), None);
-    }
-
-    #[test]
-    fn test_callable_narrowing() {
-        let mut narrower = TypeNarrower::new();
-        narrower.push_scope();
-
-        let original_types: HashMap<String, Type> = [("f".to_string(), Type::Any)]
-            .into_iter()
-            .collect();
-
-        let condition = NarrowingCondition::IsCallable {
-            var_name: "f".to_string(),
-        };
-
-        narrower.apply_condition(&condition, &original_types);
-
-        let narrowed = narrower.get_narrowed("f").unwrap();
-        assert!(matches!(narrowed, Type::Callable { .. }));
-    }
-
-    #[test]
-    fn test_hasattr_narrowing() {
-        let mut narrower = TypeNarrower::new();
-        narrower.push_scope();
-
-        let original_types: HashMap<String, Type> = [("obj".to_string(), Type::Any)]
-            .into_iter()
-            .collect();
-
-        let condition = NarrowingCondition::HasAttr {
-            var_name: "obj".to_string(),
-            attr_name: "foo".to_string(),
-        };
-
-        narrower.apply_condition(&condition, &original_types);
-
-        // HasAttr creates a marker type
-        let narrowed = narrower.get_narrowed("obj").unwrap();
-        assert!(matches!(narrowed, Type::Instance { name, .. } if name.contains("HasAttr")));
-    }
-
-    #[test]
-    fn test_callable_negation() {
-        // Test that not callable(x) produces NotCallable
-        let cond = NarrowingCondition::IsCallable {
-            var_name: "f".to_string(),
-        };
-        let negated = negate_condition(&cond);
-        assert!(matches!(&negated, NarrowingCondition::NotCallable { var_name } if var_name == "f"));
-
-        // And back
-        let double_neg = negate_condition(&negated);
-        assert!(matches!(&double_neg, NarrowingCondition::IsCallable { var_name } if var_name == "f"));
-    }
-}
+#[path = "narrow_tests.rs"]
+mod tests;

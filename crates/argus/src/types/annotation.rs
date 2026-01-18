@@ -150,6 +150,16 @@ pub fn parse_generic_type(source: &str, node: &Node) -> Type {
             let inner = args.first().cloned().unwrap_or(Type::Unknown);
             Type::Unpack(Box::new(inner))
         }
+        // PEP 647: TypeGuard
+        "TypeGuard" => {
+            let inner = args.first().cloned().unwrap_or(Type::Unknown);
+            Type::TypeGuard(Box::new(inner))
+        }
+        // PEP 742: TypeIs
+        "TypeIs" => {
+            let inner = args.first().cloned().unwrap_or(Type::Unknown);
+            Type::TypeIs(Box::new(inner))
+        }
         _ => Type::Instance {
             name: base.to_string(),
             module: None,

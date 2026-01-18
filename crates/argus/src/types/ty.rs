@@ -184,6 +184,12 @@ pub enum Type {
     /// Unpacked TypeVarTuple (*Ts)
     Unpack(Box<Type>),
 
+    // === Type Guards (PEP 647, 742) ===
+    /// TypeGuard[T] - narrows type only in positive branch
+    TypeGuard(Box<Type>),
+    /// TypeIs[T] - narrows type in both positive and negative branches
+    TypeIs(Box<Type>),
+
     // === Error type ===
     /// Type error placeholder (allows continued analysis)
     Error,
@@ -555,6 +561,34 @@ impl Type {
     pub fn is_literal_string(&self) -> bool {
         matches!(self, Type::LiteralString | Type::Literal(LiteralValue::Str(_)))
     }
+
+    /// Create a TypeGuard type (PEP 647)
+    pub fn type_guard(inner: Type) -> Type {
+        Type::TypeGuard(Box::new(inner))
+    }
+
+    /// Create a TypeIs type (PEP 742)
+    pub fn type_is(inner: Type) -> Type {
+        Type::TypeIs(Box::new(inner))
+    }
+
+    /// Check if this is a TypeGuard
+    pub fn is_type_guard(&self) -> bool {
+        matches!(self, Type::TypeGuard(_))
+    }
+
+    /// Check if this is a TypeIs
+    pub fn is_type_is(&self) -> bool {
+        matches!(self, Type::TypeIs(_))
+    }
+
+    /// Get the narrowed type from TypeGuard or TypeIs
+    pub fn get_guard_type(&self) -> Option<&Type> {
+        match self {
+            Type::TypeGuard(inner) | Type::TypeIs(inner) => Some(inner),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Type {
@@ -716,6 +750,8 @@ impl fmt::Display for Type {
             }
             Type::TypeVarTuple { name, .. } => write!(f, "TypeVarTuple[{}]", name),
             Type::Unpack(inner) => write!(f, "*{}", inner),
+            Type::TypeGuard(inner) => write!(f, "TypeGuard[{}]", inner),
+            Type::TypeIs(inner) => write!(f, "TypeIs[{}]", inner),
 
             Type::Error => write!(f, "<error>"),
         }

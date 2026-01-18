@@ -349,3 +349,49 @@ fn test_is_literal_string() {
     assert!(Type::Literal(LiteralValue::Str("hello".to_string())).is_literal_string());
     assert!(!Type::Str.is_literal_string());
 }
+
+// === Phase B Type Tests (PEP 647, 742) ===
+
+#[test]
+fn test_typeguard_display() {
+    let tg = Type::type_guard(Type::Int);
+    assert_eq!(tg.to_string(), "TypeGuard[int]");
+
+    let tg_str = Type::type_guard(Type::Str);
+    assert_eq!(tg_str.to_string(), "TypeGuard[str]");
+
+    let tg_nested = Type::type_guard(Type::list(Type::Int));
+    assert_eq!(tg_nested.to_string(), "TypeGuard[list[int]]");
+}
+
+#[test]
+fn test_typeis_display() {
+    let ti = Type::type_is(Type::Int);
+    assert_eq!(ti.to_string(), "TypeIs[int]");
+
+    let ti_str = Type::type_is(Type::Str);
+    assert_eq!(ti_str.to_string(), "TypeIs[str]");
+}
+
+#[test]
+fn test_typeguard_helpers() {
+    let tg = Type::type_guard(Type::Int);
+    assert!(tg.is_type_guard());
+    assert!(!tg.is_type_is());
+    assert_eq!(tg.get_guard_type(), Some(&Type::Int));
+
+    // Non-TypeGuard returns false/None
+    assert!(!Type::Int.is_type_guard());
+    assert_eq!(Type::Int.get_guard_type(), None);
+}
+
+#[test]
+fn test_typeis_helpers() {
+    let ti = Type::type_is(Type::Str);
+    assert!(ti.is_type_is());
+    assert!(!ti.is_type_guard());
+    assert_eq!(ti.get_guard_type(), Some(&Type::Str));
+
+    // Non-TypeIs returns false
+    assert!(!Type::Str.is_type_is());
+}
