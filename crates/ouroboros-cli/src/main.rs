@@ -32,6 +32,17 @@ enum Commands {
         #[command(subcommand)]
         action: QcAction,
     },
+    /// Argus - unified code analysis (LSP + Linting)
+    Argus {
+        #[command(subcommand)]
+        action: ArgusAction,
+    },
+    /// Lint - alias for argus check (deprecated, use 'ob argus')
+    #[command(hide = true)]
+    Lint {
+        #[command(subcommand)]
+        action: ArgusAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -117,6 +128,46 @@ enum QcAction {
     },
 }
 
+#[derive(Subcommand)]
+enum ArgusAction {
+    /// Check files for issues (linting + analysis)
+    Check {
+        /// Paths to check (files or directories)
+        #[arg(default_value = ".")]
+        paths: Vec<String>,
+
+        /// Languages to check (comma-separated: python,typescript,rust)
+        #[arg(short, long)]
+        lang: Option<String>,
+
+        /// Output format (json, markdown, console)
+        #[arg(short, long, default_value = "console")]
+        format: String,
+
+        /// Minimum severity to report (error, warning, info, hint)
+        #[arg(long, default_value = "warning")]
+        min_severity: String,
+
+        /// Output to file instead of stdout
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
+    /// List available rules
+    Rules {
+        /// Language to list rules for
+        #[arg(short, long)]
+        lang: Option<String>,
+    },
+
+    /// Start LSP server for editor integration
+    Serve {
+        /// Port to listen on (stdio if not specified)
+        #[arg(short, long)]
+        port: Option<u16>,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -148,6 +199,26 @@ fn main() -> Result<()> {
 
             QcAction::Migrate { path, backup, dry_run, verbose } => {
                 migrate_tests(&path, backup, dry_run, verbose)?;
+            }
+        },
+        Commands::Argus { action } | Commands::Lint { action } => match action {
+            ArgusAction::Check {
+                paths,
+                lang,
+                format,
+                min_severity,
+                output,
+            } => {
+                let exit_code = run_argus_check(&paths, lang, &format, &min_severity, output)?;
+                if exit_code != 0 {
+                    std::process::exit(exit_code);
+                }
+            }
+            ArgusAction::Rules { lang } => {
+                list_argus_rules(lang)?;
+            }
+            ArgusAction::Serve { port } => {
+                run_argus_lsp(port)?;
             }
         },
     }
@@ -774,6 +845,132 @@ fn migrate_tests(path: &str, backup: bool, dry_run: bool, verbose: bool) -> Resu
 
         Ok(())
     })?;
+
+    Ok(())
+}
+
+// =============================================================================
+// Argus Commands
+// =============================================================================
+
+/// Run Argus checks on files
+fn run_argus_check(
+    paths: &[String],
+    lang: Option<String>,
+    format: &str,
+    _min_severity: &str,
+    output: Option<String>,
+) -> Result<i32> {
+    use argus::{check_paths, Language, LintConfig, OutputFormat, Reporter};
+
+    // Parse languages
+    let languages = if let Some(lang_str) = lang {
+        lang_str
+            .split(',')
+            .filter_map(|s| match s.trim().to_lowercase().as_str() {
+                "python" | "py" => Some(Language::Python),
+                "typescript" | "ts" => Some(Language::TypeScript),
+                "rust" | "rs" => Some(Language::Rust),
+                _ => None,
+            })
+            .collect()
+    } else {
+        vec![Language::Python, Language::TypeScript, Language::Rust]
+    };
+
+    // Create config
+    let config = LintConfig {
+        languages,
+        ..LintConfig::default()
+    };
+
+    // Convert paths
+    let path_refs: Vec<&std::path::Path> = paths
+        .iter()
+        .map(|p| std::path::Path::new(p))
+        .collect();
+
+    // Run checks
+    let results = check_paths(&path_refs, &config);
+
+    // Format output
+    let output_format = OutputFormat::from_str(format).unwrap_or(OutputFormat::Console);
+    let reporter = Reporter::new(output_format);
+    let report = reporter.generate(&results);
+
+    // Output
+    if let Some(output_path) = output {
+        std::fs::write(&output_path, &report)
+            .context("Failed to write lint report")?;
+        println!("📄 Lint report written to: {}", output_path);
+    } else {
+        print!("{}", report);
+    }
+
+    // Count errors
+    let error_count: usize = results.iter().map(|r| r.error_count()).sum();
+    let warning_count: usize = results.iter().map(|r| r.warning_count()).sum();
+
+    if error_count > 0 {
+        return Ok(1);
+    }
+    if warning_count > 0 {
+        return Ok(0); // Warnings don't fail
+    }
+
+    Ok(0)
+}
+
+/// Run Argus LSP server
+fn run_argus_lsp(port: Option<u16>) -> Result<()> {
+    use argus::lsp;
+
+    // Create tokio runtime
+    let rt = tokio::runtime::Runtime::new()
+        .context("Failed to create tokio runtime")?;
+
+    rt.block_on(async {
+        if let Some(p) = port {
+            eprintln!("🔮 Argus LSP server listening on port {}", p);
+            lsp::run_server_tcp(p).await
+                .map_err(|e| anyhow::anyhow!("LSP server error: {}", e))?;
+        } else {
+            // stdio mode - no output to stderr (it would interfere with LSP)
+            lsp::run_server().await;
+        }
+        Ok(())
+    })
+}
+
+/// List available Argus rules
+fn list_argus_rules(lang: Option<String>) -> Result<()> {
+    use argus::{CheckerRegistry, Language};
+
+    let registry = CheckerRegistry::new();
+
+    let languages = if let Some(lang_str) = lang {
+        match lang_str.to_lowercase().as_str() {
+            "python" | "py" => vec![Language::Python],
+            "typescript" | "ts" => vec![Language::TypeScript],
+            "rust" | "rs" => vec![Language::Rust],
+            _ => {
+                println!("Unknown language: {}", lang_str);
+                return Ok(());
+            }
+        }
+    } else {
+        vec![Language::Python, Language::TypeScript, Language::Rust]
+    };
+
+    for lang in languages {
+        if let Some(checker) = registry.get(lang) {
+            println!("\n{} Rules:", lang.as_str().to_uppercase());
+            println!("{}", "-".repeat(40));
+            for rule in checker.available_rules() {
+                println!("  {}", rule);
+            }
+        }
+    }
 
     Ok(())
 }

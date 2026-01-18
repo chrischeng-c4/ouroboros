@@ -791,6 +791,38 @@ impl<'a> TypeChecker<'a> {
                 self.is_assignable(key_ty, &Type::Str)
             }
 
+            // PEP 591: Final[T] is assignable to T
+            (target, Type::Final(inner)) => self.is_assignable(target, inner),
+            (Type::Final(inner), source) => self.is_assignable(inner, source),
+
+            // PEP 593: Annotated[T, ...] is assignable to T
+            (target, Type::Annotated { inner, .. }) => self.is_assignable(target, inner),
+            (Type::Annotated { inner, .. }, source) => self.is_assignable(inner, source),
+
+            // PEP 675: LiteralString is assignable to str
+            (Type::Str, Type::LiteralString) => true,
+            // String literals are assignable to LiteralString
+            (Type::LiteralString, Type::Literal(LiteralValue::Str(_))) => true,
+            // LiteralString is assignable to LiteralString
+            (Type::LiteralString, Type::LiteralString) => true,
+
+            // PEP 673: Self type - compare class names
+            (Type::SelfType { class_name: Some(n1) }, Type::SelfType { class_name: Some(n2) }) => n1 == n2,
+            (Type::SelfType { class_name: Some(name) }, Type::Instance { name: inst_name, .. }) => name == inst_name,
+            (Type::Instance { name: inst_name, .. }, Type::SelfType { class_name: Some(name) }) => name == inst_name,
+            // Unresolved Self is compatible with any Self
+            (Type::SelfType { class_name: None }, Type::SelfType { .. }) => true,
+            (Type::SelfType { .. }, Type::SelfType { class_name: None }) => true,
+
+            // Overloaded functions - source can be any signature
+            (Type::Callable { .. }, Type::Overloaded { signatures }) => {
+                signatures.iter().any(|sig| self.is_assignable(target, sig))
+            }
+            // Overloaded to Callable - at least one signature must match
+            (Type::Overloaded { signatures }, source) => {
+                signatures.iter().any(|sig| self.is_assignable(sig, source))
+            }
+
             _ => false,
         }
     }

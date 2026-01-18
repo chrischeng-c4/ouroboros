@@ -42,6 +42,10 @@ pub fn parse_simple_type(name: &str) -> Type {
         "None" => Type::None,
         "Any" => Type::Any,
         "object" => Type::Any,
+        // PEP 673: Self type
+        "Self" => Type::SelfType { class_name: None },
+        // PEP 675: LiteralString
+        "LiteralString" => Type::LiteralString,
         _ => Type::Instance {
             name: name.to_string(),
             module: None,
@@ -99,13 +103,52 @@ pub fn parse_generic_type(source: &str, node: &Node) -> Type {
                 Type::Unknown
             }
         }
-        "type" => {
+        "type" | "Type" => {
             let inner = args.first().cloned().unwrap_or(Type::Unknown);
             if let Type::Instance { name, module, .. } = inner {
                 Type::ClassType { name, module }
             } else {
                 Type::Unknown
             }
+        }
+        // PEP 591: Final
+        "Final" => {
+            let inner = args.first().cloned().unwrap_or(Type::Unknown);
+            Type::Final(Box::new(inner))
+        }
+        // PEP 593: Annotated
+        "Annotated" => {
+            if args.is_empty() {
+                Type::Unknown
+            } else {
+                let inner = args[0].clone();
+                // Metadata is simplified - store as strings
+                let metadata: Vec<String> = args[1..].iter()
+                    .map(|t| t.to_string())
+                    .collect();
+                Type::Annotated {
+                    inner: Box::new(inner),
+                    metadata,
+                }
+            }
+        }
+        // PEP 612: Concatenate
+        "Concatenate" => {
+            if args.is_empty() {
+                Type::Unknown
+            } else {
+                let param_spec = args.last().cloned().unwrap_or(Type::Unknown);
+                let params = args[..args.len().saturating_sub(1)].to_vec();
+                Type::Concatenate {
+                    params,
+                    param_spec: Box::new(param_spec),
+                }
+            }
+        }
+        // PEP 646: Unpack
+        "Unpack" => {
+            let inner = args.first().cloned().unwrap_or(Type::Unknown);
+            Type::Unpack(Box::new(inner))
         }
         _ => Type::Instance {
             name: base.to_string(),

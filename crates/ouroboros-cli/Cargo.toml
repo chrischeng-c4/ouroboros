@@ -22,3 +22,4 @@ pyo3 = { version = "0.24", features = ["auto-initialize"] }
 
 # Internal crates
 ouroboros-qc = { path = "../ouroboros-qc" }
+argus = { path = "../argus" }

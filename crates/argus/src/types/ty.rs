@@ -7,6 +7,14 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVarId(pub usize);
 
+/// Unique identifier for ParamSpec (PEP 612)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ParamSpecId(pub usize);
+
+/// Unique identifier for TypeVarTuple (PEP 646)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeVarTupleId(pub usize);
+
 /// Parameter kind in function signatures
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
@@ -134,8 +142,47 @@ pub enum Type {
     Unknown,
     /// Literal type (Literal["foo"], Literal[42])
     Literal(LiteralValue),
-    /// Self type (for method return types)
-    SelfType,
+    /// Self type (PEP 673) - references the enclosing class
+    SelfType {
+        /// The class this Self refers to (resolved during checking)
+        class_name: Option<String>,
+    },
+    /// LiteralString type (PEP 675) - string known at compile time
+    LiteralString,
+    /// Final type (PEP 591) - value cannot be reassigned
+    Final(Box<Type>),
+    /// Annotated type (PEP 593) - type with runtime metadata
+    Annotated {
+        inner: Box<Type>,
+        metadata: Vec<String>, // Simplified: just store as strings
+    },
+
+    // === Overloaded functions ===
+    /// Overloaded function with multiple signatures
+    Overloaded {
+        signatures: Vec<Type>, // Each should be a Callable
+    },
+
+    // === ParamSpec (PEP 612) ===
+    /// ParamSpec - captures function parameter types
+    ParamSpec {
+        id: ParamSpecId,
+        name: String,
+    },
+    /// Concatenate - prepend params to a ParamSpec
+    Concatenate {
+        params: Vec<Type>,
+        param_spec: Box<Type>, // Should be a ParamSpec
+    },
+
+    // === TypeVarTuple (PEP 646) ===
+    /// TypeVarTuple - variadic type variable
+    TypeVarTuple {
+        id: TypeVarTupleId,
+        name: String,
+    },
+    /// Unpacked TypeVarTuple (*Ts)
+    Unpack(Box<Type>),
 
     // === Error type ===
     /// Type error placeholder (allows continued analysis)
@@ -435,6 +482,79 @@ impl Type {
             constraints: vec![],
         }
     }
+
+    /// Create a ParamSpec (PEP 612)
+    pub fn param_spec(id: usize, name: &str) -> Type {
+        Type::ParamSpec {
+            id: ParamSpecId(id),
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a TypeVarTuple (PEP 646)
+    pub fn type_var_tuple(id: usize, name: &str) -> Type {
+        Type::TypeVarTuple {
+            id: TypeVarTupleId(id),
+            name: name.to_string(),
+        }
+    }
+
+    /// Create a Final type (PEP 591)
+    pub fn final_type(inner: Type) -> Type {
+        Type::Final(Box::new(inner))
+    }
+
+    /// Create an Annotated type (PEP 593)
+    pub fn annotated(inner: Type, metadata: Vec<String>) -> Type {
+        Type::Annotated {
+            inner: Box::new(inner),
+            metadata,
+        }
+    }
+
+    /// Create a Self type (PEP 673)
+    pub fn self_type(class_name: Option<String>) -> Type {
+        Type::SelfType { class_name }
+    }
+
+    /// Create an Overloaded function type
+    pub fn overloaded(signatures: Vec<Type>) -> Type {
+        Type::Overloaded { signatures }
+    }
+
+    /// Create a Concatenate type (PEP 612)
+    pub fn concatenate(params: Vec<Type>, param_spec: Type) -> Type {
+        Type::Concatenate {
+            params,
+            param_spec: Box::new(param_spec),
+        }
+    }
+
+    /// Unwrap Final to get inner type
+    pub fn unwrap_final(&self) -> &Type {
+        match self {
+            Type::Final(inner) => inner,
+            other => other,
+        }
+    }
+
+    /// Unwrap Annotated to get inner type
+    pub fn unwrap_annotated(&self) -> &Type {
+        match self {
+            Type::Annotated { inner, .. } => inner,
+            other => other,
+        }
+    }
+
+    /// Check if this is a Final type
+    pub fn is_final(&self) -> bool {
+        matches!(self, Type::Final(_))
+    }
+
+    /// Check if this is a LiteralString
+    pub fn is_literal_string(&self) -> bool {
+        matches!(self, Type::LiteralString | Type::Literal(LiteralValue::Str(_)))
+    }
 }
 
 impl fmt::Display for Type {
@@ -554,7 +674,48 @@ impl fmt::Display for Type {
                 LiteralValue::Bool(b) => write!(f, "Literal[{}]", b),
                 LiteralValue::None => write!(f, "Literal[None]"),
             },
-            Type::SelfType => write!(f, "Self"),
+            Type::SelfType { class_name } => {
+                if let Some(name) = class_name {
+                    write!(f, "Self[{}]", name)
+                } else {
+                    write!(f, "Self")
+                }
+            }
+            Type::LiteralString => write!(f, "LiteralString"),
+            Type::Final(inner) => write!(f, "Final[{}]", inner),
+            Type::Annotated { inner, metadata } => {
+                write!(f, "Annotated[{}", inner)?;
+                for m in metadata {
+                    write!(f, ", {}", m)?;
+                }
+                write!(f, "]")
+            }
+            Type::Overloaded { signatures } => {
+                write!(f, "Overloaded[")?;
+                for (i, sig) in signatures.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", sig)?;
+                }
+                write!(f, "]")
+            }
+            Type::ParamSpec { name, .. } => write!(f, "ParamSpec[{}]", name),
+            Type::Concatenate { params, param_spec } => {
+                write!(f, "Concatenate[")?;
+                for (i, p) in params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", p)?;
+                }
+                if !params.is_empty() {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{}]", param_spec)
+            }
+            Type::TypeVarTuple { name, .. } => write!(f, "TypeVarTuple[{}]", name),
+            Type::Unpack(inner) => write!(f, "*{}", inner),
 
             Type::Error => write!(f, "<error>"),
         }
@@ -562,248 +723,5 @@ impl fmt::Display for Type {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_type_display() {
-        assert_eq!(Type::Int.to_string(), "int");
-        assert_eq!(Type::optional(Type::Str).to_string(), "str | None");
-        assert_eq!(Type::list(Type::Int).to_string(), "list[int]");
-        assert_eq!(
-            Type::dict(Type::Str, Type::Int).to_string(),
-            "dict[str, int]"
-        );
-    }
-
-    #[test]
-    fn test_union_flattening() {
-        let union = Type::union(vec![
-            Type::Int,
-            Type::Union(vec![Type::Str, Type::Float]),
-            Type::Int, // duplicate
-        ]);
-
-        match union {
-            Type::Union(types) => {
-                assert_eq!(types.len(), 3);
-                assert!(types.contains(&Type::Int));
-                assert!(types.contains(&Type::Str));
-                assert!(types.contains(&Type::Float));
-            }
-            _ => panic!("Expected Union"),
-        }
-    }
-
-    #[test]
-    fn test_without_none() {
-        let optional = Type::optional(Type::Str);
-        assert_eq!(optional.without_none(), Type::Str);
-
-        let union = Type::Union(vec![Type::Int, Type::None, Type::Str]);
-        let without = union.without_none();
-        match without {
-            Type::Union(types) => {
-                assert_eq!(types.len(), 2);
-                assert!(!types.contains(&Type::None));
-            }
-            _ => panic!("Expected Union"),
-        }
-    }
-
-    #[test]
-    fn test_type_var_substitution() {
-        use std::collections::HashMap;
-
-        // Create a generic type: List[T]
-        let t = Type::type_var(0, "T");
-        let list_t = Type::list(t);
-
-        // Substitute T -> Int
-        let mut subs = HashMap::new();
-        subs.insert(TypeVarId(0), Type::Int);
-
-        let result = list_t.substitute(&subs);
-        assert_eq!(result, Type::list(Type::Int));
-    }
-
-    #[test]
-    fn test_type_vars_collection() {
-        // Create Dict[K, V]
-        let k = Type::type_var(0, "K");
-        let v = Type::type_var(1, "V");
-        let dict_kv = Type::dict(k, v);
-
-        let vars = dict_kv.type_vars();
-        assert_eq!(vars.len(), 2);
-        assert!(vars.contains(&TypeVarId(0)));
-        assert!(vars.contains(&TypeVarId(1)));
-    }
-
-    #[test]
-    fn test_nested_substitution() {
-        use std::collections::HashMap;
-
-        // Create Optional[List[T]]
-        let t = Type::type_var(0, "T");
-        let list_t = Type::list(t);
-        let optional_list_t = Type::optional(list_t);
-
-        // Substitute T -> Str
-        let mut subs = HashMap::new();
-        subs.insert(TypeVarId(0), Type::Str);
-
-        let result = optional_list_t.substitute(&subs);
-        assert_eq!(result, Type::optional(Type::list(Type::Str)));
-    }
-
-    #[test]
-    fn test_callable_substitution() {
-        use std::collections::HashMap;
-
-        // Create Callable[[T], T]
-        let t = Type::type_var(0, "T");
-        let callable = Type::Callable {
-            params: vec![Param {
-                name: "x".to_string(),
-                ty: t.clone(),
-                has_default: false,
-                kind: ParamKind::Positional,
-            }],
-            ret: Box::new(t),
-        };
-
-        // Substitute T -> Int
-        let mut subs = HashMap::new();
-        subs.insert(TypeVarId(0), Type::Int);
-
-        let result = callable.substitute(&subs);
-        match result {
-            Type::Callable { params, ret } => {
-                assert_eq!(params[0].ty, Type::Int);
-                assert_eq!(*ret, Type::Int);
-            }
-            _ => panic!("Expected Callable"),
-        }
-    }
-
-    #[test]
-    fn test_unify_type_var() {
-        use std::collections::HashMap;
-
-        // Unify T with int -> T=int
-        let t = Type::type_var(0, "T");
-        let mut subs = HashMap::new();
-
-        assert!(t.unify(&Type::Int, &mut subs));
-        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Int));
-    }
-
-    #[test]
-    fn test_unify_list() {
-        use std::collections::HashMap;
-
-        // Unify list[T] with list[str] -> T=str
-        let t = Type::type_var(0, "T");
-        let list_t = Type::list(t);
-        let mut subs = HashMap::new();
-
-        assert!(list_t.unify(&Type::list(Type::Str), &mut subs));
-        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
-    }
-
-    #[test]
-    fn test_unify_dict() {
-        use std::collections::HashMap;
-
-        // Unify dict[K, V] with dict[str, int] -> K=str, V=int
-        let k = Type::type_var(0, "K");
-        let v = Type::type_var(1, "V");
-        let dict_kv = Type::dict(k, v);
-        let mut subs = HashMap::new();
-
-        assert!(dict_kv.unify(&Type::dict(Type::Str, Type::Int), &mut subs));
-        assert_eq!(subs.get(&TypeVarId(0)), Some(&Type::Str));
-        assert_eq!(subs.get(&TypeVarId(1)), Some(&Type::Int));
-    }
-
-    #[test]
-    fn test_unify_consistency() {
-        use std::collections::HashMap;
-
-        // Unify T with int, then T with int again -> ok
-        let t = Type::type_var(0, "T");
-        let mut subs = HashMap::new();
-
-        assert!(t.unify(&Type::Int, &mut subs));
-        assert!(t.unify(&Type::Int, &mut subs)); // Same binding, ok
-
-        // Unify T with str after binding to int -> fail
-        assert!(!t.unify(&Type::Str, &mut subs));
-    }
-
-    #[test]
-    fn test_protocol_display() {
-        let protocol = Type::Protocol {
-            name: "Sized".to_string(),
-            module: Some("typing".to_string()),
-            members: vec![
-                ("__len__".to_string(), Type::callable(vec![], Type::Int)),
-            ],
-        };
-        assert_eq!(protocol.to_string(), "Protocol[Sized]{__len__}");
-
-        // Empty protocol
-        let empty_proto = Type::Protocol {
-            name: "Empty".to_string(),
-            module: None,
-            members: vec![],
-        };
-        assert_eq!(empty_proto.to_string(), "Protocol[Empty]");
-    }
-
-    #[test]
-    fn test_literal_display() {
-        assert_eq!(
-            Type::Literal(LiteralValue::Int(42)).to_string(),
-            "Literal[42]"
-        );
-        assert_eq!(
-            Type::Literal(LiteralValue::Str("hello".to_string())).to_string(),
-            "Literal[\"hello\"]"
-        );
-        assert_eq!(
-            Type::Literal(LiteralValue::Bool(true)).to_string(),
-            "Literal[true]"
-        );
-        assert_eq!(
-            Type::Literal(LiteralValue::None).to_string(),
-            "Literal[None]"
-        );
-    }
-
-    #[test]
-    fn test_typed_dict_display() {
-        let td = Type::TypedDict {
-            name: "Person".to_string(),
-            fields: vec![
-                ("name".to_string(), Type::Str, true),
-                ("age".to_string(), Type::Int, true),
-                ("email".to_string(), Type::Str, false), // optional
-            ],
-            total: true,
-        };
-        assert_eq!(
-            td.to_string(),
-            "TypedDict[Person]{name: str, age: int, email?: str}"
-        );
-
-        // Empty TypedDict
-        let empty_td = Type::TypedDict {
-            name: "Empty".to_string(),
-            fields: vec![],
-            total: true,
-        };
-        assert_eq!(empty_td.to_string(), "TypedDict[Empty]");
-    }
-}
+#[path = "ty_tests.rs"]
+mod tests;

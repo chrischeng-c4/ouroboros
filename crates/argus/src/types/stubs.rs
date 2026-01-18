@@ -286,11 +286,40 @@ fn create_typing_stub() -> ModuleInfo {
         name: "ClassVar".to_string(),
         module: Some("typing".to_string()),
     });
-    info.exports.insert("Self".to_string(), Type::SelfType);
+    info.exports.insert("Self".to_string(), Type::SelfType { class_name: None });
     info.exports.insert("TypeAlias".to_string(), Type::ClassType {
         name: "TypeAlias".to_string(),
         module: Some("typing".to_string()),
     });
+
+    // PEP 593: Annotated
+    info.exports.insert("Annotated".to_string(), Type::ClassType {
+        name: "Annotated".to_string(),
+        module: Some("typing".to_string()),
+    });
+
+    // PEP 612: ParamSpec and Concatenate
+    info.exports.insert("ParamSpec".to_string(), Type::ClassType {
+        name: "ParamSpec".to_string(),
+        module: Some("typing".to_string()),
+    });
+    info.exports.insert("Concatenate".to_string(), Type::ClassType {
+        name: "Concatenate".to_string(),
+        module: Some("typing".to_string()),
+    });
+
+    // PEP 646: TypeVarTuple and Unpack
+    info.exports.insert("TypeVarTuple".to_string(), Type::ClassType {
+        name: "TypeVarTuple".to_string(),
+        module: Some("typing".to_string()),
+    });
+    info.exports.insert("Unpack".to_string(), Type::ClassType {
+        name: "Unpack".to_string(),
+        module: Some("typing".to_string()),
+    });
+
+    // PEP 675: LiteralString
+    info.exports.insert("LiteralString".to_string(), Type::LiteralString);
 
     // Functions
     info.exports.insert("cast".to_string(), Type::callable(

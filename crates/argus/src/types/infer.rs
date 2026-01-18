@@ -30,6 +30,10 @@ pub struct TypeInferencer<'a> {
     stubs: StubLoader,
     /// Import resolver for module resolution
     resolver: ImportResolver,
+    /// Overloaded function signatures (name -> list of Callable signatures)
+    overload_signatures: HashMap<String, Vec<Type>>,
+    /// Current class name (for Self type resolution)
+    current_class: Option<String>,
 }
 
 impl<'a> TypeInferencer<'a> {
@@ -56,6 +60,8 @@ impl<'a> TypeInferencer<'a> {
             type_overrides: None,
             stubs,
             resolver,
+            overload_signatures: HashMap::new(),
+            current_class: None,
         }
     }
 
@@ -618,6 +624,21 @@ impl<'a> TypeInferencer<'a> {
         }
     }
 
+    /// Check if a function has the @overload decorator
+    fn has_overload_decorator(&self, node: &Node) -> bool {
+        // Look for decorator node
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "decorator" {
+                let decorator_text = self.node_text(&child);
+                if decorator_text.contains("overload") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Analyze a function definition and add it to the environment
     pub fn analyze_function(&mut self, node: &Node) -> Type {
         let name = node
@@ -638,13 +659,62 @@ impl<'a> TypeInferencer<'a> {
             return_type = parse_type_annotation(self.source, &return_node);
         }
 
+        // Resolve Self type if we're in a class context
+        if let Some(ref class_name) = self.current_class {
+            return_type = self.resolve_self_type(return_type, class_name);
+        }
+
         let func_type = Type::Callable {
             params,
             ret: Box::new(return_type),
         };
 
+        // Check for @overload decorator
+        if self.has_overload_decorator(node) {
+            // This is an overload signature, collect it
+            self.overload_signatures
+                .entry(name.clone())
+                .or_default()
+                .push(func_type.clone());
+            // Don't bind to env yet, wait for the implementation
+            return func_type;
+        }
+
+        // Check if we have collected overload signatures for this function
+        if let Some(signatures) = self.overload_signatures.remove(&name) {
+            // Create an Overloaded type with all signatures
+            let mut all_signatures = signatures;
+            all_signatures.push(func_type.clone()); // Add the implementation signature
+            let overloaded_type = Type::Overloaded {
+                signatures: all_signatures,
+            };
+            self.env.bind(name, overloaded_type.clone());
+            return overloaded_type;
+        }
+
         self.env.bind(name, func_type.clone());
         func_type
+    }
+
+    /// Resolve Self type to the actual class type
+    fn resolve_self_type(&self, ty: Type, class_name: &str) -> Type {
+        match ty {
+            Type::SelfType { .. } => Type::Instance {
+                name: class_name.to_string(),
+                module: None,
+                type_args: vec![],
+            },
+            Type::Optional(inner) => {
+                Type::Optional(Box::new(self.resolve_self_type(*inner, class_name)))
+            }
+            Type::Union(types) => {
+                Type::union(types.into_iter().map(|t| self.resolve_self_type(t, class_name)).collect())
+            }
+            Type::List(elem) => {
+                Type::List(Box::new(self.resolve_self_type(*elem, class_name)))
+            }
+            other => other,
+        }
     }
 
     /// Analyze a class definition and add it to the registry
@@ -653,6 +723,10 @@ impl<'a> TypeInferencer<'a> {
             .child_by_field_name("name")
             .map(|n| self.node_text(&n).to_string())
             .unwrap_or_default();
+
+        // Set current class for Self type resolution
+        let prev_class = self.current_class.take();
+        self.current_class = Some(name.clone());
 
         let mut class_info = ClassInfo::new(name.clone());
 
@@ -681,6 +755,9 @@ impl<'a> TypeInferencer<'a> {
                 }
             }
         }
+
+        // Restore previous class context
+        self.current_class = prev_class;
 
         // Add class type to environment
         let class_type = Type::ClassType {
