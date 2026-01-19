@@ -263,7 +263,6 @@ vs uvloop:
 
 ### Project Documentation
 - **Implementation Summary**: `../../PYLOOP_PHASE1_SUMMARY.md`
-- **Design Document**: `../../openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Project Benchmarks**: `../../docs/PYLOOP_BENCHMARKS.md`
 
 ### External References

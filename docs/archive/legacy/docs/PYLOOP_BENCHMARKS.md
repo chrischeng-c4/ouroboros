@@ -197,7 +197,6 @@ asyncio.run(main())
 - **Quick Reference**: `benchmarks/pyloop/QUICK_REFERENCE.md`
 - **Benchmark Guide**: `benchmarks/pyloop/README.md`
 - **Implementation Summary**: `PYLOOP_PHASE1_SUMMARY.md`
-- **Design Document**: `openspec/changes/implement-data-bridge-pyloop/design.md`
 
 ## Contributing
 

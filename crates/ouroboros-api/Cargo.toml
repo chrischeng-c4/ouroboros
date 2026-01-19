@@ -77,6 +77,7 @@ pyo3 = { workspace = true }
 # Internal
 ouroboros-common = { path = "../ouroboros-common" }
 ouroboros-pyloop = { path = "../ouroboros-pyloop" }
+ouroboros-validation = { path = "../ouroboros-validation", features = ["serde", "sonic"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

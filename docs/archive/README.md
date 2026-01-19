@@ -1,14 +1,13 @@
 # Archived Documentation
 
-This directory contains documentation that has been superseded by the `openspec` specifications or is otherwise legacy.
+This directory contains legacy documentation kept for historical reference.
 
 ## Archived Files
 
 The following files have been moved here:
 
 ### From Root
-- `ADAPTIVE_SAMPLING.md`: Superseded by `openspec/specs/test-framework`
-- `AGENTS.md`: Superseded by `@/openspec/AGENTS.md`
+- `ADAPTIVE_SAMPLING.md`: Legacy test framework docs
 - `MIGRATION_MAP.md`: Legacy migration doc
 - `kv_benchmark_concurrent_fixed.md`: Specific benchmark run report
 
@@ -22,7 +21,7 @@ The following files have been moved here:
 - `TELEMETRY_RELATIONSHIPS.md`
 - `telemetry.md`
 
-These files are kept for historical reference but should not be considered the current source of truth. Please refer to `openspec/specs/` or `dev-docs/` for the latest documentation.
+These files are kept for historical reference but should not be considered the current source of truth. Please refer to `dev-docs/` for the latest documentation.
 
 ### From Root (Phase Summaries - Obsolete)
 - `PHASE2_LAZY_LOADING_IMPLEMENTATION.md`: Old implementation summary

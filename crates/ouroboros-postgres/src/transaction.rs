@@ -6,11 +6,12 @@ use crate::{Connection, Result};
 use sqlx::Postgres;
 
 /// Transaction isolation levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum IsolationLevel {
     /// Read uncommitted
     ReadUncommitted,
     /// Read committed (PostgreSQL default)
+    #[default]
     ReadCommitted,
     /// Repeatable read
     RepeatableRead,
@@ -27,6 +28,113 @@ impl IsolationLevel {
             IsolationLevel::RepeatableRead => "REPEATABLE READ",
             IsolationLevel::Serializable => "SERIALIZABLE",
         }
+    }
+}
+
+/// Transaction access mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AccessMode {
+    /// Read-write transaction (default)
+    #[default]
+    ReadWrite,
+    /// Read-only transaction - no writes allowed
+    ReadOnly,
+}
+
+impl AccessMode {
+    /// Returns the SQL access mode string.
+    pub fn to_sql(&self) -> &'static str {
+        match self {
+            AccessMode::ReadWrite => "READ WRITE",
+            AccessMode::ReadOnly => "READ ONLY",
+        }
+    }
+}
+
+/// Transaction options for fine-grained control over transaction behavior.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Default read-write transaction
+/// let options = TransactionOptions::default();
+///
+/// // Read-only transaction (useful for reports)
+/// let options = TransactionOptions::new()
+///     .read_only()
+///     .isolation_level(IsolationLevel::RepeatableRead);
+///
+/// // Serializable snapshot isolation (useful for money transfers)
+/// let options = TransactionOptions::new()
+///     .isolation_level(IsolationLevel::Serializable)
+///     .deferrable(true); // May wait to ensure serializability
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TransactionOptions {
+    /// Isolation level for the transaction
+    pub isolation_level: IsolationLevel,
+    /// Access mode (read-write or read-only)
+    pub access_mode: AccessMode,
+    /// Whether the transaction is deferrable (only meaningful for SERIALIZABLE READ ONLY)
+    ///
+    /// A deferrable transaction may block waiting for other serializable transactions
+    /// to complete, but once started, it will never be aborted due to serialization conflicts.
+    /// This is useful for long-running read-only queries.
+    pub deferrable: bool,
+}
+
+impl TransactionOptions {
+    /// Create new transaction options with defaults.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the isolation level.
+    pub fn isolation_level(mut self, level: IsolationLevel) -> Self {
+        self.isolation_level = level;
+        self
+    }
+
+    /// Make the transaction read-only.
+    pub fn read_only(mut self) -> Self {
+        self.access_mode = AccessMode::ReadOnly;
+        self
+    }
+
+    /// Make the transaction read-write (default).
+    pub fn read_write(mut self) -> Self {
+        self.access_mode = AccessMode::ReadWrite;
+        self
+    }
+
+    /// Set whether the transaction is deferrable.
+    ///
+    /// Note: DEFERRABLE is only meaningful for SERIALIZABLE READ ONLY transactions.
+    /// For other transaction types, it has no effect.
+    pub fn deferrable(mut self, deferrable: bool) -> Self {
+        self.deferrable = deferrable;
+        self
+    }
+
+    /// Build the SQL string for SET TRANSACTION command.
+    pub fn to_sql(&self) -> String {
+        let mut parts = vec![
+            format!("ISOLATION LEVEL {}", self.isolation_level.to_sql()),
+            self.access_mode.to_sql().to_string(),
+        ];
+
+        // DEFERRABLE is only valid for SERIALIZABLE READ ONLY
+        if self.isolation_level == IsolationLevel::Serializable
+            && self.access_mode == AccessMode::ReadOnly
+        {
+            if self.deferrable {
+                parts.push("DEFERRABLE".to_string());
+            } else {
+                parts.push("NOT DEFERRABLE".to_string());
+            }
+        }
+
+        format!("SET TRANSACTION {}", parts.join(", "))
     }
 }
 
@@ -53,7 +161,7 @@ impl Transaction {
         &mut self.tx
     }
 
-    /// Begins a new transaction.
+    /// Begins a new transaction with a specific isolation level.
     ///
     /// # Arguments
     ///
@@ -64,12 +172,51 @@ impl Transaction {
     ///
     /// Returns error if transaction cannot be started.
     pub async fn begin(conn: &Connection, isolation_level: IsolationLevel) -> Result<Self> {
+        let options = TransactionOptions::new().isolation_level(isolation_level);
+        Self::begin_with_options(conn, options).await
+    }
+
+    /// Begins a new transaction with full options control.
+    ///
+    /// # Arguments
+    ///
+    /// * `conn` - Connection to use for transaction
+    /// * `options` - Transaction options including isolation level, access mode, and deferrable
+    ///
+    /// # Errors
+    ///
+    /// Returns error if transaction cannot be started.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // Read-only transaction for reports
+    /// let options = TransactionOptions::new()
+    ///     .read_only()
+    ///     .isolation_level(IsolationLevel::RepeatableRead);
+    /// let tx = Transaction::begin_with_options(&conn, options).await?;
+    ///
+    /// // Deferrable serializable read-only transaction (won't abort due to conflicts)
+    /// let options = TransactionOptions::new()
+    ///     .isolation_level(IsolationLevel::Serializable)
+    ///     .read_only()
+    ///     .deferrable(true);
+    /// let tx = Transaction::begin_with_options(&conn, options).await?;
+    /// ```
+    pub async fn begin_with_options(conn: &Connection, options: TransactionOptions) -> Result<Self> {
         // Begin transaction from pool
         let mut tx = conn.pool().begin().await?;
 
-        // Set isolation level
-        let sql = format!("SET TRANSACTION ISOLATION LEVEL {}", isolation_level.to_sql());
+        // Set transaction options
+        let sql = options.to_sql();
         sqlx::query(&sql).execute(&mut *tx).await?;
+
+        tracing::debug!(
+            isolation_level = ?options.isolation_level,
+            access_mode = ?options.access_mode,
+            deferrable = options.deferrable,
+            "Started transaction"
+        );
 
         Ok(Self { tx })
     }
@@ -192,6 +339,111 @@ mod tests {
         let level = IsolationLevel::Serializable;
         let cloned = level;
         assert_eq!(level, cloned);
+    }
+
+    #[test]
+    fn test_access_mode_to_sql() {
+        assert_eq!(AccessMode::ReadWrite.to_sql(), "READ WRITE");
+        assert_eq!(AccessMode::ReadOnly.to_sql(), "READ ONLY");
+    }
+
+    #[test]
+    fn test_transaction_options_default() {
+        let options = TransactionOptions::default();
+        assert_eq!(options.isolation_level, IsolationLevel::ReadCommitted);
+        assert_eq!(options.access_mode, AccessMode::ReadWrite);
+        assert!(!options.deferrable);
+    }
+
+    #[test]
+    fn test_transaction_options_builder() {
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::Serializable)
+            .read_only()
+            .deferrable(true);
+
+        assert_eq!(options.isolation_level, IsolationLevel::Serializable);
+        assert_eq!(options.access_mode, AccessMode::ReadOnly);
+        assert!(options.deferrable);
+    }
+
+    #[test]
+    fn test_transaction_options_to_sql_default() {
+        let options = TransactionOptions::default();
+        let sql = options.to_sql();
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED, READ WRITE"
+        );
+    }
+
+    #[test]
+    fn test_transaction_options_to_sql_read_only() {
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::RepeatableRead)
+            .read_only();
+        let sql = options.to_sql();
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+        );
+    }
+
+    #[test]
+    fn test_transaction_options_to_sql_serializable_deferrable() {
+        // DEFERRABLE is only valid for SERIALIZABLE READ ONLY
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::Serializable)
+            .read_only()
+            .deferrable(true);
+        let sql = options.to_sql();
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, DEFERRABLE"
+        );
+    }
+
+    #[test]
+    fn test_transaction_options_to_sql_serializable_not_deferrable() {
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::Serializable)
+            .read_only()
+            .deferrable(false);
+        let sql = options.to_sql();
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ ONLY, NOT DEFERRABLE"
+        );
+    }
+
+    #[test]
+    fn test_transaction_options_deferrable_ignored_for_read_write() {
+        // DEFERRABLE should not appear for READ WRITE transactions
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::Serializable)
+            .read_write()
+            .deferrable(true);
+        let sql = options.to_sql();
+        // Should NOT contain DEFERRABLE since it's READ WRITE
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, READ WRITE"
+        );
+    }
+
+    #[test]
+    fn test_transaction_options_deferrable_ignored_for_non_serializable() {
+        // DEFERRABLE should not appear for non-SERIALIZABLE transactions
+        let options = TransactionOptions::new()
+            .isolation_level(IsolationLevel::RepeatableRead)
+            .read_only()
+            .deferrable(true);
+        let sql = options.to_sql();
+        // Should NOT contain DEFERRABLE since it's not SERIALIZABLE
+        assert_eq!(
+            sql,
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+        );
     }
 
     // Integration tests require a live PostgreSQL database

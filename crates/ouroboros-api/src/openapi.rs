@@ -8,7 +8,7 @@ use crate::validation::{TypeDescriptor, StringFormat};
 use crate::request::HttpMethod;
 
 #[cfg(test)]
-use crate::validation::{StringConstraints, NumericConstraints, FieldDescriptor};
+use crate::validation::{StringConstraints, NumericConstraints, FieldDescriptor, ListConstraints};
 #[cfg(test)]
 use crate::request::SerializableValue;
 
@@ -372,7 +372,7 @@ pub struct Schema {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "additionalProperties")]
-    pub additional_properties: Option<Box<Schema>>,
+    pub additional: Option<Box<Schema>>,
     // Composition
     #[serde(skip_serializing_if = "Option::is_none", rename = "oneOf")]
     pub one_of: Option<Vec<Schema>>,
@@ -463,7 +463,7 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             }
             schema
         }
-        TypeDescriptor::Int(constraints) => {
+        TypeDescriptor::Int64(constraints) => {
             let mut schema = Schema::integer();
             schema.minimum = constraints.minimum.map(|v| v as f64);
             schema.maximum = constraints.maximum.map(|v| v as f64);
@@ -471,7 +471,7 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             schema.exclusive_maximum = constraints.exclusive_maximum.map(|v| v as f64);
             schema
         }
-        TypeDescriptor::Float(constraints) => {
+        TypeDescriptor::Float64(constraints) => {
             let mut schema = Schema::number();
             schema.minimum = constraints.minimum;
             schema.maximum = constraints.maximum;
@@ -480,11 +480,12 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             schema
         }
         TypeDescriptor::Bool => Schema::boolean(),
+        TypeDescriptor::Null => Schema::default().nullable(),
         TypeDescriptor::Bytes => Schema::string().format("binary"),
-        TypeDescriptor::List { items, min_items, max_items } => {
+        TypeDescriptor::List { items, constraints } => {
             let mut schema = Schema::array(type_descriptor_to_schema(items));
-            schema.min_items = *min_items;
-            schema.max_items = *max_items;
+            schema.min_items = constraints.min_items;
+            schema.max_items = constraints.max_items;
             schema
         }
         TypeDescriptor::Tuple { items } => {
@@ -501,7 +502,7 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             // In 3.1, we can just use array (uniqueness is a runtime constraint)
             Schema::array(type_descriptor_to_schema(items))
         }
-        TypeDescriptor::Object { fields, additional_properties } => {
+        TypeDescriptor::Object { fields, additional } => {
             let mut schema = Schema::object();
             let mut properties = HashMap::new();
             let mut required_fields = Vec::new();
@@ -512,7 +513,7 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
                     field_schema.description = Some(desc.clone());
                 }
                 if let Some(ref default) = field.default {
-                    field_schema.default = Some(default.to_json());
+                    field_schema.default = Some(default.clone().into());
                 }
                 properties.insert(field.name.clone(), field_schema);
                 if field.required {
@@ -524,8 +525,8 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             if !required_fields.is_empty() {
                 schema.required = Some(required_fields);
             }
-            if let Some(ref add_props) = additional_properties {
-                schema.additional_properties = Some(Box::new(type_descriptor_to_schema(add_props)));
+            if let Some(ref add_props) = additional {
+                schema.additional = Some(Box::new(type_descriptor_to_schema(add_props)));
             }
             schema
         }
@@ -548,10 +549,10 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
         TypeDescriptor::DateTime => Schema::string().format("date-time"),
         TypeDescriptor::Date => Schema::string().format("date"),
         TypeDescriptor::Time => Schema::string().format("time"),
-        TypeDescriptor::Decimal => Schema::string().format("decimal"),
+        TypeDescriptor::Decimal(_) => Schema::string().format("decimal"),
         TypeDescriptor::Enum { values } => {
             let enum_values: Vec<serde_json::Value> = values.iter()
-                .map(|v| v.to_json())
+                .map(|v| v.clone().into())
                 .collect();
             Schema {
                 enum_values: Some(enum_values),
@@ -560,7 +561,7 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
         }
         TypeDescriptor::Literal { values } => {
             let enum_values: Vec<serde_json::Value> = values.iter()
-                .map(|v| v.to_json())
+                .map(|v| v.clone().into())
                 .collect();
             Schema {
                 enum_values: Some(enum_values),
@@ -638,7 +639,7 @@ mod tests {
 
     #[test]
     fn test_schema_numeric_constraints() {
-        let desc = TypeDescriptor::Int(NumericConstraints {
+        let desc = TypeDescriptor::Int64(NumericConstraints {
             minimum: Some(0),
             maximum: Some(100),
             exclusive_minimum: None,
@@ -666,13 +667,13 @@ mod tests {
                 },
                 FieldDescriptor {
                     name: "age".to_string(),
-                    type_desc: TypeDescriptor::Int(NumericConstraints::default()),
+                    type_desc: TypeDescriptor::Int64(NumericConstraints::default()),
                     required: false,
                     default: None,
                     description: None,
                 },
             ],
-            additional_properties: None,
+            additional: None,
         };
 
         let schema = type_descriptor_to_schema(&desc);
@@ -689,8 +690,11 @@ mod tests {
     fn test_schema_array() {
         let desc = TypeDescriptor::List {
             items: Box::new(TypeDescriptor::String(StringConstraints::default())),
-            min_items: Some(1),
-            max_items: Some(10),
+            constraints: ListConstraints {
+                min_items: Some(1),
+                max_items: Some(10),
+                unique_items: false,
+            },
         };
 
         let schema = type_descriptor_to_schema(&desc);
@@ -715,8 +719,8 @@ mod tests {
     fn test_schema_enum() {
         let desc = TypeDescriptor::Enum {
             values: vec![
-                SerializableValue::String("active".to_string()),
-                SerializableValue::String("inactive".to_string()),
+                ouroboros_validation::Value::String("active".to_string()),
+                ouroboros_validation::Value::String("inactive".to_string()),
             ],
         };
 
@@ -794,14 +798,14 @@ mod tests {
                                 description: Some("User name".to_string()),
                             },
                         ],
-                        additional_properties: None,
+                        additional: None,
                     },
                     required: true,
                     default: None,
                     description: Some("User object".to_string()),
                 },
             ],
-            additional_properties: None,
+            additional: None,
         };
 
         let schema = type_descriptor_to_schema(&desc);

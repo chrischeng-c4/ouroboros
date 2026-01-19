@@ -67,6 +67,21 @@ pub enum Operator {
     JsonAnyKeyExists,
     /// JSONB all keys exist ?&
     JsonAllKeysExist,
+    // Array operators
+    /// Array contains value (value = ANY(array_column))
+    Any,
+    /// Array contains all values (array_column @> ARRAY[values])
+    ArrayContains,
+    /// Array is contained by (array_column <@ ARRAY[values])
+    ArrayContainedBy,
+    /// Array overlaps with values (array_column && ARRAY[values])
+    ArrayOverlaps,
+    /// Array has element (value = ANY(array_column)) - alias for Any
+    Has,
+    /// Array has all elements (array_column @> ARRAY[values]) - alias for ArrayContains
+    HasAll,
+    /// Array has any element (array_column && ARRAY[values]) - alias for ArrayOverlaps
+    HasAny,
 }
 
 impl Operator {
@@ -94,7 +109,26 @@ impl Operator {
             Operator::JsonKeyExists => "?",
             Operator::JsonAnyKeyExists => "?|",
             Operator::JsonAllKeysExist => "?&",
+            // Array operators
+            Operator::Any | Operator::Has => "= ANY",
+            Operator::ArrayContains | Operator::HasAll => "@>",
+            Operator::ArrayContainedBy => "<@",
+            Operator::ArrayOverlaps | Operator::HasAny => "&&",
         }
+    }
+
+    /// Returns true if this operator requires special array handling in WHERE clause
+    pub fn is_array_operator(&self) -> bool {
+        matches!(
+            self,
+            Operator::Any
+                | Operator::Has
+                | Operator::ArrayContains
+                | Operator::HasAll
+                | Operator::ArrayContainedBy
+                | Operator::ArrayOverlaps
+                | Operator::HasAny
+        )
     }
 }
 

@@ -336,4 +336,3 @@ Profile:
 
 - [Example: python_handler_example.rs](examples/python_handler_example.rs)
 - [PyLoop Documentation](../data-bridge-pyloop/)
-- [OpenSpec Proposal](../../openspec/changes/integrate-pyloop-http-server/)

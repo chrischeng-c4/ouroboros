@@ -301,6 +301,43 @@ impl QueryBuilder {
                     format!("{} {} NULL", quote_identifier(&cond.field), cond.operator.to_sql())
                 }
             }
+            // Array operators
+            Operator::Any | Operator::Has => {
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("${} = ANY({})", params.len(), quoted_field)
+                } else {
+                    format!("NULL = ANY({})", quoted_field)
+                }
+            }
+            Operator::ArrayContains | Operator::HasAll => {
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} @> ${}", quoted_field, params.len())
+                } else {
+                    format!("{} @> NULL", quoted_field)
+                }
+            }
+            Operator::ArrayContainedBy => {
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} <@ ${}", quoted_field, params.len())
+                } else {
+                    format!("{} <@ NULL", quoted_field)
+                }
+            }
+            Operator::ArrayOverlaps | Operator::HasAny => {
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} && ${}", quoted_field, params.len())
+                } else {
+                    format!("{} && NULL", quoted_field)
+                }
+            }
             _ => {
                 let quoted_field = quote_identifier(&cond.field);
                 if let Some(ref value) = cond.value {

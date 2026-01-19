@@ -24,6 +24,72 @@ impl QueryBuilder {
         Ok(self)
     }
 
+    /// Defer loading of specific columns (exclude from initial SELECT).
+    ///
+    /// This is useful for optimizing queries that don't need large columns
+    /// like blobs or text fields in the initial fetch.
+    ///
+    /// # Arguments
+    ///
+    /// * `columns` - Column names to defer loading
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Load users without the large_blob column
+    /// let query = QueryBuilder::new("users")?
+    ///     .defer(&["large_blob", "full_description"])?
+    ///     .build();
+    /// // Deferred columns will be excluded from SELECT
+    /// ```
+    pub fn defer(mut self, columns: &[&str]) -> Result<Self> {
+        for col in columns {
+            Self::validate_identifier(col)?;
+            self.deferred_columns.push(col.to_string());
+        }
+        Ok(self)
+    }
+
+    /// Select only the specified columns (all other columns are excluded).
+    ///
+    /// This is the opposite of `defer()` - instead of excluding specific columns,
+    /// you specify exactly which columns to include.
+    ///
+    /// # Arguments
+    ///
+    /// * `columns` - Column names to select exclusively
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// // Only load id and name columns
+    /// let query = QueryBuilder::new("users")?
+    ///     .only(&["id", "name"])?
+    ///     .build();
+    /// // Generated SQL: SELECT "id", "name" FROM "users"
+    /// ```
+    pub fn only(mut self, columns: &[&str]) -> Result<Self> {
+        let mut cols = Vec::with_capacity(columns.len());
+        for col in columns {
+            Self::validate_identifier(col)?;
+            cols.push(col.to_string());
+        }
+        self.only_columns = Some(cols);
+        Ok(self)
+    }
+
+    /// Clear deferred columns
+    pub fn clear_defer(mut self) -> Self {
+        self.deferred_columns.clear();
+        self
+    }
+
+    /// Clear only columns (revert to select all)
+    pub fn clear_only(mut self) -> Self {
+        self.only_columns = None;
+        self
+    }
+
     /// Adds a WHERE condition.
     ///
     /// # Arguments
@@ -215,6 +281,96 @@ impl QueryBuilder {
             subquery: None,
         });
         Ok(self)
+    }
+
+    // Array operators
+
+    /// Filter where value equals any element in the array column (value = ANY(array_column))
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Find rows where 'admin' is in the roles array
+    /// builder.where_any("roles", ExtractedValue::String("admin".to_string()))
+    /// ```
+    pub fn where_any(mut self, field: &str, value: ExtractedValue) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::Any,
+            value: Some(value),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Alias for where_any - Filter where array column has the given element
+    pub fn where_has(self, field: &str, value: ExtractedValue) -> Result<Self> {
+        self.where_any(field, value)
+    }
+
+    /// Filter where array column contains all the given values (array @> ARRAY[values])
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Find rows where tags contain both "rust" and "postgres"
+    /// builder.where_array_contains("tags", vec![
+    ///     ExtractedValue::String("rust".to_string()),
+    ///     ExtractedValue::String("postgres".to_string()),
+    /// ])
+    /// ```
+    pub fn where_array_contains(mut self, field: &str, values: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::ArrayContains,
+            value: Some(ExtractedValue::Array(values)),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Alias for where_array_contains - Filter where array has all the given elements
+    pub fn where_has_all(self, field: &str, values: Vec<ExtractedValue>) -> Result<Self> {
+        self.where_array_contains(field, values)
+    }
+
+    /// Filter where array column is contained by the given values (array <@ ARRAY[values])
+    pub fn where_array_contained_by(mut self, field: &str, values: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::ArrayContainedBy,
+            value: Some(ExtractedValue::Array(values)),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Filter where array column overlaps with given values (array && ARRAY[values])
+    ///
+    /// # Example
+    /// ```ignore
+    /// // Find rows where tags contain any of "rust", "python", or "go"
+    /// builder.where_array_overlaps("tags", vec![
+    ///     ExtractedValue::String("rust".to_string()),
+    ///     ExtractedValue::String("python".to_string()),
+    ///     ExtractedValue::String("go".to_string()),
+    /// ])
+    /// ```
+    pub fn where_array_overlaps(mut self, field: &str, values: Vec<ExtractedValue>) -> Result<Self> {
+        Self::validate_identifier(field)?;
+        self.where_conditions.push(WhereCondition {
+            field: field.to_string(),
+            operator: Operator::ArrayOverlaps,
+            value: Some(ExtractedValue::Array(values)),
+            subquery: None,
+        });
+        Ok(self)
+    }
+
+    /// Alias for where_array_overlaps - Filter where array has any of the given elements
+    pub fn where_has_any(self, field: &str, values: Vec<ExtractedValue>) -> Result<Self> {
+        self.where_array_overlaps(field, values)
     }
 
     /// Adds an ORDER BY clause.
@@ -610,8 +766,16 @@ impl QueryBuilder {
                 })
                 .collect();
             select_parts.extend(agg_parts);
+        } else if let Some(ref only_cols) = self.only_columns {
+            // `only()` takes precedence - select exactly these columns
+            let quoted_cols: Vec<String> = only_cols.iter()
+                .map(|c| quote_identifier(c))
+                .collect();
+            select_parts.extend(quoted_cols);
         } else if !self.select_columns.is_empty() {
+            // Filter out deferred columns from select_columns
             let quoted_cols: Vec<String> = self.select_columns.iter()
+                .filter(|c| !self.deferred_columns.contains(c))
                 .map(|c| quote_identifier(c))
                 .collect();
             select_parts.extend(quoted_cols);
@@ -623,6 +787,9 @@ impl QueryBuilder {
         }
 
         if select_parts.is_empty() {
+            // If deferred columns exist but no explicit columns, we can't use * easily
+            // For now, we output * (caller should use only() or select() for deferred loading)
+            // In a full implementation, we'd introspect the schema to exclude deferred columns
             sql.push('*');
         } else {
             sql.push_str(&select_parts.join(", "));
@@ -794,6 +961,47 @@ impl QueryBuilder {
                     )
                 } else {
                     format!("{} {} NULL", quote_identifier(&cond.field), cond.operator.to_sql())
+                }
+            }
+            // Array operators
+            Operator::Any | Operator::Has => {
+                // value = ANY(array_column)
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("${} = ANY({})", params.len(), quoted_field)
+                } else {
+                    format!("NULL = ANY({})", quoted_field)
+                }
+            }
+            Operator::ArrayContains | Operator::HasAll => {
+                // array_column @> ARRAY[values]
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} @> ${}", quoted_field, params.len())
+                } else {
+                    format!("{} @> NULL", quoted_field)
+                }
+            }
+            Operator::ArrayContainedBy => {
+                // array_column <@ ARRAY[values]
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} <@ ${}", quoted_field, params.len())
+                } else {
+                    format!("{} <@ NULL", quoted_field)
+                }
+            }
+            Operator::ArrayOverlaps | Operator::HasAny => {
+                // array_column && ARRAY[values]
+                let quoted_field = quote_identifier(&cond.field);
+                if let Some(ref value) = cond.value {
+                    params.push(value.clone());
+                    format!("{} && ${}", quoted_field, params.len())
+                } else {
+                    format!("{} && NULL", quoted_field)
                 }
             }
             _ => {

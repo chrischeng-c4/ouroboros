@@ -280,7 +280,6 @@ python benchmarks/pyloop/bench_scaling.py
 
 ### Project Documentation
 - `PYLOOP_PHASE1_SUMMARY.md` - Implementation summary
-- `openspec/changes/implement-ouroboros-pyloop/design.md` - Design document
 
 ---
 

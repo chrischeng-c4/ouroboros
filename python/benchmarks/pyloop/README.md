@@ -315,7 +315,6 @@ Please include:
 ## References
 
 - **PyLoop Source**: `crates/ouroboros-pyloop/src/`
-- **Design Doc**: `openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Phase Summary**: `PYLOOP_PHASE1_SUMMARY.md`
 - **Tokio**: https://tokio.rs/
 - **Python asyncio**: https://docs.python.org/3/library/asyncio.html

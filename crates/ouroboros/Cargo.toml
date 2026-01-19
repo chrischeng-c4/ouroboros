@@ -40,6 +40,7 @@ ouroboros-api = { path = "../ouroboros-api", optional = true }
 ouroboros-tasks = { path = "../ouroboros-tasks", optional = true }
 ouroboros-pyloop = { path = "../ouroboros-pyloop", optional = true }
 ouroboros-common = { path = "../ouroboros-common" }
+ouroboros-validation = { path = "../ouroboros-validation", features = ["bson", "python"] }
 
 # Base64 encoding for binary data
 base64 = "0.22"

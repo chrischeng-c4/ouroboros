@@ -160,7 +160,7 @@ impl RustDocument {
         py: Python<'py>,
         schema: &Bound<'_, pyo3::types::PyDict>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        use crate::validation::{BsonTypeDescriptor, validate_document};
+        use super::validation::{bson_type_descriptor_from_py_dict, py_validate_document};
 
         // Security: Validate collection name
         let validated_name = validate_collection_name(&self.collection_name)?.into_string();
@@ -170,12 +170,12 @@ impl RustDocument {
         for (key, value) in schema.iter() {
             let field_name: String = key.extract()?;
             let type_dict = value.downcast::<pyo3::types::PyDict>()?;
-            let type_descriptor = BsonTypeDescriptor::from_py_dict(py, type_dict)?;
+            let type_descriptor = bson_type_descriptor_from_py_dict(py, type_dict)?;
             rust_schema.insert(field_name, type_descriptor);
         }
 
         // Validate document against schema
-        validate_document(&self.data, &rust_schema)?;
+        py_validate_document(&self.data, &rust_schema)?;
 
         // If validation passes, proceed with normal save
         let conn = get_connection()?;

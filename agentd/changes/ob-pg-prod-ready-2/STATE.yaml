@@ -1,0 +1,189 @@
+change_id: ob-pg-prod-ready-2
+schema_version: '2.0'
+created_at: 2026-01-19T03:28:21.380100Z
+updated_at: 2026-01-19T04:36:48.046593Z
+phase: implementing
+iteration: 1
+last_action: validate-challenge
+checksums:
+  CHALLENGE.md:
+    hash: sha256:587cf2572f674ad24886d0ea1df34bb7ff2c1dd9e0a644a69798e86e28dfd491
+    validated_at: 2026-01-19T04:25:01.654599Z
+validations:
+- step: validate-proposal
+  timestamp: 2026-01-19T03:28:21.380160Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 18
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/robustness.md] Scenario heading ''Scenario: Database starts after application'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Unique constraint violation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Pool exhaustion'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/robustness.md] Missing **WHEN** clause in scenarios'
+  - '[specs/robustness.md] Missing **THEN** clause in scenarios'
+  - '[specs/performance.md] Scenario heading ''Scenario: Deadlock recovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Scenario heading ''Scenario: Statement reuse'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Scenario heading ''Scenario: Bulk Insert Efficiency'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/performance.md] Missing **WHEN** clause in scenarios'
+  - '[specs/performance.md] Missing **THEN** clause in scenarios'
+  - '[specs/observability.md] Scenario heading ''Scenario: Query tracing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Scenario heading ''Scenario: Error context in logs'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Scenario heading ''Scenario: Monitoring pool health'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/observability.md] Missing **WHEN** clause in scenarios'
+  - '[specs/observability.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-proposal
+  timestamp: 2026-01-19T03:30:24.164730Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 34
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/robustness.md] Scenario heading ''Scenario: Database starts after application'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Unique constraint violation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Pool exhaustion'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/robustness.md] Missing **WHEN** clause in scenarios'
+  - '[specs/robustness.md] Missing **THEN** clause in scenarios'
+  - '[specs/safety.md] Scenario heading ''Scenario: Invalid Connection String'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Scenario heading ''Scenario: Type Mismatch'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Scenario heading ''Scenario: Query Builder Error'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/safety.md] Missing **WHEN** clause in scenarios'
+  - '[specs/safety.md] Missing **THEN** clause in scenarios'
+  - '[specs/performance.md] Scenario heading ''Scenario: Deadlock recovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Scenario heading ''Scenario: Statement reuse'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/performance.md] Missing **WHEN** clause in scenarios'
+  - '[specs/performance.md] Missing **THEN** clause in scenarios'
+  - '[specs/features.md] Scenario heading ''Scenario: Array Contains'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Scenario heading ''Scenario: JSON Key Exists'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Scenario heading ''Scenario: Read Only Transaction'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/features.md] Missing **WHEN** clause in scenarios'
+  - '[specs/features.md] Missing **THEN** clause in scenarios'
+  - '[specs/observability.md] Scenario heading ''Scenario: Query tracing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Scenario heading ''Scenario: Error context'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/observability.md] Missing **WHEN** clause in scenarios'
+  - '[specs/observability.md] Missing **THEN** clause in scenarios'
+  - '[specs/correctness.md] Scenario heading ''Scenario: Insert with Returning'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Scenario heading ''Scenario: Insert without Returning'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Scenario heading ''Scenario: Aggregate Decimal'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/correctness.md] Missing **WHEN** clause in scenarios'
+  - '[specs/correctness.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-proposal
+  timestamp: 2026-01-19T03:31:21.051297Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 40
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/robustness.md] Scenario heading ''Scenario: Database starts after application'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Unique constraint violation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Scenario heading ''Scenario: Pool exhaustion'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/robustness.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/robustness.md] Missing **WHEN** clause in scenarios'
+  - '[specs/robustness.md] Missing **THEN** clause in scenarios'
+  - '[specs/safety.md] Scenario heading ''Scenario: Invalid Connection String'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Scenario heading ''Scenario: Type Mismatch'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Scenario heading ''Scenario: Query Builder Error'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/safety.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/safety.md] Missing **WHEN** clause in scenarios'
+  - '[specs/safety.md] Missing **THEN** clause in scenarios'
+  - '[specs/performance.md] Scenario heading ''Scenario: Deadlock recovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Scenario heading ''Scenario: Statement reuse'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/performance.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/performance.md] Missing **WHEN** clause in scenarios'
+  - '[specs/performance.md] Missing **THEN** clause in scenarios'
+  - '[specs/advanced_query.md] Scenario heading ''Scenario: Deferred Loading'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced_query.md] Scenario heading ''Scenario: Join Construction'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced_query.md] Scenario heading ''Scenario: Subquery in Where'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced_query.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/advanced_query.md] Missing **WHEN** clause in scenarios'
+  - '[specs/advanced_query.md] Missing **THEN** clause in scenarios'
+  - '[specs/features.md] Scenario heading ''Scenario: Array Contains'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Scenario heading ''Scenario: JSON Key Exists'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Scenario heading ''Scenario: Read Only Transaction'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/features.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/features.md] Missing **WHEN** clause in scenarios'
+  - '[specs/features.md] Missing **THEN** clause in scenarios'
+  - '[specs/observability.md] Scenario heading ''Scenario: Query tracing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Scenario heading ''Scenario: Error context'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/observability.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/observability.md] Missing **WHEN** clause in scenarios'
+  - '[specs/observability.md] Missing **THEN** clause in scenarios'
+  - '[specs/correctness.md] Scenario heading ''Scenario: Insert with Returning'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Scenario heading ''Scenario: Insert without Returning'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Scenario heading ''Scenario: Aggregate Decimal'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/correctness.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/correctness.md] Missing **WHEN** clause in scenarios'
+  - '[specs/correctness.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T04:06:03.892502Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 5
+    medium: 2
+    low: 2
+    verdict: NEEDS_REVISION
+    issues_parsed: 9
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T04:19:51.297464Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 3
+    medium: 1
+    low: 1
+    verdict: NEEDS_REVISION
+    issues_parsed: 5
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T04:25:01.654373Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 3
+    medium: 3
+    low: 3
+    verdict: NEEDS_REVISION
+    issues_parsed: 9
+  errors: []
+  warnings: []
+telemetry: null

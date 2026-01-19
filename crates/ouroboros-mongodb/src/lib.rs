@@ -14,10 +14,16 @@
 pub mod connection;
 pub mod document;
 pub mod query;
+pub mod validation;
 
 pub use connection::{Connection, PoolConfig};
 pub use ouroboros_common::{DataBridgeError, Result};
 pub use document::Document;
+pub use validation::{
+    ValidatedCollectionName, ValidatedFieldName, ObjectIdParser,
+    validate_query, BsonConstraints, BsonTypeDescriptor,
+    validate_field, validate_document,
+};
 
 #[cfg(test)]
 mod tests {
