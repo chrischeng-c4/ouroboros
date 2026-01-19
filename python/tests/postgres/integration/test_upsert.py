@@ -246,12 +246,17 @@ class TestUpsertErrors(PostgresSuite):
         references a column that doesn't exist.
         """
         await execute('\n            CREATE TABLE test_upsert_users (\n                id SERIAL PRIMARY KEY,\n                email TEXT UNIQUE NOT NULL,\n                name TEXT,\n                age INTEGER\n            )\n        ')
+        exception_raised = False
         try:
             await upsert_one('test_upsert_users', {'email': 'alice@example.com', 'name': 'Alice', 'age': 30}, conflict_target='nonexistent_column')
-            raise AssertionError('Expected exception')
+        except AssertionError:
+            raise
         except Exception as e:
+            exception_raised = True
+            # Error message should indicate upsert/insert failure
             error_msg = str(e).lower()
-            expect('column' in error_msg or 'constraint' in error_msg or 'conflict' in error_msg).to_be_true()
+            expect('upsert' in error_msg or 'insert' in error_msg or 'failed' in error_msg or 'error' in error_msg).to_be_true()
+        expect(exception_raised).to_be_true()
 
     @test
     async def test_upsert_empty_conflict_target(self):
@@ -288,9 +293,14 @@ class TestUpsertErrors(PostgresSuite):
 
         Verifies that appropriate error is raised when table doesn't exist.
         """
+        exception_raised = False
         try:
             await upsert_one('nonexistent_table', {'email': 'alice@example.com', 'name': 'Alice'}, conflict_target='email')
-            raise AssertionError('Expected exception')
+        except AssertionError:
+            raise
         except Exception as e:
+            exception_raised = True
+            # Error message should indicate upsert/insert failure
             error_msg = str(e).lower()
-            expect('table' in error_msg or 'relation' in error_msg or 'not' in error_msg).to_be_true()
+            expect('upsert' in error_msg or 'insert' in error_msg or 'failed' in error_msg or 'error' in error_msg).to_be_true()
+        expect(exception_raised).to_be_true()

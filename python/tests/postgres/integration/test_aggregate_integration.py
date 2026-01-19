@@ -46,28 +46,28 @@ class TestBasicAggregates(PostgresSuite):
         """Test SUM(column) - sum of all values."""
         results = await query_aggregate('orders', [('sum', 'amount', 'total_amount')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['total_amount'])).to_equal(pytest.approx(876.5, rel=0.01))
+        expect(float(results[0]['total_amount'])).to_be_close_to(876.5, rel=0.01)
 
     @test
     async def test_avg(self, orders_table):
         """Test AVG(column) - average of values."""
         results = await query_aggregate('orders', [('avg', 'amount', 'avg_amount')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['avg_amount'])).to_equal(pytest.approx(146.08, rel=0.01))
+        expect(float(results[0]['avg_amount'])).to_be_close_to(146.08, rel=0.01)
 
     @test
     async def test_min(self, orders_table):
         """Test MIN(column) - minimum value."""
         results = await query_aggregate('orders', [('min', 'amount', 'min_amount')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['min_amount'])).to_equal(pytest.approx(50.25, rel=0.01))
+        expect(float(results[0]['min_amount'])).to_be_close_to(50.25, rel=0.01)
 
     @test
     async def test_max(self, orders_table):
         """Test MAX(column) - maximum value."""
         results = await query_aggregate('orders', [('max', 'amount', 'max_amount')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['max_amount'])).to_equal(pytest.approx(300.75, rel=0.01))
+        expect(float(results[0]['max_amount'])).to_be_close_to(300.75, rel=0.01)
 
 class TestGroupBy(PostgresSuite):
     """Test GROUP BY functionality."""
@@ -78,13 +78,13 @@ class TestGroupBy(PostgresSuite):
         results = await query_aggregate('orders', [('sum', 'amount', 'total'), ('count', None, 'count')], group_by=['user_id'], having=None, where_conditions=None, order_by=[('user_id', 'asc')], limit=None)
         expect(len(results)).to_equal(3)
         expect(results[0]['user_id']).to_equal(1)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(350.75, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(350.75, rel=0.01)
         expect(results[0]['count']).to_equal(3)
         expect(results[1]['user_id']).to_equal(2)
-        expect(float(results[1]['total'])).to_equal(pytest.approx(450.75, rel=0.01))
+        expect(float(results[1]['total'])).to_be_close_to(450.75, rel=0.01)
         expect(results[1]['count']).to_equal(2)
         expect(results[2]['user_id']).to_equal(3)
-        expect(float(results[2]['total'])).to_equal(pytest.approx(75.0, rel=0.01))
+        expect(float(results[2]['total'])).to_be_close_to(75.0, rel=0.01)
         expect(results[2]['count']).to_equal(1)
 
     @test
@@ -101,14 +101,14 @@ class TestWhereConditions(PostgresSuite):
         """Test aggregate with single WHERE condition."""
         results = await query_aggregate('orders', [('sum', 'amount', 'total')], group_by=None, having=None, where_conditions=[('status', 'eq', 'completed')], order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(751.25, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(751.25, rel=0.01)
 
     @test
     async def test_where_multiple_conditions(self, orders_table):
         """Test aggregate with multiple WHERE conditions (AND)."""
         results = await query_aggregate('orders', [('sum', 'amount', 'total')], group_by=None, having=None, where_conditions=[('status', 'eq', 'completed'), ('amount', 'gt', 150)], order_by=None, limit=None)
         expect(len(results)).to_equal(1)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(500.75, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(500.75, rel=0.01)
 
     @test
     async def test_where_with_group_by(self, orders_table):
@@ -116,10 +116,10 @@ class TestWhereConditions(PostgresSuite):
         results = await query_aggregate('orders', [('sum', 'amount', 'total'), ('count', None, 'count')], group_by=['user_id'], having=None, where_conditions=[('status', 'eq', 'completed')], order_by=[('user_id', 'asc')], limit=None)
         expect(len(results)).to_equal(2)
         expect(results[0]['user_id']).to_equal(1)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(300.5, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(300.5, rel=0.01)
         expect(results[0]['count']).to_equal(2)
         expect(results[1]['user_id']).to_equal(2)
-        expect(float(results[1]['total'])).to_equal(pytest.approx(450.75, rel=0.01))
+        expect(float(results[1]['total'])).to_be_close_to(450.75, rel=0.01)
         expect(results[1]['count']).to_equal(2)
 
 class TestOrderByAndLimit(PostgresSuite):
@@ -151,10 +151,10 @@ class TestMultipleAggregates(PostgresSuite):
         results = await query_aggregate('orders', [('count', None, 'count'), ('sum', 'amount', 'total'), ('avg', 'amount', 'avg'), ('min', 'amount', 'min'), ('max', 'amount', 'max')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
         expect(len(results)).to_equal(1)
         expect(results[0]['count']).to_equal(6)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(876.5, rel=0.01))
-        expect(float(results[0]['avg'])).to_equal(pytest.approx(146.08, rel=0.01))
-        expect(float(results[0]['min'])).to_equal(pytest.approx(50.25, rel=0.01))
-        expect(float(results[0]['max'])).to_equal(pytest.approx(300.75, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(876.5, rel=0.01)
+        expect(float(results[0]['avg'])).to_be_close_to(146.08, rel=0.01)
+        expect(float(results[0]['min'])).to_be_close_to(50.25, rel=0.01)
+        expect(float(results[0]['max'])).to_be_close_to(300.75, rel=0.01)
 
     @test
     async def test_multiple_aggregates_with_group(self, orders_table):
@@ -180,10 +180,14 @@ class TestOperatorVariations(PostgresSuite):
     @test
     async def test_comparison_operators(self, orders_table):
         """Test gt, gte, lt, lte operators."""
+        # Test data: 100.5, 200.0, 50.25, 150.0, 300.75, 75.0
+        # gt 100: 100.5, 200.0, 150.0, 300.75 = 4 orders
         results = await query_aggregate('orders', [('count', None, 'count')], group_by=None, having=None, where_conditions=[('amount', 'gt', 100)], order_by=None, limit=None)
-        expect(results[0]['count']).to_equal(3)
+        expect(results[0]['count']).to_equal(4)
+        # gte 100: same as gt since no amount equals exactly 100
         results = await query_aggregate('orders', [('count', None, 'count')], group_by=None, having=None, where_conditions=[('amount', 'gte', 100)], order_by=None, limit=None)
         expect(results[0]['count']).to_equal(4)
+        # lt 100: 50.25, 75.0 = 2 orders
         results = await query_aggregate('orders', [('count', None, 'count')], group_by=None, having=None, where_conditions=[('amount', 'lt', 100)], order_by=None, limit=None)
         expect(results[0]['count']).to_equal(2)
 
@@ -196,7 +200,7 @@ class TestHavingClause(PostgresSuite):
         results = await query_aggregate('orders', [('sum', 'amount', 'total'), ('count', None, 'count')], group_by=['user_id'], having=[('sum', 'amount', 'gt', 400)], where_conditions=None, order_by=[('user_id', 'asc')], limit=None)
         expect(len(results)).to_equal(1)
         expect(results[0]['user_id']).to_equal(2)
-        expect(float(results[0]['total'])).to_equal(pytest.approx(450.75, rel=0.01))
+        expect(float(results[0]['total'])).to_be_close_to(450.75, rel=0.01)
 
     @test
     async def test_having_count_condition(self, orders_table):
@@ -237,7 +241,7 @@ class TestHavingClause(PostgresSuite):
         results = await query_aggregate('orders', [('max', 'amount', 'max_amount'), ('count', None, 'count')], group_by=['user_id'], having=[('max', 'amount', 'gt', 250)], where_conditions=None, order_by=[('user_id', 'asc')], limit=None)
         expect(len(results)).to_equal(1)
         expect(results[0]['user_id']).to_equal(2)
-        expect(float(results[0]['max_amount'])).to_equal(pytest.approx(300.75, rel=0.01))
+        expect(float(results[0]['max_amount'])).to_be_close_to(300.75, rel=0.01)
 
 class TestErrorHandling(PostgresSuite):
     """Test error handling and validation."""
@@ -245,14 +249,22 @@ class TestErrorHandling(PostgresSuite):
     @test
     async def test_invalid_table_name(self):
         """Test error on invalid table name."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_aggregate('nonexistent_table', [('count', None, 'count')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
     @test
     async def test_invalid_column_name(self, orders_table):
         """Test error on invalid column name."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_aggregate('orders', [('sum', 'nonexistent_column', 'total')], group_by=None, having=None, where_conditions=None, order_by=None, limit=None)
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
     @test
     async def test_invalid_aggregate_function(self):

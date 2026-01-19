@@ -532,7 +532,7 @@ impl Row {
         }
 
         let mut qb = QueryBuilder::new(table)?
-            .select(select_cols)?;
+            .select_raw(select_cols);
 
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);
@@ -715,7 +715,7 @@ impl Row {
         }
 
         let mut qb = QueryBuilder::new(table)?
-            .select(select_cols)?;
+            .select_raw(select_cols);
 
         for (idx, rel) in relations.iter().enumerate() {
             let alias = format!("_rel{}", idx);

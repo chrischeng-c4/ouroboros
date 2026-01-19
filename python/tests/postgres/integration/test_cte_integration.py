@@ -7,23 +7,24 @@ from datetime import datetime, timezone
 from ouroboros.postgres import execute, insert_one, query_with_cte
 from ouroboros.qc import expect, fixture, test
 from tests.postgres.base import PostgresSuite
-class TestCteIntegration(PostgresSuite):
 
-    @test
-    @fixture
-    async def test_tables(self):
-        """Create and populate test tables for CTE testing."""
-        await execute('\n        CREATE TABLE IF NOT EXISTS users (\n            id SERIAL PRIMARY KEY,\n            name VARCHAR(100) NOT NULL,\n            email VARCHAR(100) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
-        await execute('\n        CREATE TABLE IF NOT EXISTS orders (\n            id SERIAL PRIMARY KEY,\n            user_id INTEGER NOT NULL,\n            amount DECIMAL(10, 2) NOT NULL,\n            status VARCHAR(50) NOT NULL,\n            created_at TIMESTAMP DEFAULT NOW()\n        )\n        ')
-        users_data = [{'name': 'Alice', 'email': 'alice@example.com', 'status': 'active'}, {'name': 'Bob', 'email': 'bob@example.com', 'status': 'active'}, {'name': 'Charlie', 'email': 'charlie@example.com', 'status': 'inactive'}, {'name': 'David', 'email': 'david@example.com', 'status': 'active'}, {'name': 'Eve', 'email': 'eve@example.com', 'status': 'active'}]
-        for data in users_data:
-            await insert_one('users', data)
-        orders_data = [{'user_id': 1, 'amount': 100.0, 'status': 'completed'}, {'user_id': 1, 'amount': 200.0, 'status': 'completed'}, {'user_id': 1, 'amount': 50.0, 'status': 'pending'}, {'user_id': 2, 'amount': 150.0, 'status': 'completed'}, {'user_id': 2, 'amount': 75.0, 'status': 'pending'}, {'user_id': 3, 'amount': 25.0, 'status': 'cancelled'}, {'user_id': 4, 'amount': 300.0, 'status': 'completed'}, {'user_id': 4, 'amount': 250.0, 'status': 'completed'}]
-        for data in orders_data:
-            await insert_one('orders', data)
-        yield
-        await execute('DROP TABLE IF EXISTS orders')
-        await execute('DROP TABLE IF EXISTS users')
+@fixture
+async def test_tables():
+    """Create and populate test tables for CTE testing."""
+    await execute('\n        CREATE TABLE IF NOT EXISTS users (\n            id SERIAL PRIMARY KEY,\n            name VARCHAR(100) NOT NULL,\n            email VARCHAR(100) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
+    await execute('\n        CREATE TABLE IF NOT EXISTS orders (\n            id SERIAL PRIMARY KEY,\n            user_id INTEGER NOT NULL,\n            amount DECIMAL(10, 2) NOT NULL,\n            status VARCHAR(50) NOT NULL,\n            created_at TIMESTAMP DEFAULT NOW()\n        )\n        ')
+    users_data = [{'name': 'Alice', 'email': 'alice@example.com', 'status': 'active'}, {'name': 'Bob', 'email': 'bob@example.com', 'status': 'active'}, {'name': 'Charlie', 'email': 'charlie@example.com', 'status': 'inactive'}, {'name': 'David', 'email': 'david@example.com', 'status': 'active'}, {'name': 'Eve', 'email': 'eve@example.com', 'status': 'active'}]
+    for data in users_data:
+        await insert_one('users', data)
+    orders_data = [{'user_id': 1, 'amount': 100.0, 'status': 'completed'}, {'user_id': 1, 'amount': 200.0, 'status': 'completed'}, {'user_id': 1, 'amount': 50.0, 'status': 'pending'}, {'user_id': 2, 'amount': 150.0, 'status': 'completed'}, {'user_id': 2, 'amount': 75.0, 'status': 'pending'}, {'user_id': 3, 'amount': 25.0, 'status': 'cancelled'}, {'user_id': 4, 'amount': 300.0, 'status': 'completed'}, {'user_id': 4, 'amount': 250.0, 'status': 'completed'}]
+    for data in orders_data:
+        await insert_one('orders', data)
+    yield
+    await execute('DROP TABLE IF EXISTS orders')
+    await execute('DROP TABLE IF EXISTS users')
+
+class TestCteIntegration(PostgresSuite):
+    pass
 
 class TestSimpleCTE(PostgresSuite):
     """Test simple CTE functionality."""
@@ -264,26 +265,42 @@ class TestCTEErrorHandling(PostgresSuite):
     @test
     async def test_invalid_cte_sql(self, test_tables):
         """Test error on invalid CTE SQL."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_with_cte('bad_cte', [('bad_cte', 'SELECT * FROM nonexistent_table', [])], select_columns=['id'])
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
     @test
     async def test_invalid_main_table(self, test_tables):
         """Test error when main table doesn't exist and no CTE matches."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_with_cte('nonexistent_table', [('some_cte', 'SELECT * FROM orders', [])], select_columns=['id'])
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
     @test
     async def test_cte_with_invalid_column(self, test_tables):
         """Test error when selecting non-existent column from CTE."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_with_cte('orders_cte', [('orders_cte', 'SELECT user_id, amount FROM orders', [])], select_columns=['nonexistent_column'])
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
     @test
     async def test_cte_parameter_mismatch(self, test_tables):
         """Test error when CTE parameters don't match placeholders."""
-        with pytest.raises(Exception):
+        raised = False
+        try:
             await query_with_cte('orders_cte', [('orders_cte', 'SELECT * FROM orders WHERE status = $1 AND amount > $2', ['completed'])], select_columns=['id'])
+        except Exception:
+            raised = True
+        expect(raised).to_be_true()
 
 class TestCTEPerformance(PostgresSuite):
     """Test CTE performance characteristics."""

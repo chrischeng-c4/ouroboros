@@ -440,14 +440,29 @@ class TestSuite:
         self._discover_hooks()
 
     def _discover_fixtures(self) -> None:
-        """Discover all @fixture decorated methods in this suite and module."""
+        """Discover all @fixture decorated methods in this suite, module, and parent modules."""
         self._fixture_runner = FixtureRunner(self, self._fixture_registry)
 
-        # 1. Discover module-level fixtures (pytest-compatible)
         import sys
+
+        # Collect all modules to check (current + all parent class modules)
+        modules_to_check = set()
+
+        # Current class module
         module_name = self.__class__.__module__
         if module_name in sys.modules:
-            module = sys.modules[module_name]
+            modules_to_check.add(sys.modules[module_name])
+
+        # Parent class modules (for inherited fixtures)
+        for base_class in self.__class__.__mro__:
+            if base_class is object:
+                continue
+            base_module_name = base_class.__module__
+            if base_module_name in sys.modules:
+                modules_to_check.add(sys.modules[base_module_name])
+
+        # 1. Discover module-level fixtures from all relevant modules
+        for module in modules_to_check:
             for name in dir(module):
                 attr = getattr(module, name, None)
                 if attr is None:

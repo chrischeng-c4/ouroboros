@@ -59,6 +59,8 @@ pub struct QueryBuilder {
     pub(crate) deferred_columns: Vec<String>,
     /// If set, only these columns are selected (overrides select_columns)
     pub(crate) only_columns: Option<Vec<String>>,
+    /// If true, select_columns are raw SQL expressions (no quoting applied)
+    pub(crate) raw_select: bool,
 }
 
 impl QueryBuilder {
@@ -92,6 +94,7 @@ impl QueryBuilder {
             returning: Vec::new(),
             deferred_columns: Vec::new(),
             only_columns: None,
+            raw_select: false,
         })
     }
 

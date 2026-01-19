@@ -7,8 +7,8 @@ use super::conversion::extracted_to_py_value;
 
 /// Wrapper for Row to implement IntoPyObject
 #[derive(Debug, Clone)]
-pub(super) struct RowWrapper {
-    pub(super) columns: Vec<(String, ouroboros_postgres::ExtractedValue)>,
+pub(crate) struct RowWrapper {
+    pub(crate) columns: Vec<(String, ouroboros_postgres::ExtractedValue)>,
 }
 
 impl<'py> IntoPyObject<'py> for RowWrapper {
@@ -27,7 +27,7 @@ impl<'py> IntoPyObject<'py> for RowWrapper {
 }
 
 impl RowWrapper {
-    pub(super) fn from_row(row: &Row) -> PyResult<Self> {
+    pub(crate) fn from_row(row: &Row) -> PyResult<Self> {
         let mut columns = Vec::new();
         for column in row.columns() {
             if let Ok(value) = row.get(column) {
@@ -40,7 +40,7 @@ impl RowWrapper {
 
 /// Wrapper for optional Row
 #[derive(Debug, Clone)]
-pub(super) struct OptionalRowWrapper(pub(super) Option<RowWrapper>);
+pub(crate) struct OptionalRowWrapper(pub(crate) Option<RowWrapper>);
 
 impl<'py> IntoPyObject<'py> for OptionalRowWrapper {
     type Target = PyAny;
@@ -60,7 +60,7 @@ impl<'py> IntoPyObject<'py> for OptionalRowWrapper {
 
 /// Wrapper for multiple rows
 #[derive(Debug, Clone)]
-pub(super) struct RowsWrapper(pub(super) Vec<RowWrapper>);
+pub(crate) struct RowsWrapper(pub(crate) Vec<RowWrapper>);
 
 impl<'py> IntoPyObject<'py> for RowsWrapper {
     type Target = PyList;

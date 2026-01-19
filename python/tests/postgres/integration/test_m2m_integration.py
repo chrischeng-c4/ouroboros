@@ -10,7 +10,7 @@ except ImportError:
     _engine = None
 
 @fixture
-async def m2m_tables(request):
+async def m2m_tables():
     """Create posts and tags tables with a join table for M2M testing."""
     from ouroboros.postgres import execute, insert_one
     await execute('\n        CREATE TABLE IF NOT EXISTS posts (\n            id SERIAL PRIMARY KEY,\n            title VARCHAR(255) NOT NULL,\n            content TEXT\n        )\n    ')
@@ -35,7 +35,7 @@ class TestM2MAddRelation(TestSuite):
     async def test_add_single_relation(self, m2m_tables):
         """Test adding a single M2M relation."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -46,7 +46,7 @@ class TestM2MAddRelation(TestSuite):
     async def test_add_multiple_relations(self, m2m_tables):
         """Test adding multiple M2M relations."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids'][:3]
         for tag_id in tag_ids:
@@ -58,7 +58,7 @@ class TestM2MAddRelation(TestSuite):
     async def test_add_duplicate_relation_idempotent(self, m2m_tables):
         """Test that adding duplicate relation is idempotent."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -73,7 +73,7 @@ class TestM2MRemoveRelation(TestSuite):
     async def test_remove_single_relation(self, m2m_tables):
         """Test removing a single M2M relation."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -86,7 +86,7 @@ class TestM2MRemoveRelation(TestSuite):
     async def test_remove_nonexistent_relation(self, m2m_tables):
         """Test removing a nonexistent relation returns 0."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         affected = await _engine.m2m_remove_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -99,7 +99,7 @@ class TestM2MClearRelations(TestSuite):
     async def test_clear_all_relations(self, m2m_tables):
         """Test clearing all relations for a source."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids']
         for tag_id in tag_ids:
@@ -116,7 +116,7 @@ class TestM2MFetchRelated(TestSuite):
     async def test_fetch_all_related(self, m2m_tables):
         """Test fetching all related records."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids'][:2]
         for tag_id in tag_ids:
@@ -131,7 +131,7 @@ class TestM2MFetchRelated(TestSuite):
     async def test_fetch_with_select_columns(self, m2m_tables):
         """Test fetching with specific columns."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -143,7 +143,7 @@ class TestM2MFetchRelated(TestSuite):
     async def test_fetch_with_order_by(self, m2m_tables):
         """Test fetching with ordering."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids']
         for tag_id in tag_ids:
@@ -156,7 +156,7 @@ class TestM2MFetchRelated(TestSuite):
     async def test_fetch_with_limit(self, m2m_tables):
         """Test fetching with limit."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids']
         for tag_id in tag_ids:
@@ -171,7 +171,7 @@ class TestM2MSetRelations(TestSuite):
     async def test_set_replaces_existing(self, m2m_tables):
         """Test that set replaces all existing relations."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         old_tags = m2m_tables['tag_ids'][:2]
         new_tags = m2m_tables['tag_ids'][2:]
@@ -189,7 +189,7 @@ class TestM2MSetRelations(TestSuite):
     async def test_set_empty_clears_all(self, m2m_tables):
         """Test that setting empty list clears all relations."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids']
         for tag_id in tag_ids:
@@ -205,7 +205,7 @@ class TestM2MCreateJoinTable(TestSuite):
     async def test_create_join_table(self):
         """Test creating a join table automatically."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         from ouroboros.postgres import execute
         await execute('\n            CREATE TABLE IF NOT EXISTS users_test (\n                id SERIAL PRIMARY KEY,\n                name VARCHAR(100)\n            )\n        ')
         await execute('\n            CREATE TABLE IF NOT EXISTS groups_test (\n                id SERIAL PRIMARY KEY,\n                name VARCHAR(100)\n            )\n        ')
@@ -223,7 +223,7 @@ class TestM2MCountRelated(TestSuite):
     async def test_count_zero_relations(self, m2m_tables):
         """Test counting when there are no relations."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         count = await _engine.m2m_count_related('post_tags', 'post_id', 'tag_id', 'tags', post_id, 'id', 'id')
         expect(count).to_equal(0)
@@ -232,7 +232,7 @@ class TestM2MCountRelated(TestSuite):
     async def test_count_multiple_relations(self, m2m_tables):
         """Test counting multiple relations."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_ids = m2m_tables['tag_ids']
         for tag_id in tag_ids:
@@ -247,7 +247,7 @@ class TestM2MHasRelation(TestSuite):
     async def test_has_existing_relation(self, m2m_tables):
         """Test checking for existing relation."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -258,7 +258,7 @@ class TestM2MHasRelation(TestSuite):
     async def test_has_nonexistent_relation(self, m2m_tables):
         """Test checking for nonexistent relation."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         exists = await _engine.m2m_has_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')
@@ -271,7 +271,7 @@ class TestM2MBidirectional(TestSuite):
     async def test_bidirectional_relations(self, m2m_tables):
         """Test that relations work in both directions."""
         if _engine is None:
-            pytest.skip('Rust engine not available')
+            return  # Skip: Rust engine not available
         post_id = m2m_tables['post_ids'][0]
         tag_id = m2m_tables['tag_ids'][0]
         await _engine.m2m_add_relation('post_tags', 'post_id', 'tag_id', 'tags', post_id, tag_id, 'id', 'id')

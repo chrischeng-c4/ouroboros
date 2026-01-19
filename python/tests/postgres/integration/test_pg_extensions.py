@@ -189,46 +189,55 @@ class TestPgExtensions(PostgresSuite):
         expect(result).to_equal('ARRAY[]')
 
     @test
-    async def test_raiseload_raises_on_access(self, postgres_connection):
+    async def test_raiseload_raises_on_access(self):
         """Test that raiseload raises error when relationship is accessed."""
         await Author.create_table()
         await Book.create_table()
-        author = await Author.insert(name='Test Author')
-        book = await Book.insert(title='Test Book', author_id=author.id)
-        books = await Book.find().options(raiseload('author')).to_list()
-        expect(len(books)).to_equal(1)
         try:
-            await books[0].author
-            raise AssertionError('Expected RuntimeError')
-        except RuntimeError as e:
-            expect("Attempted to access unloaded relationship 'author'").to_be_in(str(e))
-            expect('Use selectinload()').to_be_in(str(e))
-        await Book.drop_table()
-        await Author.drop_table()
+            author = await Author.insert(name='Test Author')
+            book = await Book.insert(title='Test Book', author_id=author.id)
+            books = await Book.find().options(raiseload('author')).to_list()
+            expect(len(books)).to_equal(1)
+            try:
+                await books[0].author
+                raise AssertionError('Expected RuntimeError')
+            except RuntimeError as e:
+                expect("Attempted to access unloaded relationship 'author'").to_be_in(str(e))
+                expect('Use selectinload()').to_be_in(str(e))
+        finally:
+            await Book.drop_table()
+            await Author.drop_table()
 
     @test
-    async def test_raiseload_with_selectinload_works(self, postgres_connection):
+    async def test_raiseload_with_selectinload_works(self):
         """Test that selectinload prevents raiseload error."""
         await Author.create_table()
         await Book.create_table()
-        author = await Author.insert(name='Test Author')
-        book = await Book.insert(title='Test Book', author_id=author.id)
-        books = await Book.find().options(selectinload('author')).to_list()
-        expect(len(books)).to_equal(1)
-        loaded_author = await books[0].author
-        expect(loaded_author).to_not_be_none()
-        expect(loaded_author.name).to_equal('Test Author')
-        await Book.drop_table()
-        await Author.drop_table()
+        try:
+            author = await Author.insert(name='Test Author')
+            book = await Book.insert(title='Test Book', author_id=author.id)
+            books = await Book.find().options(selectinload('author')).to_list()
+            expect(len(books)).to_equal(1)
+            loaded_author = await books[0].author
+            expect(loaded_author).to_not_be_none()
+            expect(loaded_author.name).to_equal('Test Author')
+        finally:
+            await Book.drop_table()
+            await Author.drop_table()
 
     @test
     async def test_raiseload_invalid_relationship(self):
         """Test raiseload with invalid relationship name."""
+        await Author.create_table()
+        await Book.create_table()
         try:
             books = await Book.find().options(raiseload('invalid_rel')).to_list()
             raise AssertionError('Expected ValueError')
         except ValueError as e:
             expect('Unknown relationship: invalid_rel').to_be_in(str(e))
+        finally:
+            await Book.drop_table()
+            await Author.drop_table()
 
 class Article(Table):
     id: int = Column(primary_key=True)
