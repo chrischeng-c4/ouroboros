@@ -93,9 +93,14 @@ async def test_minlen_validation_failure(setup_db):
     """Test that MinLen validation rejects strings that are too short."""
     user = UserWithStringConstraints(name="Al", email="al@example.com")  # Only 2 chars
 
-    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await user.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "MinLen validation should raise ValueError"
     assert "ValidationError" in error_msg
     assert "name" in error_msg
     assert "too short" in error_msg.lower() or "min" in error_msg.lower()
@@ -123,9 +128,14 @@ async def test_maxlen_validation_failure(setup_db):
         email="test@example.com"
     )
 
-    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await user.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "MaxLen validation should raise ValueError"
     assert "ValidationError" in error_msg
     assert "name" in error_msg
     assert "too long" in error_msg.lower() or "max" in error_msg.lower()
@@ -165,9 +175,14 @@ async def test_email_validation_failure(setup_db):
     for email in invalid_emails:
         user = UserWithEmailConstraint(name="Test User", email=email)
 
-        exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-        error_msg = str(exc_info.value)
+        exception_raised = False
+        error_msg = ""
+        try:
+            await user.save()
+        except ValueError as e:
+            exception_raised = True
+            error_msg = str(e)
+        assert exception_raised, f"Email validation should raise ValueError for {email}"
         assert "ValidationError" in error_msg
         assert "email" in error_msg
         assert "invalid" in error_msg.lower() or "format" in error_msg.lower()
@@ -206,9 +221,14 @@ async def test_url_validation_failure(setup_db):
     for url in invalid_urls:
         user = UserWithUrlConstraint(name="Test User", website=url)
 
-        exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-        error_msg = str(exc_info.value)
+        exception_raised = False
+        error_msg = ""
+        try:
+            await user.save()
+        except ValueError as e:
+            exception_raised = True
+            error_msg = str(e)
+        assert exception_raised, f"URL validation should raise ValueError for {url}"
         assert "ValidationError" in error_msg
         assert "website" in error_msg
         assert "invalid" in error_msg.lower() or "format" in error_msg.lower()
@@ -239,9 +259,14 @@ async def test_min_validation_failure_float(setup_db):
         quantity=10
     )
 
-    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await product.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Min validation should raise ValueError for float below minimum"
     assert "ValidationError" in error_msg
     assert "price" in error_msg
     assert "below" in error_msg.lower() or "min" in error_msg.lower()
@@ -256,9 +281,14 @@ async def test_min_validation_failure_int(setup_db):
         quantity=-1  # Below minimum (0)
     )
 
-    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await product.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Min validation should raise ValueError for int below minimum"
     assert "ValidationError" in error_msg
     assert "quantity" in error_msg
     assert "below" in error_msg.lower() or "min" in error_msg.lower()
@@ -288,9 +318,14 @@ async def test_max_validation_failure_float(setup_db):
         quantity=100
     )
 
-    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await product.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Max validation should raise ValueError for float above maximum"
     assert "ValidationError" in error_msg
     assert "price" in error_msg
     assert "above" in error_msg.lower() or "max" in error_msg.lower()
@@ -305,9 +340,14 @@ async def test_max_validation_failure_int(setup_db):
         quantity=1000001  # Above maximum (1000000)
     )
 
-    exc_info = expect(lambda: await product.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await product.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Max validation should raise ValueError for int above maximum"
     assert "ValidationError" in error_msg
     assert "quantity" in error_msg
     assert "above" in error_msg.lower() or "max" in error_msg.lower()
@@ -345,9 +385,14 @@ async def test_error_message_includes_field_name(setup_db):
     """Test that validation errors include the field name."""
     user = UserWithStringConstraints(name="AB", email="test@example.com")
 
-    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await user.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Validation should raise ValueError"
     assert "name" in error_msg  # Field name should be in error message
 
 
@@ -356,9 +401,14 @@ async def test_error_message_includes_constraint_details(setup_db):
     """Test that validation errors include constraint details."""
     user = UserWithStringConstraints(name="AB", email="test@example.com")
 
-    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await user.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Validation should raise ValueError"
     # Should mention the minimum length (3)
     assert "3" in error_msg or "min" in error_msg.lower()
 
@@ -368,8 +418,13 @@ async def test_error_message_from_rust(setup_db):
     """Test that validation errors originate from Rust (not Python)."""
     user = UserWithEmailConstraint(name="Test", email="invalid")
 
-    exc_info = expect(lambda: await user.save()).to_raise(ValueError)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await user.save()
+    except ValueError as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Validation should raise ValueError"
     # Rust error messages start with "ValidationError:"
     assert "ValidationError" in error_msg

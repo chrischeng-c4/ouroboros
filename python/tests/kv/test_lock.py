@@ -131,7 +131,12 @@ class TestLockRelease:
         await kv_client.lock("lock:resource:1", "owner1", ttl=10.0)
 
         # Try to release with different owner (should raise error)
-        expect(lambda: await kv_client.unlock("lock:resource:1", "owner2")).to_raise(RuntimeError)
+        exception_raised = False
+        try:
+            await kv_client.unlock("lock:resource:1", "owner2")
+        except RuntimeError:
+            exception_raised = True
+        assert exception_raised, "unlock with different owner should raise RuntimeError"
 
         # Verify lock still held
         exists = await kv_client.exists("lock:resource:1")
@@ -165,7 +170,12 @@ class TestLockExtend:
         await kv_client.lock("lock:resource:2", "owner1", ttl=10.0)
 
         # Try to extend with different owner (should raise error)
-        expect(lambda: await kv_client.extend_lock("lock:resource:2", "owner2", ttl=10.0)).to_raise(RuntimeError)
+        exception_raised = False
+        try:
+            await kv_client.extend_lock("lock:resource:2", "owner2", ttl=10.0)
+        except RuntimeError:
+            exception_raised = True
+        assert exception_raised, "extend_lock with different owner should raise RuntimeError"
 
     @pytest.mark.asyncio
     async def test_extend_lock_actually_extends_ttl(self, kv_client: KvClient):

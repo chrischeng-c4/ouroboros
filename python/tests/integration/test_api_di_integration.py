@@ -304,7 +304,12 @@ class TestDependencyErrors:
         app.compile()
 
         ctx = RequestContext()
-        expect(lambda: await app.resolve_dependencies(handler, ctx)).to_raise(ValueError)
+        exception_raised = False
+        try:
+            await app.resolve_dependencies(handler, ctx)
+        except ValueError:
+            exception_raised = True
+        assert exception_raised, "Dependency exception should propagate as ValueError"
 
     @pytest.mark.asyncio
     async def test_sub_dependency_exception(self):
@@ -324,7 +329,12 @@ class TestDependencyErrors:
         app.compile()
 
         ctx = RequestContext()
-        expect(lambda: await app.resolve_dependencies(handler, ctx)).to_raise(RuntimeError)
+        exception_raised = False
+        try:
+            await app.resolve_dependencies(handler, ctx)
+        except RuntimeError:
+            exception_raised = True
+        assert exception_raised, "Sub-dependency exception should propagate as RuntimeError"
 
     def test_missing_dependency_error(self):
         """Test error when dependency is not registered."""
