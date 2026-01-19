@@ -63,18 +63,23 @@ def ensure_setup():
     Ensure MongoDB is initialized (synchronous wrapper).
 
     This is called automatically when benchmarks are imported.
+    When running in an async context, this is a no-op since the CLI
+    will call ensure_mongodb_initialized() before loading benchmarks.
     """
     global _setup_complete
 
-    if not _setup_complete:
-        # Run async setup in a new event loop if needed
-        try:
-            loop = asyncio.get_running_loop()
-            # If we're in an async context, schedule setup
-            # Note: This won't block, setup will happen before benchmarks run
-        except RuntimeError:
-            # No event loop running, create one
-            asyncio.run(_async_setup())
+    if _setup_complete:
+        return
+
+    # Check if we're in an async context
+    try:
+        asyncio.get_running_loop()
+        # If we're in an async context, skip sync setup.
+        # The CLI handles async initialization before loading benchmarks.
+        return
+    except RuntimeError:
+        # No event loop running, create one and run setup
+        asyncio.run(_async_setup())
 
 
 async def async_ensure_setup():

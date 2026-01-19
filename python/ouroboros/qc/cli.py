@@ -258,6 +258,10 @@ async def run_benchmarks_only(cli_config: CLIConfig) -> int:
 
     print(f"✅ Found {len(bench_files)} benchmark file(s)")
 
+    # Ensure MongoDB is initialized BEFORE loading benchmark files
+    # This is critical because benchmark files may import modules that require MongoDB
+    await ensure_mongodb_initialized(cli_config.verbose)
+
     # Load benchmark groups
     all_groups = []
     for file_info in bench_files:
@@ -281,9 +285,6 @@ async def run_benchmarks_only(cli_config: CLIConfig) -> int:
     if not all_groups:
         print("❌ No benchmark groups found")
         return 1
-
-    # Ensure MongoDB is initialized
-    await ensure_mongodb_initialized(cli_config.verbose)
 
     # Run all benchmarks
     print(f"\n🏃 Running {len(all_groups)} benchmark group(s)...")
