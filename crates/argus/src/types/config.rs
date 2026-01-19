@@ -2,9 +2,31 @@
 //!
 //! Reads configuration from pyproject.toml [tool.argus] section
 //! and supports per-directory overrides.
+//!
+//! ## Python Environment Configuration
+//!
+//! The `[tool.argus.python]` section supports:
+//! - `search_paths`: Additional directories to search for modules
+//! - `venv_path`: Path to the virtual environment to use
+//! - `ignore_site_packages`: Whether to ignore site-packages
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+/// Python environment configuration for module resolution
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(default)]
+pub struct PythonEnvConfig {
+    /// Additional directories to search for modules
+    pub search_paths: Vec<PathBuf>,
+
+    /// Path to the virtual environment to use (overrides auto-detection)
+    pub venv_path: Option<PathBuf>,
+
+    /// Whether to ignore site-packages (default: false)
+    #[serde(default)]
+    pub ignore_site_packages: bool,
+}
 
 /// Configuration for Argus type checker
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -12,6 +34,10 @@ use std::path::{Path, PathBuf};
 pub struct ArgusConfig {
     /// Python version to check against (e.g., "3.10")
     pub python_version: Option<String>,
+
+    /// Python environment configuration for module resolution
+    #[serde(default)]
+    pub python: PythonEnvConfig,
 
     /// Enable strict mode (like mypy --strict)
     pub strict: bool,
@@ -362,5 +388,54 @@ check_untyped_defs = false
         assert_eq!(config.exclude.len(), 2);
         assert_eq!(config.overrides.len(), 1);
         assert_eq!(config.overrides[0].pattern, "tests/**/*.py");
+    }
+
+    #[test]
+    fn test_python_env_config_default() {
+        let config = PythonEnvConfig::default();
+        assert!(config.search_paths.is_empty());
+        assert!(config.venv_path.is_none());
+        assert!(!config.ignore_site_packages);
+    }
+
+    #[test]
+    fn test_parse_python_env_config() {
+        let toml_content = r#"
+[tool.argus]
+python_version = "3.11"
+
+[tool.argus.python]
+search_paths = ["./lib", "./src"]
+venv_path = "./custom_env"
+ignore_site_packages = true
+"#;
+
+        let pyproject: PyProject = toml::from_str(toml_content).unwrap();
+        let config = pyproject.tool.unwrap().argus.unwrap();
+
+        assert_eq!(config.python_version, Some("3.11".to_string()));
+        assert_eq!(config.python.search_paths.len(), 2);
+        assert_eq!(config.python.search_paths[0], PathBuf::from("./lib"));
+        assert_eq!(config.python.search_paths[1], PathBuf::from("./src"));
+        assert_eq!(config.python.venv_path, Some(PathBuf::from("./custom_env")));
+        assert!(config.python.ignore_site_packages);
+    }
+
+    #[test]
+    fn test_parse_python_env_config_partial() {
+        let toml_content = r#"
+[tool.argus]
+python_version = "3.10"
+
+[tool.argus.python]
+venv_path = ".venv"
+"#;
+
+        let pyproject: PyProject = toml::from_str(toml_content).unwrap();
+        let config = pyproject.tool.unwrap().argus.unwrap();
+
+        assert!(config.python.search_paths.is_empty());
+        assert_eq!(config.python.venv_path, Some(PathBuf::from(".venv")));
+        assert!(!config.python.ignore_site_packages);
     }
 }
