@@ -30,6 +30,12 @@ anyhow.workspace = true
 jwalk.workspace = true
 tracing.workspace = true
 
+# HTTP client for typeshed downloads
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+# File system watching
+notify = "7"
+
 # Parallel processing
 rayon.workspace = true
 
@@ -46,3 +52,8 @@ async-trait = "0.1"
 
 [dev-dependencies]
 tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "daemon_bench"
+harness = false

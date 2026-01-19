@@ -166,6 +166,27 @@ enum ArgusAction {
         #[arg(short, long)]
         port: Option<u16>,
     },
+
+    /// Start daemon server for fast code analysis
+    Server {
+        /// Root directory to analyze (default: current directory)
+        #[arg(default_value = ".")]
+        root: String,
+
+        /// Custom Unix socket path (default: /tmp/argus-<hash>.sock)
+        #[arg(long)]
+        socket: Option<String>,
+
+        /// Disable file watching
+        #[arg(long)]
+        no_watch: bool,
+    },
+
+    /// Print MCP configuration for Claude Desktop
+    Mcp,
+
+    /// Start MCP server (stdio mode, for AI integration)
+    McpServer,
 }
 
 fn main() -> Result<()> {
@@ -219,6 +240,15 @@ fn main() -> Result<()> {
             }
             ArgusAction::Serve { port } => {
                 run_argus_lsp(port)?;
+            }
+            ArgusAction::Server { root, socket, no_watch } => {
+                run_argus_server(&root, socket, no_watch)?;
+            }
+            ArgusAction::Mcp => {
+                print_mcp_config();
+            }
+            ArgusAction::McpServer => {
+                run_mcp_server()?;
             }
         },
     }
@@ -862,7 +892,73 @@ fn run_argus_check(
     output: Option<String>,
 ) -> Result<i32> {
     use argus::{check_paths, Language, LintConfig, OutputFormat, Reporter};
+    use argus::server::DaemonClient;
 
+    // Try daemon first for faster results
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let client = DaemonClient::for_workspace(&cwd);
+
+    // Create tokio runtime for async client operations
+    let rt = tokio::runtime::Runtime::new()
+        .context("Failed to create tokio runtime")?;
+
+    // Check if daemon is running and try to use it
+    let daemon_result = rt.block_on(async {
+        if !client.is_daemon_running().await {
+            return None;
+        }
+
+        // Use daemon for check
+        for path in paths {
+            match client.check(path).await {
+                Ok(result) => {
+                    // Print diagnostics from daemon
+                    if let Some(check_result) = result.as_object() {
+                        if let Some(diagnostics) = check_result.get("diagnostics").and_then(|d| d.as_array()) {
+                            for diag in diagnostics {
+                                if let Some(obj) = diag.as_object() {
+                                    let file = obj.get("file").and_then(|f| f.as_str()).unwrap_or("");
+                                    let line = obj.get("line").and_then(|l| l.as_u64()).unwrap_or(0);
+                                    let col = obj.get("column").and_then(|c| c.as_u64()).unwrap_or(0);
+                                    let severity = obj.get("severity").and_then(|s| s.as_str()).unwrap_or("error");
+                                    let code = obj.get("code").and_then(|c| c.as_str()).unwrap_or("");
+                                    let message = obj.get("message").and_then(|m| m.as_str()).unwrap_or("");
+
+                                    let emoji = match severity {
+                                        "error" => "❌",
+                                        "warning" => "⚠️",
+                                        _ => "ℹ️",
+                                    };
+
+                                    eprintln!("{} {}:{}:{}: [{}] {}", emoji, file, line, col, code, message);
+                                }
+                            }
+                        }
+
+                        let errors = check_result.get("errors").and_then(|e| e.as_u64()).unwrap_or(0);
+                        let warnings = check_result.get("warnings").and_then(|w| w.as_u64()).unwrap_or(0);
+
+                        if errors > 0 {
+                            return Some(1i32);
+                        }
+                        if warnings > 0 {
+                            return Some(0);
+                        }
+                        return Some(0);
+                    }
+                }
+                Err(_) => return None,
+            }
+        }
+        Some(0)
+    });
+
+    // If daemon succeeded, return its result
+    if let Some(exit_code) = daemon_result {
+        return Ok(exit_code);
+    }
+
+    // Fallback to direct analysis
     // Parse languages
     let languages = if let Some(lang_str) = lang {
         lang_str
@@ -919,6 +1015,64 @@ fn run_argus_check(
     }
 
     Ok(0)
+}
+
+/// Print MCP configuration for Claude Desktop
+fn print_mcp_config() {
+    argus::mcp::server::print_mcp_config();
+}
+
+/// Run MCP server (stdio mode)
+fn run_mcp_server() -> Result<()> {
+    use argus::mcp::McpServer;
+
+    let cwd = std::env::current_dir()
+        .context("Failed to get current directory")?;
+
+    let server = McpServer::new(cwd);
+
+    // Create tokio runtime
+    let rt = tokio::runtime::Runtime::new()
+        .context("Failed to create tokio runtime")?;
+
+    rt.block_on(async {
+        server.run_async().await
+            .map_err(|e| anyhow::anyhow!("MCP server error: {}", e))
+    })
+}
+
+/// Run Argus daemon server
+fn run_argus_server(root: &str, socket: Option<String>, no_watch: bool) -> Result<()> {
+    use argus::server::{ArgusDaemon, DaemonConfig};
+
+    let root_path = std::path::PathBuf::from(root)
+        .canonicalize()
+        .context("Failed to resolve root path")?;
+
+    let mut config = DaemonConfig::new(root_path.clone());
+
+    if let Some(socket_path) = socket {
+        config = config.with_socket(std::path::PathBuf::from(socket_path));
+    }
+
+    config = config.with_watch(!no_watch);
+
+    eprintln!("🚀 Starting Argus daemon server");
+    eprintln!("   Root: {}", root_path.display());
+    eprintln!("   Socket: {:?}", config.socket_path);
+    eprintln!("   Watch: {}", if no_watch { "disabled" } else { "enabled" });
+
+    let daemon = ArgusDaemon::new(config)
+        .map_err(|e| anyhow::anyhow!("Failed to create daemon: {}", e))?;
+
+    // Create tokio runtime
+    let rt = tokio::runtime::Runtime::new()
+        .context("Failed to create tokio runtime")?;
+
+    rt.block_on(async {
+        daemon.run().await
+            .map_err(|e| anyhow::anyhow!("Daemon error: {}", e))
+    })
 }
 
 /// Run Argus LSP server

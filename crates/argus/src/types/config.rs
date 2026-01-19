@@ -2,9 +2,31 @@
 //!
 //! Reads configuration from pyproject.toml [tool.argus] section
 //! and supports per-directory overrides.
+//!
+//! ## Python Environment Configuration
+//!
+//! The `[tool.argus.python]` section supports:
+//! - `search_paths`: Additional directories to search for modules
+//! - `venv_path`: Path to the virtual environment to use
+//! - `ignore_site_packages`: Whether to ignore site-packages
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+
+/// Python environment configuration for module resolution
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+#[serde(default)]
+pub struct PythonEnvConfig {
+    /// Additional directories to search for modules
+    pub search_paths: Vec<PathBuf>,
+
+    /// Path to the virtual environment to use (overrides auto-detection)
+    pub venv_path: Option<PathBuf>,
+
+    /// Whether to ignore site-packages (default: false)
+    #[serde(default)]
+    pub ignore_site_packages: bool,
+}
 
 /// Configuration for Argus type checker
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -12,6 +34,10 @@ use std::path::{Path, PathBuf};
 pub struct ArgusConfig {
     /// Python version to check against (e.g., "3.10")
     pub python_version: Option<String>,
+
+    /// Python environment configuration for module resolution
+    #[serde(default)]
+    pub python: PythonEnvConfig,
 
     /// Enable strict mode (like mypy --strict)
     pub strict: bool,
@@ -52,6 +78,37 @@ pub struct ArgusConfig {
 
     /// Plugins to enable
     pub plugins: Vec<String>,
+
+    // === Typeshed configuration ===
+
+    /// Custom path to a local typeshed copy (takes precedence over downloads)
+    pub typeshed_path: Option<PathBuf>,
+
+    /// Directory to store downloaded typeshed stubs (default: ~/.cache/argus)
+    pub typeshed_cache_dir: Option<PathBuf>,
+
+    /// Disable network requests for typeshed downloads (offline mode)
+    #[serde(default)]
+    pub typeshed_offline: bool,
+
+    /// Cache TTL in days for typeshed stubs (default: 7)
+    #[serde(default = "default_typeshed_ttl")]
+    pub typeshed_ttl_days: u32,
+
+    /// Optional commit hash to pin typeshed version
+    pub typeshed_commit: Option<String>,
+
+    /// Stub precedence order: "local", "typeshed", "bundled" (default: local > typeshed > bundled)
+    #[serde(default = "default_stub_precedence")]
+    pub stub_precedence: Vec<String>,
+}
+
+fn default_typeshed_ttl() -> u32 {
+    7
+}
+
+fn default_stub_precedence() -> Vec<String> {
+    vec!["local".to_string(), "typeshed".to_string(), "bundled".to_string()]
 }
 
 /// Per-directory configuration override
@@ -89,6 +146,24 @@ impl ArgusConfig {
     /// Create a new config with defaults
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Get the Python version for stub resolution (defaults to "3.11")
+    pub fn python_version_or_default(&self) -> String {
+        self.python_version.clone().unwrap_or_else(|| "3.11".to_string())
+    }
+
+    /// Get the typeshed cache directory (defaults to ~/.cache/argus)
+    pub fn typeshed_cache_dir_or_default(&self) -> PathBuf {
+        self.typeshed_cache_dir.clone().unwrap_or_else(|| {
+            if let Ok(home) = std::env::var("HOME") {
+                PathBuf::from(home).join(".cache").join("argus")
+            } else if let Ok(cache) = std::env::var("XDG_CACHE_HOME") {
+                PathBuf::from(cache).join("argus")
+            } else {
+                PathBuf::from(".argus-cache")
+            }
+        })
     }
 
     /// Create a strict configuration
@@ -313,5 +388,54 @@ check_untyped_defs = false
         assert_eq!(config.exclude.len(), 2);
         assert_eq!(config.overrides.len(), 1);
         assert_eq!(config.overrides[0].pattern, "tests/**/*.py");
+    }
+
+    #[test]
+    fn test_python_env_config_default() {
+        let config = PythonEnvConfig::default();
+        assert!(config.search_paths.is_empty());
+        assert!(config.venv_path.is_none());
+        assert!(!config.ignore_site_packages);
+    }
+
+    #[test]
+    fn test_parse_python_env_config() {
+        let toml_content = r#"
+[tool.argus]
+python_version = "3.11"
+
+[tool.argus.python]
+search_paths = ["./lib", "./src"]
+venv_path = "./custom_env"
+ignore_site_packages = true
+"#;
+
+        let pyproject: PyProject = toml::from_str(toml_content).unwrap();
+        let config = pyproject.tool.unwrap().argus.unwrap();
+
+        assert_eq!(config.python_version, Some("3.11".to_string()));
+        assert_eq!(config.python.search_paths.len(), 2);
+        assert_eq!(config.python.search_paths[0], PathBuf::from("./lib"));
+        assert_eq!(config.python.search_paths[1], PathBuf::from("./src"));
+        assert_eq!(config.python.venv_path, Some(PathBuf::from("./custom_env")));
+        assert!(config.python.ignore_site_packages);
+    }
+
+    #[test]
+    fn test_parse_python_env_config_partial() {
+        let toml_content = r#"
+[tool.argus]
+python_version = "3.10"
+
+[tool.argus.python]
+venv_path = ".venv"
+"#;
+
+        let pyproject: PyProject = toml::from_str(toml_content).unwrap();
+        let config = pyproject.tool.unwrap().argus.unwrap();
+
+        assert!(config.python.search_paths.is_empty());
+        assert_eq!(config.python.venv_path, Some(PathBuf::from(".venv")));
+        assert!(!config.python.ignore_site_packages);
     }
 }

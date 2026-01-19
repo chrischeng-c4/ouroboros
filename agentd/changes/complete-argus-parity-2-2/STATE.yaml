@@ -1,0 +1,210 @@
+change_id: complete-argus-parity-2-2
+schema_version: '2.0'
+created_at: 2026-01-19T04:31:17.995583Z
+updated_at: 2026-01-19T04:58:11.083225Z
+phase: proposed
+iteration: 1
+last_action: validate-challenge
+checksums:
+  CHALLENGE.md:
+    hash: sha256:952dd97e11e8920333cc2b2c0df12eaec00fbe7ae7cb089cf6132127bcc54f5c
+    validated_at: 2026-01-19T04:58:11.083224Z
+validations:
+- step: validate-proposal
+  timestamp: 2026-01-19T04:31:17.995647Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 42
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: LLM Type Inquiry'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Project-wide Symbol Search'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Error Handling'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/mcp-server.md] Missing **WHEN** clause in scenarios'
+  - '[specs/mcp-server.md] Missing **THEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: First-time Package Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Offline Mode'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Version Update'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/dynamic-typeshed.md] Missing **WHEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Missing **THEN** clause in scenarios'
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Live Diagnostic Updates'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Mass File Change (Git)'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: New File Discovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/watch-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/watch-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Generic List Instantiation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: TypeGuard Narrowing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Exhaustive Match'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/core-type-system.md] Missing **WHEN** clause in scenarios'
+  - '[specs/core-type-system.md] Missing **THEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Rapid Incremental Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Concurrent Client Access'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Configuration Hot-Reload'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/daemon-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Typing inside a Function'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Unclosed Parentheses'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Indentation Error'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/error-recovery.md] Missing **WHEN** clause in scenarios'
+  - '[specs/error-recovery.md] Missing **THEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Renaming a Class'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Finding References of a Method'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Reference Persistence'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/advanced-lsp.md] Missing **WHEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-proposal
+  timestamp: 2026-01-19T04:33:01.664270Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 42
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: LLM Type Inquiry'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Project-wide Symbol Search'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Error Handling'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/mcp-server.md] Missing **WHEN** clause in scenarios'
+  - '[specs/mcp-server.md] Missing **THEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: First-time Package Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Offline Mode'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Version Update'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/dynamic-typeshed.md] Missing **WHEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Missing **THEN** clause in scenarios'
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Live Diagnostic Updates'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Mass File Change (Git)'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: New File Discovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/watch-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/watch-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Generic List Instantiation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: TypeGuard Narrowing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Exhaustive Match'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/core-type-system.md] Missing **WHEN** clause in scenarios'
+  - '[specs/core-type-system.md] Missing **THEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Rapid Incremental Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Concurrent Client Access'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Configuration Hot-Reload'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/daemon-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Typing inside a Function'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Unclosed Parentheses'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Indentation Error'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/error-recovery.md] Missing **WHEN** clause in scenarios'
+  - '[specs/error-recovery.md] Missing **THEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Renaming a Class'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Finding References of a Method'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Reference Persistence'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/advanced-lsp.md] Missing **WHEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-proposal
+  timestamp: 2026-01-19T04:35:00.251649Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 43
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: LLM Type Inquiry'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Project-wide Symbol Search'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Scenario heading ''Scenario: Error Handling'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/mcp-server.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/mcp-server.md] Missing **WHEN** clause in scenarios'
+  - '[specs/mcp-server.md] Missing **THEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: First-time Package Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Offline Mode'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Scenario heading ''Scenario: Version Update'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/dynamic-typeshed.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/dynamic-typeshed.md] Missing **WHEN** clause in scenarios'
+  - '[specs/dynamic-typeshed.md] Missing **THEN** clause in scenarios'
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Live Diagnostic Updates'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: Mass File Change (Git)'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Scenario heading ''Scenario: New File Discovery'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/watch-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/watch-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/watch-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Generic List Instantiation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: TypeGuard Narrowing'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Scenario heading ''Scenario: Exhaustive Match'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/core-type-system.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/core-type-system.md] Missing **WHEN** clause in scenarios'
+  - '[specs/core-type-system.md] Missing **THEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Rapid Incremental Analysis'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Concurrent Client Access'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Scenario heading ''Scenario: Configuration Hot-Reload'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/daemon-mode.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/daemon-mode.md] Missing **WHEN** clause in scenarios'
+  - '[specs/daemon-mode.md] Missing **THEN** clause in scenarios'
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Typing inside a Function'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Unclosed Parentheses'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Scenario heading ''Scenario: Indentation Error'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/error-recovery.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/error-recovery.md] Missing **WHEN** clause in scenarios'
+  - '[specs/error-recovery.md] Missing **THEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Renaming a Class'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Finding References of a Method'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Import Quick Fix'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Scenario heading ''Scenario: Reference Persistence'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/advanced-lsp.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/advanced-lsp.md] Missing **WHEN** clause in scenarios'
+  - '[specs/advanced-lsp.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T04:49:03.851859Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 5
+    medium: 4
+    low: 2
+    verdict: NEEDS_REVISION
+    issues_parsed: 11
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T04:58:11.083124Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 4
+    medium: 3
+    low: 3
+    verdict: NEEDS_REVISION
+    issues_parsed: 10
+  errors: []
+  warnings: []
+telemetry: null

@@ -6,16 +6,22 @@ pub mod core;
 pub mod diagnostic;
 pub mod lint;
 pub mod lsp;
+pub mod mcp;
 pub mod output;
 pub mod semantic;
+pub mod server;
 pub mod syntax;
 pub mod types;
+pub mod watch;
 
 pub use core::{ArgusConfig, LanguageConfig};
 pub use diagnostic::{Diagnostic, DiagnosticCategory, DiagnosticSeverity, Position, Range};
 pub use lint::{Checker, CheckerRegistry};
 pub use output::{OutputFormat, Reporter};
 pub use syntax::{Language, MultiParser, ParsedFile};
+pub use mcp::{McpServer, ArgusTools};
+pub use server::{ArgusDaemon, DaemonClient, DaemonConfig, RequestHandler};
+pub use watch::{FileWatcher, WatchConfig, WatchEvent};
 
 use std::path::Path;
 

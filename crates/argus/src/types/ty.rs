@@ -15,6 +15,38 @@ pub struct ParamSpecId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVarTupleId(pub usize);
 
+/// Variance of a TypeVar for generic types
+///
+/// Variance determines how subtyping works for generic types:
+/// - Invariant: T[A] is only a subtype of T[B] if A == B (e.g., list in Python is invariant)
+/// - Covariant: T[A] is a subtype of T[B] if A is a subtype of B (e.g., Sequence, return types)
+/// - Contravariant: T[A] is a subtype of T[B] if B is a subtype of A (e.g., function params)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Variance {
+    /// Default: A and B must be exactly equal
+    #[default]
+    Invariant,
+    /// T[A] <: T[B] if A <: B (e.g., Iterator[Cat] <: Iterator[Animal])
+    Covariant,
+    /// T[A] <: T[B] if B <: A (e.g., Callable[[Animal], None] <: Callable[[Cat], None])
+    Contravariant,
+}
+
+impl Variance {
+    /// Check if this variance allows subtyping in the given direction
+    ///
+    /// - Covariant: subtype of parameter means subtype of whole type
+    /// - Contravariant: supertype of parameter means subtype of whole type
+    /// - Invariant: exact match required
+    pub fn allows_subtype(&self, is_subtype: bool, is_supertype: bool) -> bool {
+        match self {
+            Variance::Invariant => is_subtype && is_supertype, // Must be equal
+            Variance::Covariant => is_subtype,
+            Variance::Contravariant => is_supertype,
+        }
+    }
+}
+
 /// Parameter kind in function signatures
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
@@ -113,6 +145,8 @@ pub enum Type {
         name: String,
         bound: Option<Box<Type>>,
         constraints: Vec<Type>,
+        /// Variance of this TypeVar (covariant, contravariant, or invariant)
+        variance: Variance,
     },
 
     // === Protocol types ===
@@ -469,24 +503,47 @@ impl Type {
         }
     }
 
-    /// Create a TypeVar
+    /// Create a TypeVar (invariant by default)
     pub fn type_var(id: usize, name: &str) -> Type {
         Type::TypeVar {
             id: TypeVarId(id),
             name: name.to_string(),
             bound: None,
             constraints: vec![],
+            variance: Variance::Invariant,
         }
     }
 
-    /// Create a TypeVar with a bound
+    /// Create a TypeVar with a bound (invariant by default)
     pub fn type_var_bounded(id: usize, name: &str, bound: Type) -> Type {
         Type::TypeVar {
             id: TypeVarId(id),
             name: name.to_string(),
             bound: Some(Box::new(bound)),
             constraints: vec![],
+            variance: Variance::Invariant,
         }
+    }
+
+    /// Create a TypeVar with specific variance
+    pub fn type_var_with_variance(id: usize, name: &str, variance: Variance) -> Type {
+        Type::TypeVar {
+            id: TypeVarId(id),
+            name: name.to_string(),
+            bound: None,
+            constraints: vec![],
+            variance,
+        }
+    }
+
+    /// Create a covariant TypeVar
+    pub fn type_var_covariant(id: usize, name: &str) -> Type {
+        Type::type_var_with_variance(id, name, Variance::Covariant)
+    }
+
+    /// Create a contravariant TypeVar
+    pub fn type_var_contravariant(id: usize, name: &str) -> Type {
+        Type::type_var_with_variance(id, name, Variance::Contravariant)
     }
 
     /// Create a ParamSpec (PEP 612)

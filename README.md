@@ -925,6 +925,50 @@ See [docs/archive/SHEET_README.md](docs/archive/SHEET_README.md) for complete do
 
 ---
 
+## Argus Code Analysis
+
+Argus is a high-performance static analysis engine for Python, built in Rust. It now includes a background daemon and an MCP server for LLM integration.
+
+### Daemon
+
+The Argus Daemon maintains a live, type-aware index of your codebase, providing sub-millisecond response times for queries.
+
+```bash
+# Start the daemon
+ob argus server
+```
+
+### LLM Integration (MCP)
+
+Argus implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io), allowing tools like Claude Desktop to "see" your code with semantic understanding (types, references, definitions).
+
+**Features:**
+- **Deep Type Analysis**: Resolves types across files.
+- **Go to Definition**: Finds where symbols are defined.
+- **Find References**: Locates usages of symbols.
+- **Hover**: Shows documentation and type signatures.
+
+**Setup for Claude Desktop:**
+
+1. Generate the configuration:
+   ```bash
+   ob argus mcp
+   ```
+
+2. Add the output to your Claude Desktop config file.
+
+3. Start the daemon in a separate terminal:
+   ```bash
+   ob argus server
+   ```
+
+To run the MCP server directly (e.g., for direct stdio integration):
+```bash
+ob argus mcp-server
+```
+
+---
+
 ## Architecture
 
 ### Platform Overview
