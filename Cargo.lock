@@ -3288,6 +3288,7 @@ dependencies = [
  "axum 0.8.8",
  "base64 0.22.1",
  "bytes",
+ "flate2",
  "futures-util",
  "hmac",
  "http 1.4.0",

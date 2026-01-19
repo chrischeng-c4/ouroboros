@@ -68,6 +68,9 @@ parking_lot = "0.12"
 hmac = "0.12"
 sha2 = "0.10"
 
+# Compression
+flate2 = "1.0"
+
 # Form data parsing
 multer = { workspace = true }
 urlencoding = { workspace = true }
