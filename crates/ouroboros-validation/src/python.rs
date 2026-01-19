@@ -424,6 +424,9 @@ fn parse_field_descriptor(py_dict: &Bound<'_, PyDict>) -> PyResult<FieldDescript
         required,
         default: default_value,
         description: None,
+        alias: None,
+        validation_alias: None,
+        serialization_alias: None,
     })
 }
 

@@ -89,6 +89,96 @@ pub struct FieldDescriptor {
     pub default: Option<Value>,
     /// Optional description for documentation
     pub description: Option<String>,
+    /// Alias for both validation and serialization
+    /// When set, the field can be accessed by either name or alias
+    pub alias: Option<String>,
+    /// Alias for validation only (input)
+    /// When set, input can use this alias but output uses original name
+    pub validation_alias: Option<String>,
+    /// Alias for serialization only (output)
+    /// When set, output uses this alias but input uses original name
+    pub serialization_alias: Option<String>,
+}
+
+impl FieldDescriptor {
+    /// Create a new field descriptor
+    pub fn new(name: impl Into<String>, type_desc: TypeDescriptor) -> Self {
+        Self {
+            name: name.into(),
+            type_desc,
+            required: true,
+            default: None,
+            description: None,
+            alias: None,
+            validation_alias: None,
+            serialization_alias: None,
+        }
+    }
+
+    /// Set field as optional
+    pub fn optional(mut self) -> Self {
+        self.required = false;
+        self
+    }
+
+    /// Set default value
+    pub fn default_value(mut self, value: Value) -> Self {
+        self.default = Some(value);
+        self.required = false;
+        self
+    }
+
+    /// Set description
+    pub fn description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
+    /// Set alias for both validation and serialization
+    pub fn alias(mut self, alias: impl Into<String>) -> Self {
+        self.alias = Some(alias.into());
+        self
+    }
+
+    /// Set alias for validation only
+    pub fn validation_alias(mut self, alias: impl Into<String>) -> Self {
+        self.validation_alias = Some(alias.into());
+        self
+    }
+
+    /// Set alias for serialization only
+    pub fn serialization_alias(mut self, alias: impl Into<String>) -> Self {
+        self.serialization_alias = Some(alias.into());
+        self
+    }
+
+    /// Get the name to use for validation (input)
+    pub fn validation_name(&self) -> &str {
+        self.validation_alias
+            .as_deref()
+            .or(self.alias.as_deref())
+            .unwrap_or(&self.name)
+    }
+
+    /// Get the name to use for serialization (output)
+    pub fn serialization_name(&self) -> &str {
+        self.serialization_alias
+            .as_deref()
+            .or(self.alias.as_deref())
+            .unwrap_or(&self.name)
+    }
+
+    /// Get all names that can be used to access this field (for validation)
+    pub fn all_validation_names(&self) -> Vec<&str> {
+        let mut names = vec![self.name.as_str()];
+        if let Some(ref alias) = self.alias {
+            names.push(alias.as_str());
+        }
+        if let Some(ref alias) = self.validation_alias {
+            names.push(alias.as_str());
+        }
+        names
+    }
 }
 
 #[cfg(test)]
