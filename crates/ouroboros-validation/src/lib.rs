@@ -55,6 +55,18 @@ pub mod serializers;
 pub mod types;
 pub mod validators;
 
+// Additional validation features
+pub mod config;
+pub mod dataclass;
+pub mod discriminated;
+pub mod json_schema;
+pub mod strict;
+
+// Re-export error module under 'error' alias for compatibility
+pub mod error {
+    pub use crate::errors::*;
+}
+
 // Python bindings (feature-gated)
 #[cfg(feature = "python")]
 pub mod python;
@@ -80,6 +92,13 @@ pub use computed::{
 pub use errors::{ErrorType, ValidationContext, ValidationError, ValidationErrors, ValidationResult};
 pub use types::{TypeDescriptor, Value};
 pub use validators::{validate, validate_value, validate_with_context};
+
+// Additional feature re-exports
+pub use config::{ExtraFields, ValidationConfig, RevalidateInstances};
+pub use dataclass::{DataclassDefinition, FieldInfo, infer_type_from_annotation};
+pub use discriminated::{DiscriminatedUnion, DiscriminatedUnionBuilder};
+pub use json_schema::{JsonSchema, type_descriptor_to_json_schema};
+pub use strict::{StrictMode, StrictResult};
 
 // Re-export Python bindings
 #[cfg(feature = "python")]
