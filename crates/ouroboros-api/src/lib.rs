@@ -22,6 +22,7 @@ pub mod python_handler;
 pub mod websocket;
 pub mod sse;
 pub mod compression;
+pub mod content_negotiation;
 pub mod cookies;
 pub mod lifecycle;
 pub mod rate_limit;
@@ -52,6 +53,7 @@ pub use cookies::{Cookie, CookieJar, CookieSigner, SameSite, ResponseCookies};
 pub use security::{JwtConfig, JwtClaims, JwtHandler, JwtAlgorithm, OAuth2PasswordBearer, TokenResponse, ApiKey, ApiKeyLocation};
 pub use rate_limit::{RateLimitConfig, RateLimitAlgorithm, RateLimitResult, RateLimiter, SharedRateLimiter, shared_rate_limiter, RateLimitTier, TieredRateLimiter};
 pub use compression::{CompressionConfig, CompressionAlgorithm, CompressionLevel, CompressionResult, ResponseCompressor, compress, compress_gzip, compress_deflate};
+pub use content_negotiation::{MediaType, AcceptHeader, ContentNegotiator, NegotiationResult, LanguageTag, AcceptLanguage};
 
 // Re-export telemetry types when feature is enabled
 #[cfg(feature = "observability")]
