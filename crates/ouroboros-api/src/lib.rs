@@ -6,6 +6,7 @@
 //! - Python defines contracts via type hints
 //! - Two-phase GIL pattern for maximum concurrency
 
+pub mod background_tasks;
 pub mod router;
 pub mod handler;
 pub mod request;
@@ -26,6 +27,7 @@ pub mod sse;
 pub mod telemetry;
 
 // Re-exports
+pub use background_tasks::{BackgroundTasks, SharedBackgroundTasks, TaskBuilder};
 pub use router::Router;
 pub use handler::{Handler, HandlerMeta};
 pub use request::Request;
