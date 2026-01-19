@@ -21,6 +21,7 @@ libc = "0.2"
 
 # Additional dependencies
 num_cpus = "1.16"
+parking_lot = "0.12"
 
 # Shared utilities
 ouroboros-common = { path = "../ouroboros-common" }

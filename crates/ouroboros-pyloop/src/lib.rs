@@ -43,6 +43,10 @@ pub mod signal;
 pub mod executor;
 #[cfg(unix)]
 pub mod unix_socket;
+pub mod tls;
+pub mod dns;
+pub mod debug;
+pub mod exception_handler;
 
 pub use error::PyLoopError;
 pub use loop_impl::PyLoop;
@@ -78,6 +82,32 @@ pub use unix_socket::{
     create_unix_connection, create_unix_connection_with_timeout,
     create_unix_server, create_unix_server_with_permissions,
     open_unix_connection,
+};
+
+// TLS/SSL re-exports
+pub use tls::{
+    TlsConfig, TlsVersion, VerifyMode, TlsStream, CertificateInfo,
+    create_tls_connection, create_tls_connection_with_timeout, upgrade_to_tls,
+};
+
+// DNS re-exports
+pub use dns::{
+    AddressFamily, SocketType, AddrInfo, NameInfo, ResolverConfig,
+    getaddrinfo, getaddrinfo_with_timeout, getnameinfo,
+    resolve_hostname, resolve_hostname_all, resolve_hostname_v4, resolve_hostname_v6,
+};
+
+// Debug re-exports
+pub use debug::{
+    DebugConfig, SlowCallback, LoopStatistics, DebugMonitor, CallbackTimer,
+    SharedDebugMonitor, shared_debug_monitor,
+};
+
+// Exception handler re-exports
+pub use exception_handler::{
+    ExceptionContext, ExceptionHandlerFn, ExceptionHandlerManager,
+    SharedExceptionHandler, shared_exception_handler,
+    context_from_error, context_from_io_error,
 };
 
 /// Initialize the Tokio runtime for use with PyLoop.
