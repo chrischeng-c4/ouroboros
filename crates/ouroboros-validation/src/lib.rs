@@ -46,6 +46,7 @@
 //! ```
 
 // Public modules
+pub mod computed;
 pub mod constraints;
 pub mod custom_validators;
 pub mod errors;
@@ -71,6 +72,10 @@ pub use serializers::{
     BoxedFieldSerializer, BoxedModelSerializer, FieldSerializer, FnFieldSerializer,
     FnModelSerializer, MaskSerializer, ModelSerializer, SerializerCollection, SerializerContext,
     SerializerMode,
+};
+pub use computed::{
+    BoxedComputedField, ComputedField, ComputedFieldCollection, ConcatComputed, FnComputedField,
+    get_bool_field, get_float_field, get_int_field, get_string_field,
 };
 pub use errors::{ErrorType, ValidationContext, ValidationError, ValidationErrors, ValidationResult};
 pub use types::{TypeDescriptor, Value};
