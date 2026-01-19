@@ -99,9 +99,17 @@ pub fn detect_with_config(project_root: &Path, config: &ArgusConfig) -> EnvInfo 
 
         if venv_abs.exists() {
             let site_packages = find_site_packages(&venv_abs, config.python_version.as_deref());
+            // Try to determine the venv type by checking if it matches any detected env
+            let env_type = info
+                .detected_envs
+                .iter()
+                .find(|e| e.path == venv_abs)
+                .map(|e| e.env_type.clone())
+                .unwrap_or(VenvType::Venv); // Default to Venv if not in detected list
+
             info.active_venv = Some(DetectedEnv {
                 path: venv_abs,
-                env_type: VenvType::Unknown,
+                env_type,
                 site_packages,
             });
         }
