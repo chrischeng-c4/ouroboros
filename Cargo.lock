@@ -3302,6 +3302,7 @@ dependencies = [
  "ouroboros-common",
  "ouroboros-pyloop",
  "ouroboros-validation",
+ "parking_lot",
  "pyo3",
  "regex",
  "serde",

@@ -1,0 +1,50 @@
+change_id: validation-custom-validators-2
+schema_version: '2.0'
+created_at: 2026-01-19T15:19:42.146197Z
+updated_at: 2026-01-19T15:20:46.676951Z
+phase: proposed
+iteration: 1
+last_action: validate-challenge
+checksums:
+  proposal.md:
+    hash: sha256:a474b6ee825442be9eb29ff1e4c9121c6881a6afb8cc05a7f0f566feac00a753
+    validated_at: 2026-01-19T15:19:42.146265Z
+  tasks.md:
+    hash: sha256:3c94a2dcfc8aa29abae20619d29308a85707a073ab4a3219893da8bcd739f2a8
+    validated_at: 2026-01-19T15:19:42.146296Z
+  CHALLENGE.md:
+    hash: sha256:174589524127938effab8815f373a499fd0d01683c4f3a9a3bb12b79e499ff6b
+    validated_at: 2026-01-19T15:20:46.676951Z
+  specs/_skeleton.md:
+    hash: sha256:b36a8641f8c91dcdda73cbb4ba9918e7ed1881a0d5c5de3fad5d6002b7429478
+    validated_at: 2026-01-19T15:19:42.146381Z
+validations:
+- step: validate-proposal
+  timestamp: 2026-01-19T15:19:42.146234Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 0
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T15:20:46.676913Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 3
+    medium: 0
+    low: 1
+    verdict: NEEDS_REVISION
+    issues_parsed: 4
+  errors: []
+  warnings: []
+telemetry: null

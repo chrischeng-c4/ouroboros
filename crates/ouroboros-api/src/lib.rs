@@ -23,6 +23,7 @@ pub mod websocket;
 pub mod sse;
 pub mod lifecycle;
 pub mod static_files;
+pub mod templates;
 
 // OpenTelemetry tracing - only available with "observability" feature
 #[cfg(feature = "observability")]
@@ -40,6 +41,7 @@ pub use python_handler::PythonHandler;
 pub use sse::{SseEvent, SseStream, SseResponse};
 pub use lifecycle::{LifecycleManager, SharedLifecycleManager, StartupError};
 pub use static_files::{StaticFiles, StaticFilesConfig};
+pub use templates::{Templates, TemplateConfig, Context, ContextValue, SharedTemplates, shared_templates};
 
 // Re-export telemetry types when feature is enabled
 #[cfg(feature = "observability")]
