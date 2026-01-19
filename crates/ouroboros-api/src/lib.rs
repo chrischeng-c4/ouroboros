@@ -23,6 +23,7 @@ pub mod websocket;
 pub mod sse;
 pub mod cookies;
 pub mod lifecycle;
+pub mod security;
 pub mod static_files;
 pub mod templates;
 pub mod upload;
@@ -46,6 +47,7 @@ pub use static_files::{StaticFiles, StaticFilesConfig};
 pub use templates::{Templates, TemplateConfig, Context, ContextValue, SharedTemplates, shared_templates};
 pub use upload::{UploadConfig, StreamingUpload, UploadProgress, UploadedFile, MultipartStream, upload_channel};
 pub use cookies::{Cookie, CookieJar, CookieSigner, SameSite, ResponseCookies};
+pub use security::{JwtConfig, JwtClaims, JwtHandler, JwtAlgorithm, OAuth2PasswordBearer, TokenResponse, ApiKey, ApiKeyLocation};
 
 // Re-export telemetry types when feature is enabled
 #[cfg(feature = "observability")]
