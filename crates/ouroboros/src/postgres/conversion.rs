@@ -128,7 +128,7 @@ pub(super) fn py_value_to_extracted(
         }
         "Decimal" => {
             let s = value.str()?.to_string();
-            Ok(ExtractedValue::String(s))
+            Ok(ExtractedValue::Decimal(s))
         }
         _ => {
             // Fallback: try common extractions for custom types

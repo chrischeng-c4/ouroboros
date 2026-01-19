@@ -2,12 +2,62 @@
 //!
 //! This module provides connection pooling using SQLx's built-in pool manager.
 //! Similar to ouroboros-mongodb's connection management, but optimized for PostgreSQL.
+//! Includes connection resilience with exponential backoff retries.
 
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
+use std::str::FromStr;
 use std::time::Duration;
-use tracing::{info, instrument};
+use tracing::{info, warn, instrument};
 
 use crate::{DataBridgeError, Result};
+
+/// Retry configuration for connection establishment.
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts (0 = no retries)
+    pub max_retries: u32,
+    /// Initial delay between retries in milliseconds
+    pub initial_delay_ms: u64,
+    /// Maximum delay between retries in milliseconds
+    pub max_delay_ms: u64,
+    /// Multiplier for exponential backoff (e.g., 2.0 doubles delay each retry)
+    pub backoff_multiplier: f64,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            initial_delay_ms: 100,
+            max_delay_ms: 5000,
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Creates a retry config with no retries (immediate failure).
+    pub fn no_retry() -> Self {
+        Self {
+            max_retries: 0,
+            initial_delay_ms: 0,
+            max_delay_ms: 0,
+            backoff_multiplier: 1.0,
+        }
+    }
+
+    /// Calculates the delay for a given attempt number (0-indexed).
+    pub fn delay_for_attempt(&self, attempt: u32) -> Duration {
+        if attempt == 0 {
+            return Duration::from_millis(self.initial_delay_ms);
+        }
+
+        let delay_ms = (self.initial_delay_ms as f64)
+            * self.backoff_multiplier.powi(attempt as i32);
+
+        Duration::from_millis((delay_ms as u64).min(self.max_delay_ms))
+    }
+}
 
 /// Connection pool configuration.
 #[derive(Debug, Clone)]
@@ -22,6 +72,12 @@ pub struct PoolConfig {
     pub max_lifetime: Option<u64>,
     /// Idle timeout in seconds.
     pub idle_timeout: Option<u64>,
+    /// Retry configuration for connection establishment.
+    pub retry: RetryConfig,
+    /// Number of prepared statements to cache per connection.
+    /// SQLx caches prepared statements to reduce parsing overhead.
+    /// Set to 0 to disable caching. Default is 100.
+    pub statement_cache_capacity: usize,
 }
 
 impl Default for PoolConfig {
@@ -32,6 +88,8 @@ impl Default for PoolConfig {
             connect_timeout: 30,
             max_lifetime: Some(1800), // 30 minutes
             idle_timeout: Some(600),   // 10 minutes
+            retry: RetryConfig::default(),
+            statement_cache_capacity: 100, // SQLx default
         }
     }
 }
@@ -52,19 +110,20 @@ impl std::fmt::Debug for Connection {
 }
 
 impl Connection {
-    /// Creates a new connection pool.
+    /// Creates a new connection pool with retry logic.
     ///
     /// # Arguments
     ///
     /// * `uri` - PostgreSQL connection URI (e.g., "postgresql://user:password@localhost/db")
-    /// * `config` - Pool configuration
+    /// * `config` - Pool configuration including retry settings
     ///
     /// # Errors
     ///
-    /// Returns error if connection fails or URI is invalid.
+    /// Returns error if connection fails after all retries or URI is invalid.
     #[instrument(skip(uri), fields(
         min_connections = config.min_connections,
-        max_connections = config.max_connections
+        max_connections = config.max_connections,
+        max_retries = config.retry.max_retries
     ))]
     pub async fn new(uri: &str, config: PoolConfig) -> Result<Self> {
         // Validate URI format (basic check)
@@ -91,8 +150,13 @@ impl Connection {
             pool_options = pool_options.idle_timeout(Duration::from_secs(idle_timeout_secs));
         }
 
-        // Connect to the database and create pool
-        let pool = pool_options.connect(uri).await?;
+        // Connect with retry logic and statement caching
+        let pool = Self::connect_with_retry(
+            uri,
+            pool_options,
+            &config.retry,
+            config.statement_cache_capacity,
+        ).await?;
 
         // Test the connection with a simple ping
         sqlx::query("SELECT 1")
@@ -102,6 +166,52 @@ impl Connection {
 
         info!("Connection pool initialized successfully");
         Ok(Self { pool })
+    }
+
+    /// Attempts to connect with exponential backoff retry.
+    async fn connect_with_retry(
+        uri: &str,
+        pool_options: PgPoolOptions,
+        retry_config: &RetryConfig,
+        statement_cache_capacity: usize,
+    ) -> Result<PgPool> {
+        let mut last_error = None;
+
+        // Parse connection options and configure statement cache
+        let connect_options = PgConnectOptions::from_str(uri)
+            .map_err(|e| DataBridgeError::Connection(format!("Invalid connection URI: {}", e)))?
+            .statement_cache_capacity(statement_cache_capacity);
+
+        for attempt in 0..=retry_config.max_retries {
+            match pool_options.clone().connect_with(connect_options.clone()).await {
+                Ok(pool) => {
+                    if attempt > 0 {
+                        info!(attempt = attempt, "Connection established after retry");
+                    }
+                    return Ok(pool);
+                }
+                Err(e) => {
+                    last_error = Some(e);
+
+                    if attempt < retry_config.max_retries {
+                        let delay = retry_config.delay_for_attempt(attempt);
+                        warn!(
+                            attempt = attempt,
+                            max_retries = retry_config.max_retries,
+                            delay_ms = delay.as_millis() as u64,
+                            error = %last_error.as_ref().map(|e| e.to_string()).unwrap_or_default(),
+                            "Connection failed, retrying after delay"
+                        );
+                        tokio::time::sleep(delay).await;
+                    }
+                }
+            }
+        }
+
+        // All retries exhausted
+        Err(last_error
+            .map(DataBridgeError::from)
+            .unwrap_or_else(|| DataBridgeError::Connection("Connection failed".to_string())))
     }
 
     /// Gets a reference to the connection pool.
@@ -138,6 +248,7 @@ mod tests {
         assert_eq!(config.connect_timeout, 30);
         assert_eq!(config.max_lifetime, Some(1800)); // 30 minutes
         assert_eq!(config.idle_timeout, Some(600));  // 10 minutes
+        assert_eq!(config.statement_cache_capacity, 100); // SQLx default
     }
 
     #[test]
@@ -149,6 +260,8 @@ mod tests {
             connect_timeout: 60,
             max_lifetime: Some(3600), // 1 hour
             idle_timeout: Some(300),  // 5 minutes
+            retry: RetryConfig::default(),
+            statement_cache_capacity: 200,
         };
 
         assert_eq!(config.min_connections, 2);
@@ -156,6 +269,7 @@ mod tests {
         assert_eq!(config.connect_timeout, 60);
         assert_eq!(config.max_lifetime, Some(3600));
         assert_eq!(config.idle_timeout, Some(300));
+        assert_eq!(config.statement_cache_capacity, 200);
     }
 
     #[test]
@@ -172,6 +286,8 @@ mod tests {
             connect_timeout: timeout,
             max_lifetime: Some(1800),
             idle_timeout: Some(600),
+            retry: RetryConfig::default(),
+            statement_cache_capacity: 100,
         };
 
         assert_eq!(config.min_connections, 5);
@@ -189,6 +305,8 @@ mod tests {
             connect_timeout: 30,
             max_lifetime: Some(1800),
             idle_timeout: Some(600),
+            retry: RetryConfig::default(),
+            statement_cache_capacity: 100,
         };
 
         assert!(valid_config.min_connections < valid_config.max_connections);
@@ -200,6 +318,8 @@ mod tests {
             connect_timeout: 1,
             max_lifetime: None,
             idle_timeout: None,
+            retry: RetryConfig::no_retry(),
+            statement_cache_capacity: 0, // Disable caching
         };
 
         assert_eq!(edge_config.min_connections, 0);
@@ -207,6 +327,7 @@ mod tests {
         assert_eq!(edge_config.connect_timeout, 1);
         assert!(edge_config.max_lifetime.is_none());
         assert!(edge_config.idle_timeout.is_none());
+        assert_eq!(edge_config.statement_cache_capacity, 0);
     }
 
     #[test]
@@ -301,6 +422,8 @@ mod tests {
             connect_timeout: 45,
             max_lifetime: Some(2400),
             idle_timeout: Some(800),
+            retry: RetryConfig::default(),
+            statement_cache_capacity: 150,
         };
 
         let cloned = config.clone();
@@ -310,6 +433,52 @@ mod tests {
         assert_eq!(config.connect_timeout, cloned.connect_timeout);
         assert_eq!(config.max_lifetime, cloned.max_lifetime);
         assert_eq!(config.idle_timeout, cloned.idle_timeout);
+    }
+
+    #[test]
+    fn test_retry_config_default() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.initial_delay_ms, 100);
+        assert_eq!(config.max_delay_ms, 5000);
+        assert_eq!(config.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_retry_config_no_retry() {
+        let config = RetryConfig::no_retry();
+        assert_eq!(config.max_retries, 0);
+    }
+
+    #[test]
+    fn test_retry_delay_calculation() {
+        let config = RetryConfig {
+            max_retries: 5,
+            initial_delay_ms: 100,
+            max_delay_ms: 5000,
+            backoff_multiplier: 2.0,
+        };
+
+        // Attempt 0: 100ms
+        assert_eq!(config.delay_for_attempt(0), Duration::from_millis(100));
+
+        // Attempt 1: 100 * 2^1 = 200ms
+        assert_eq!(config.delay_for_attempt(1), Duration::from_millis(200));
+
+        // Attempt 2: 100 * 2^2 = 400ms
+        assert_eq!(config.delay_for_attempt(2), Duration::from_millis(400));
+
+        // Attempt 3: 100 * 2^3 = 800ms
+        assert_eq!(config.delay_for_attempt(3), Duration::from_millis(800));
+
+        // Attempt 4: 100 * 2^4 = 1600ms
+        assert_eq!(config.delay_for_attempt(4), Duration::from_millis(1600));
+
+        // Attempt 5: 100 * 2^5 = 3200ms
+        assert_eq!(config.delay_for_attempt(5), Duration::from_millis(3200));
+
+        // Attempt 6: 100 * 2^6 = 6400ms, but capped at 5000ms
+        assert_eq!(config.delay_for_attempt(6), Duration::from_millis(5000));
     }
 
     #[test]

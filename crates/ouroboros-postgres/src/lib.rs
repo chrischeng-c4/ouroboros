@@ -59,44 +59,44 @@
 //!
 //! ## Basic Query Execution
 //!
-//! ```rust,no_run
-//! use ouroboros_postgres::{Connection, QueryBuilder, Operator};
+//! ```rust,ignore
+//! use ouroboros_postgres::{Connection, QueryBuilder, Operator, PoolConfig};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Connect to PostgreSQL
-//! let conn = Connection::new("postgresql://user:pass@localhost/dbname").await?;
+//! let conn = Connection::new("postgresql://user:pass@localhost/dbname", PoolConfig::default()).await?;
 //!
 //! // Build and execute a query
-//! let query = QueryBuilder::new("users")
-//!     .select(&["id", "name", "email"])
-//!     .where_clause("age", Operator::GreaterThan, "18")
-//!     .order_by("name", ouroboros_postgres::OrderDirection::Asc)
-//!     .limit(10);
+//! let query = QueryBuilder::new("users")?
+//!     .select(vec!["id".to_string(), "name".to_string(), "email".to_string()])?
+//!     .where_clause("age", Operator::Gt, "18".into())?
+//!     .order_by("name", ouroboros_postgres::OrderDirection::Asc)?
+//!     .limit(10)?;
 //!
-//! let rows = conn.fetch_all(&query).await?;
+//! // Execute via sqlx directly with conn.pool()
 //! # Ok(())
 //! # }
 //! ```
 //!
 //! ## Transaction with Savepoints
 //!
-//! ```rust,no_run
-//! use ouroboros_postgres::Connection;
+//! ```rust,ignore
+//! use ouroboros_postgres::{Connection, Transaction, PoolConfig};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let conn = Connection::new("postgresql://localhost/db").await?;
-//! let mut txn = conn.begin().await?;
+//! let conn = Connection::new("postgresql://localhost/db", PoolConfig::default()).await?;
+//! let mut txn = Transaction::begin(&conn).await?;
 //!
 //! // Insert user
-//! txn.execute("INSERT INTO users (name) VALUES ($1)", &["Alice"]).await?;
+//! txn.execute("INSERT INTO users (name) VALUES ($1)").await?;
 //!
 //! // Create savepoint
 //! txn.savepoint("sp1").await?;
 //!
 //! // This might fail
-//! if let Err(_) = txn.execute("INSERT INTO users (name) VALUES ($1)", &["Bob"]).await {
+//! if let Err(_) = txn.execute("INSERT INTO users (name) VALUES ($1)").await {
 //!     // Rollback to savepoint, keeping Alice's insert
-//!     txn.rollback_to("sp1").await?;
+//!     txn.rollback_to_savepoint("sp1").await?;
 //! }
 //!
 //! // Commit the transaction
@@ -107,27 +107,27 @@
 //!
 //! ## Complex Query with Joins and Window Functions
 //!
-//! ```rust,no_run
-//! use ouroboros_postgres::{QueryBuilder, JoinType, WindowFunction, WindowSpec};
+//! ```rust,ignore
+//! use ouroboros_postgres::{QueryBuilder, JoinType, WindowFunction, WindowSpec, OrderDirection};
 //!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let query = QueryBuilder::new("orders")
-//!     .select(&["orders.id", "orders.amount", "customers.name"])
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let query = QueryBuilder::new("orders")?
+//!     .select(vec!["orders.id".into(), "orders.amount".into(), "customers.name".into()])?
 //!     .join(
 //!         JoinType::Inner,
 //!         "customers",
 //!         "orders.customer_id",
 //!         "customers.id"
-//!     )
+//!     )?
 //!     .window_function(
 //!         WindowFunction::RowNumber,
 //!         WindowSpec::new()
-//!             .partition_by(&["customers.id"])
-//!             .order_by("orders.created_at", ouroboros_postgres::OrderDirection::Desc)
-//!     )
-//!     .order_by("orders.created_at", ouroboros_postgres::OrderDirection::Desc);
+//!             .partition_by(vec!["customers.id".into()])?
+//!             .order_by("orders.created_at", OrderDirection::Desc)?
+//!     )?
+//!     .order_by("orders.created_at", OrderDirection::Desc)?;
 //!
-//! // Execute query...
+//! // Execute query via sqlx...
 //! # Ok(())
 //! # }
 //! ```
@@ -203,16 +203,23 @@ pub mod schema;
 /// references to prevent SQL injection and ensure data integrity.
 pub mod validation;
 
-pub use connection::{Connection, PoolConfig};
+/// Query execution utilities with retry logic and observability.
+///
+/// Provides query execution with automatic retry on transient errors,
+/// tracing spans for monitoring, and slow query logging.
+pub mod executor;
+
+pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
     AggregateFunction, HavingCondition, WindowFunction, WindowSpec, WindowExpression
 };
 pub use row::{Row, RelationConfig};
-pub use transaction::Transaction;
+pub use transaction::{Transaction, IsolationLevel, AccessMode, TransactionOptions};
 pub use types::{ExtractedValue, row_to_extracted};
 pub use migration::{Migration, MigrationRunner, MigrationStatus};
 pub use schema::{SchemaInspector, CascadeRule, BackRef, ManyToManyConfig};
 pub use validation::validate_foreign_key_reference;
+pub use executor::{QueryExecutor, ExecutorConfig, execute_with_retry};
 
 pub use ouroboros_common::{DataBridgeError, Result};

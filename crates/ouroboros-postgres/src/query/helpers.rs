@@ -214,7 +214,10 @@ pub fn adjust_param_indices(sql: &str, offset: usize) -> String {
             let mut num_str = String::new();
             while let Some(&next_ch) = chars.peek() {
                 if next_ch.is_ascii_digit() {
-                    num_str.push(chars.next().unwrap());
+                    // Safe: peek() returned Some, so next() will also return Some
+                    if let Some(digit) = chars.next() {
+                        num_str.push(digit);
+                    }
                 } else {
                     break;
                 }

@@ -55,6 +55,10 @@ pub struct QueryBuilder {
     pub(crate) set_operations: Vec<SetQuery>,
     /// Columns to return from UPDATE/DELETE (RETURNING clause)
     pub(crate) returning: Vec<String>,
+    /// Columns to defer (exclude from initial SELECT) - for lazy loading optimization
+    pub(crate) deferred_columns: Vec<String>,
+    /// If set, only these columns are selected (overrides select_columns)
+    pub(crate) only_columns: Option<Vec<String>>,
 }
 
 impl QueryBuilder {
@@ -86,6 +90,8 @@ impl QueryBuilder {
             windows: Vec::new(),
             set_operations: Vec::new(),
             returning: Vec::new(),
+            deferred_columns: Vec::new(),
+            only_columns: None,
         })
     }
 
