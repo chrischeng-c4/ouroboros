@@ -71,7 +71,7 @@ fn example_query_params() {
     validator.query_params.push(ParamValidator {
         name: "limit".to_string(),
         location: ParamLocation::Query,
-        type_desc: TypeDescriptor::Int(NumericConstraints {
+        type_desc: TypeDescriptor::Int64(NumericConstraints {
             minimum: Some(1),
             maximum: Some(100),
             exclusive_minimum: None,
@@ -144,7 +144,7 @@ fn example_body_validation() {
             },
             FieldDescriptor {
                 name: "age".to_string(),
-                type_desc: TypeDescriptor::Int(NumericConstraints {
+                type_desc: TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
@@ -156,7 +156,7 @@ fn example_body_validation() {
                 description: Some("User's age".to_string()),
             },
         ],
-        additional_properties: None,
+        additional: None,
     });
 
     let body = SerializableValue::Object(vec![
@@ -270,7 +270,7 @@ fn example_numeric_constraints() {
     validator.query_params.push(ParamValidator {
         name: "price".to_string(),
         location: ParamLocation::Query,
-        type_desc: TypeDescriptor::Float(NumericConstraints {
+        type_desc: TypeDescriptor::Float64(NumericConstraints {
             minimum: Some(0.0),
             maximum: Some(999999.99),
             exclusive_minimum: None,
@@ -285,7 +285,7 @@ fn example_numeric_constraints() {
     validator.query_params.push(ParamValidator {
         name: "quantity".to_string(),
         location: ParamLocation::Query,
-        type_desc: TypeDescriptor::Int(NumericConstraints {
+        type_desc: TypeDescriptor::Int64(NumericConstraints {
             minimum: Some(1),
             maximum: None,
             exclusive_minimum: None,

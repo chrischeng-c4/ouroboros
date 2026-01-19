@@ -3150,6 +3150,7 @@ dependencies = [
  "ouroboros-pyloop",
  "ouroboros-qc",
  "ouroboros-tasks",
+ "ouroboros-validation",
  "pyo3",
  "pyo3-async-runtimes",
  "pythonize",
@@ -3186,6 +3187,7 @@ dependencies = [
  "opentelemetry_sdk",
  "ouroboros-common",
  "ouroboros-pyloop",
+ "ouroboros-validation",
  "pyo3",
  "regex",
  "serde",
@@ -3318,6 +3320,7 @@ dependencies = [
  "futures",
  "mongodb",
  "ouroboros-common",
+ "ouroboros-validation",
  "serde",
  "serde_json",
  "thiserror 2.0.17",
@@ -3516,6 +3519,20 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "ouroboros-validation"
+version = "0.1.0"
+dependencies = [
+ "bson",
+ "once_cell",
+ "pyo3",
+ "regex",
+ "serde",
+ "serde_json",
+ "sonic-rs",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

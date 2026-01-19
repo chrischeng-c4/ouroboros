@@ -1,0 +1,41 @@
+[package]
+name = "ouroboros-validation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Unified validation library for Ouroboros - Pydantic-like validation with Rust performance"
+rust-version = "1.70"
+
+[features]
+default = []
+# JSON serialization with standard serde
+serde = ["dep:serde", "dep:serde_json"]
+# High-performance JSON with sonic-rs (3-7x faster)
+sonic = ["dep:sonic-rs"]
+# Python bindings via PyO3
+python = ["dep:pyo3"]
+# BSON support for MongoDB validation
+bson = ["dep:bson"]
+
+[dependencies]
+# Core validation
+regex = { workspace = true }
+once_cell = { workspace = true }
+thiserror = { workspace = true }
+
+# Optional: Serialization
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+sonic-rs = { version = "0.3", optional = true }
+
+# Optional: Python bindings
+pyo3 = { workspace = true, optional = true }
+
+# Optional: BSON support
+bson = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

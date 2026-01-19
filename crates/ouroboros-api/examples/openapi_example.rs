@@ -114,7 +114,7 @@ fn main() {
             },
             FieldDescriptor {
                 name: "age".to_string(),
-                type_desc: TypeDescriptor::Int(NumericConstraints {
+                type_desc: TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
@@ -133,7 +133,7 @@ fn main() {
                 description: Some("Account creation timestamp".to_string()),
             },
         ],
-        additional_properties: None,
+        additional: None,
     };
 
     // Convert TypeDescriptor to OpenAPI Schema
@@ -164,7 +164,7 @@ fn main() {
             },
             FieldDescriptor {
                 name: "age".to_string(),
-                type_desc: TypeDescriptor::Optional(Box::new(TypeDescriptor::Int(NumericConstraints {
+                type_desc: TypeDescriptor::Optional(Box::new(TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
@@ -176,7 +176,7 @@ fn main() {
                 description: Some("User age".to_string()),
             },
         ],
-        additional_properties: None,
+        additional: None,
     };
 
     let create_user_schema = type_descriptor_to_schema(&create_user_type);

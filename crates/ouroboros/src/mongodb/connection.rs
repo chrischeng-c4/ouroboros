@@ -8,7 +8,7 @@ use std::sync::RwLock as StdRwLock;
 
 use ouroboros_mongodb::Connection;
 
-use crate::validation::ValidatedCollectionName;
+use super::validation::{ValidatedCollectionName, py_validated_collection_name, py_validate_query};
 use crate::config::get_config;
 use crate::error_handling::sanitize_error;
 
@@ -32,7 +32,7 @@ pub(super) fn get_connection() -> PyResult<Arc<Connection>> {
 ///
 /// Prevents NoSQL injection via collection names
 pub(super) fn validate_collection_name(name: &str) -> PyResult<ValidatedCollectionName> {
-    ValidatedCollectionName::new(name)
+    py_validated_collection_name(name)
 }
 
 /// Validate MongoDB query for dangerous operators if validation is enabled
@@ -48,8 +48,7 @@ pub(super) fn validate_collection_name(name: &str) -> PyResult<ValidatedCollecti
 pub(super) fn validate_query_if_enabled(query: &bson::Document) -> PyResult<()> {
     let config = get_config();
     if config.validate_queries {
-        use crate::validation::validate_query;
-        validate_query(&bson::Bson::Document(query.clone()))?;
+        py_validate_query(&bson::Bson::Document(query.clone()))?;
     }
     Ok(())
 }

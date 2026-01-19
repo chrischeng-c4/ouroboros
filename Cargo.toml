@@ -14,6 +14,7 @@ members = [
     "crates/ouroboros-api",
     "crates/ouroboros-tasks",
     "crates/ouroboros-pyloop",
+    "crates/ouroboros-validation",
     "crates/ouroboros-sheet-core",
     "crates/ouroboros-sheet-db",
     "crates/ouroboros-sheet-formula",

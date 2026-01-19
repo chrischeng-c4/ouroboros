@@ -32,8 +32,7 @@
 
 use pyo3::prelude::*;
 
-// Security and validation modules
-pub mod validation;
+// Security and configuration modules
 pub mod config;
 pub mod error_handling;
 
@@ -42,6 +41,9 @@ pub mod types;
 
 // BSON conversion with GIL-free processing (Feature 201)
 pub mod conversion;
+
+// Validation module (Pydantic-like validation with Rust performance)
+pub mod validation;
 
 #[cfg(feature = "mongodb")]
 mod mongodb;
@@ -78,6 +80,11 @@ fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Add security configuration functions
     config::register_functions(m)?;
+
+    // Add validation module (Pydantic-like validation)
+    let validation_module = PyModule::new(py, "validation")?;
+    validation::register_module(&validation_module)?;
+    m.add_submodule(&validation_module)?;
 
     // Add MongoDB module if enabled
     #[cfg(feature = "mongodb")]

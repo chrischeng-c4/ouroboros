@@ -22,6 +22,7 @@ chrono.workspace = true
 
 # Shared utilities
 ouroboros-common = { path = "../ouroboros-common", features = ["mongodb-errors"] }
+ouroboros-validation = { path = "../ouroboros-validation", features = ["bson"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
