@@ -35,6 +35,7 @@ mod loop_impl;
 mod future;
 mod handle;
 mod network;
+mod subprocess;
 mod task;
 mod timer_wheel;
 
@@ -46,6 +47,12 @@ pub use network::{
     TcpTransport, TcpServer, StreamReader, StreamWriter,
     create_connection, create_connection_with_timeout,
     create_server, open_connection, open_connection_with_timeout,
+};
+pub use subprocess::{
+    Process, ProcessConfig, ProcessOutput,
+    create_subprocess_exec, create_subprocess_exec_with_config,
+    create_subprocess_shell, create_subprocess_shell_with_config,
+    run, run_with_input, run_shell, run_with_timeout,
 };
 pub use task::{PyCancelledError, Task};
 pub use timer_wheel::{TimerWheel, TimerEntry, ScheduledCallback};
