@@ -47,6 +47,7 @@
 
 // Public modules
 pub mod constraints;
+pub mod custom_validators;
 pub mod errors;
 pub mod formats;
 pub mod types;
@@ -59,6 +60,11 @@ pub mod python;
 // Re-export commonly used types
 pub use constraints::{
     FieldDescriptor, ListConstraints, NumericConstraints, StringConstraints, StringFormat,
+};
+pub use custom_validators::{
+    BoxedFieldValidator, BoxedModelValidator, FieldValidator, FnFieldValidator, FnModelValidator,
+    ModelValidator, ValidatorCollection, ValidatorContext, ValidatorMode,
+    field_error, custom_error,
 };
 pub use errors::{ErrorType, ValidationContext, ValidationError, ValidationErrors, ValidationResult};
 pub use types::{TypeDescriptor, Value};
