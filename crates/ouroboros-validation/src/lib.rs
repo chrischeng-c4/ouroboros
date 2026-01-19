@@ -50,6 +50,7 @@ pub mod constraints;
 pub mod custom_validators;
 pub mod errors;
 pub mod formats;
+pub mod serializers;
 pub mod types;
 pub mod validators;
 
@@ -65,6 +66,11 @@ pub use custom_validators::{
     BoxedFieldValidator, BoxedModelValidator, FieldValidator, FnFieldValidator, FnModelValidator,
     ModelValidator, ValidatorCollection, ValidatorContext, ValidatorMode,
     field_error, custom_error,
+};
+pub use serializers::{
+    BoxedFieldSerializer, BoxedModelSerializer, FieldSerializer, FnFieldSerializer,
+    FnModelSerializer, MaskSerializer, ModelSerializer, SerializerCollection, SerializerContext,
+    SerializerMode,
 };
 pub use errors::{ErrorType, ValidationContext, ValidationError, ValidationErrors, ValidationResult};
 pub use types::{TypeDescriptor, Value};
