@@ -493,7 +493,6 @@ Speedup:            9.95x
 - **PyLoop Implementation**: `crates/ouroboros-pyloop/src/loop_impl.rs`
 - **Benchmark Code**: `benchmarks/pyloop/bench_event_loop.py`
 - **Phase Summary**: `PYLOOP_PHASE1_SUMMARY.md`
-- **Design Document**: `openspec/changes/implement-ouroboros-pyloop/design.md`
 - **Tokio Documentation**: https://tokio.rs/
 - **Python asyncio**: https://docs.python.org/3/library/asyncio.html
 - **uvloop**: https://github.com/MagicStack/uvloop

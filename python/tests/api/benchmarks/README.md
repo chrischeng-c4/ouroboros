@@ -101,8 +101,6 @@ tests/api/benchmarks/
 
 ## Performance Targets
 
-Based on `openspec/changes/add-api-benchmarks/specs/api-server/spec.md`:
-
 ### Throughput
 - **Target**: >1.5x FastAPI/Uvicorn baseline
 - **Scenarios**:
