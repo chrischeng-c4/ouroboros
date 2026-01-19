@@ -64,6 +64,10 @@ once_cell = "1"
 # Templates
 parking_lot = "0.12"
 
+# Cookie signing
+hmac = "0.12"
+sha2 = "0.10"
+
 # Form data parsing
 multer = { workspace = true }
 urlencoding = { workspace = true }
