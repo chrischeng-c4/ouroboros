@@ -10,8 +10,8 @@ from tests.postgres.base import PostgresSuite
 @fixture
 async def employees_table():
     """Create and populate an employees table for distinct testing."""
-    await execute('\n        CREATE TABLE IF NOT EXISTS employees (\n            id SERIAL PRIMARY KEY,\n            department VARCHAR(100) NOT NULL,\n            role VARCHAR(100) NOT NULL,\n            salary DECIMAL(10, 2) NOT NULL,\n            hire_date DATE NOT NULL\n        )\n        ')
-    test_data = [{'department': 'Engineering', 'role': 'Developer', 'salary': 80000.0, 'hire_date': '2023-01-15'}, {'department': 'Engineering', 'role': 'Developer', 'salary': 85000.0, 'hire_date': '2023-02-20'}, {'department': 'Engineering', 'role': 'Senior Developer', 'salary': 120000.0, 'hire_date': '2022-06-10'}, {'department': 'Engineering', 'role': 'Manager', 'salary': 130000.0, 'hire_date': '2021-03-05'}, {'department': 'Sales', 'role': 'Sales Rep', 'salary': 60000.0, 'hire_date': '2023-04-12'}, {'department': 'Sales', 'role': 'Sales Rep', 'salary': 62000.0, 'hire_date': '2023-05-18'}, {'department': 'Sales', 'role': 'Manager', 'salary': 95000.0, 'hire_date': '2022-01-20'}, {'department': 'Marketing', 'role': 'Specialist', 'salary': 70000.0, 'hire_date': '2023-03-08'}, {'department': 'Marketing', 'role': 'Manager', 'salary': 100000.0, 'hire_date': '2021-09-15'}, {'department': 'Engineering', 'role': 'Developer', 'salary': 82000.0, 'hire_date': '2023-06-01'}, {'department': 'Sales', 'role': 'Sales Rep', 'salary': 61000.0, 'hire_date': '2023-07-10'}]
+    await execute('\n        CREATE TABLE IF NOT EXISTS employees (\n            id SERIAL PRIMARY KEY,\n            department VARCHAR(100) NOT NULL,\n            job_role VARCHAR(100) NOT NULL,\n            salary DECIMAL(10, 2) NOT NULL,\n            hire_date DATE NOT NULL\n        )\n        ')
+    test_data = [{'department': 'Engineering', 'job_role': 'Developer', 'salary': 80000.0, 'hire_date': date(2023, 1, 15)}, {'department': 'Engineering', 'job_role': 'Developer', 'salary': 85000.0, 'hire_date': date(2023, 2, 20)}, {'department': 'Engineering', 'job_role': 'Senior Developer', 'salary': 120000.0, 'hire_date': date(2022, 6, 10)}, {'department': 'Engineering', 'job_role': 'Manager', 'salary': 130000.0, 'hire_date': date(2021, 3, 5)}, {'department': 'Sales', 'job_role': 'Sales Rep', 'salary': 60000.0, 'hire_date': date(2023, 4, 12)}, {'department': 'Sales', 'job_role': 'Sales Rep', 'salary': 62000.0, 'hire_date': date(2023, 5, 18)}, {'department': 'Sales', 'job_role': 'Manager', 'salary': 95000.0, 'hire_date': date(2022, 1, 20)}, {'department': 'Marketing', 'job_role': 'Specialist', 'salary': 70000.0, 'hire_date': date(2023, 3, 8)}, {'department': 'Marketing', 'job_role': 'Manager', 'salary': 100000.0, 'hire_date': date(2021, 9, 15)}, {'department': 'Engineering', 'job_role': 'Developer', 'salary': 82000.0, 'hire_date': date(2023, 6, 1)}, {'department': 'Sales', 'job_role': 'Sales Rep', 'salary': 61000.0, 'hire_date': date(2023, 7, 10)}]
     for data in test_data:
         await insert_one('employees', data)
     yield
@@ -30,9 +30,9 @@ class TestDistinctSingleColumn(PostgresSuite):
     @test
     async def test_distinct_role(self, employees_table):
         """Test DISTINCT selecting unique roles."""
-        results = await query_aggregate('employees', [('count_column', 'role', 'role_count')], group_by=['role'], having=None, where_conditions=None, order_by=[('role', 'asc')], limit=None, distinct=True)
+        results = await query_aggregate('employees', [('count_column', 'job_role', 'role_count')], group_by=['job_role'], having=None, where_conditions=None, order_by=[('job_role', 'asc')], limit=None, distinct=True)
         expect(len(results)).to_equal(5)
-        roles = [r['role'] for r in results]
+        roles = [r['job_role'] for r in results]
         expect('Developer').to_be_in(roles)
         expect('Senior Developer').to_be_in(roles)
         expect('Manager').to_be_in(roles)
@@ -52,18 +52,18 @@ class TestDistinctMultipleColumns(PostgresSuite):
     @test
     async def test_distinct_department_role(self, employees_table):
         """Test DISTINCT on department and role combination."""
-        results = await query_aggregate('employees', [('count', None, 'count')], group_by=['department', 'role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('role', 'asc')], limit=None, distinct=True)
+        results = await query_aggregate('employees', [('count', None, 'count')], group_by=['department', 'job_role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('job_role', 'asc')], limit=None, distinct=True)
         expect(len(results)).to_equal(7)
 
     @test
     async def test_distinct_multiple_with_aggregates(self, employees_table):
         """Test DISTINCT with multiple columns and aggregate functions."""
-        results = await query_aggregate('employees', [('count', None, 'employee_count'), ('avg', 'salary', 'avg_salary')], group_by=['department', 'role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('role', 'asc')], limit=None, distinct=True)
+        results = await query_aggregate('employees', [('count', None, 'employee_count'), ('avg', 'salary', 'avg_salary')], group_by=['department', 'job_role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('job_role', 'asc')], limit=None, distinct=True)
         expect(len(results)).to_equal(7)
-        eng_devs = [r for r in results if r['department'] == 'Engineering' and r['role'] == 'Developer']
+        eng_devs = [r for r in results if r['department'] == 'Engineering' and r['job_role'] == 'Developer']
         expect(len(eng_devs)).to_equal(1)
         expect(eng_devs[0]['employee_count']).to_equal(3)
-        expect(float(eng_devs[0]['avg_salary'])).to_equal(pytest.approx(82333.33, rel=0.01))
+        expect(float(eng_devs[0]['avg_salary'])).to_be_close_to(82333.33, rel=0.01)
 
 class TestDistinctOn(PostgresSuite):
     """Test PostgreSQL DISTINCT ON functionality."""
@@ -89,7 +89,7 @@ class TestDistinctOn(PostgresSuite):
     @test
     async def test_distinct_on_multiple_columns(self, employees_table):
         """Test DISTINCT ON with multiple columns."""
-        results = await query_aggregate('employees', [('min', 'salary', 'min_salary'), ('count', None, 'count')], group_by=['department', 'role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('role', 'asc')], limit=None, distinct_on=['department', 'role'])
+        results = await query_aggregate('employees', [('min', 'salary', 'min_salary'), ('count', None, 'count')], group_by=['department', 'job_role'], having=None, where_conditions=None, order_by=[('department', 'asc'), ('job_role', 'asc')], limit=None, distinct_on=['department', 'job_role'])
         expect(len(results)).to_equal(7)
 
 class TestDistinctWithAggregates(PostgresSuite):
@@ -103,7 +103,7 @@ class TestDistinctWithAggregates(PostgresSuite):
         eng_result = [r for r in results if r['department'] == 'Engineering']
         expect(len(eng_result)).to_equal(1)
         expect(eng_result[0]['emp_count']).to_equal(5)
-        expect(float(eng_result[0]['total_salary'])).to_equal(pytest.approx(497000.0, rel=0.01))
+        expect(float(eng_result[0]['total_salary'])).to_be_close_to(497000.0, rel=0.01)
 
     @test
     async def test_distinct_with_avg_and_min_max(self, employees_table):
@@ -112,15 +112,15 @@ class TestDistinctWithAggregates(PostgresSuite):
         expect(len(results)).to_equal(3)
         sales_result = [r for r in results if r['department'] == 'Sales']
         expect(len(sales_result)).to_equal(1)
-        expect(float(sales_result[0]['avg_salary'])).to_equal(pytest.approx(69500.0, rel=0.01))
-        expect(float(sales_result[0]['min_salary'])).to_equal(pytest.approx(60000.0, rel=0.01))
-        expect(float(sales_result[0]['max_salary'])).to_equal(pytest.approx(95000.0, rel=0.01))
+        expect(float(sales_result[0]['avg_salary'])).to_be_close_to(69500.0, rel=0.01)
+        expect(float(sales_result[0]['min_salary'])).to_be_close_to(60000.0, rel=0.01)
+        expect(float(sales_result[0]['max_salary'])).to_be_close_to(95000.0, rel=0.01)
 
     @test
     async def test_distinct_count_by_role(self, employees_table):
         """Test DISTINCT counting employees per role."""
-        results = await query_aggregate('employees', [('count_distinct', 'department', 'dept_count')], group_by=['role'], having=None, where_conditions=None, order_by=[('role', 'asc')], limit=None)
-        manager_result = [r for r in results if r['role'] == 'Manager']
+        results = await query_aggregate('employees', [('count_distinct', 'department', 'dept_count')], group_by=['job_role'], having=None, where_conditions=None, order_by=[('job_role', 'asc')], limit=None)
+        manager_result = [r for r in results if r['job_role'] == 'Manager']
         expect(len(manager_result)).to_equal(1)
         expect(manager_result[0]['dept_count']).to_equal(3)
 
@@ -142,7 +142,7 @@ class TestDistinctWithWhere(PostgresSuite):
     @test
     async def test_distinct_with_role_filter(self, employees_table):
         """Test DISTINCT with WHERE filtering by role."""
-        results = await query_aggregate('employees', [('count', None, 'count'), ('avg', 'salary', 'avg_salary')], group_by=['department'], having=None, where_conditions=[('role', 'eq', 'Manager')], order_by=[('department', 'asc')], limit=None, distinct=True)
+        results = await query_aggregate('employees', [('count', None, 'count'), ('avg', 'salary', 'avg_salary')], group_by=['department'], having=None, where_conditions=[('job_role', 'eq', 'Manager')], order_by=[('department', 'asc')], limit=None, distinct=True)
         expect(len(results)).to_equal(3)
         for result in results:
             expect(result['count']).to_equal(1)
@@ -150,7 +150,7 @@ class TestDistinctWithWhere(PostgresSuite):
     @test
     async def test_distinct_with_multiple_conditions(self, employees_table):
         """Test DISTINCT with multiple WHERE conditions."""
-        results = await query_aggregate('employees', [('count', None, 'count'), ('sum', 'salary', 'total')], group_by=['department'], having=None, where_conditions=[('salary', 'gt', 70000), ('role', 'ne', 'Manager')], order_by=[('department', 'asc')], limit=None, distinct=True)
+        results = await query_aggregate('employees', [('count', None, 'count'), ('sum', 'salary', 'total')], group_by=['department'], having=None, where_conditions=[('salary', 'gt', 70000), ('job_role', 'ne', 'Manager')], order_by=[('department', 'asc')], limit=None, distinct=True)
         expect(len(results)).to_equal(1)
         expect(results[0]['department']).to_equal('Engineering')
         expect(results[0]['count']).to_equal(4)

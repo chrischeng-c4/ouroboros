@@ -54,7 +54,7 @@ class TestFetchOneEager(PostgresSuite):
         await execute('INSERT INTO test_eager_users (username) VALUES ($1)', ['alice'])
         await execute('INSERT INTO test_eager_profiles (bio) VALUES ($1)', ['Developer'])
         await execute('INSERT INTO test_eager_accounts (user_id, profile_id, status) VALUES ($1, $2, $3)', [1, 1, 'active'])
-        result = await fetch_one_eager('test_eager_accounts', 1, [('user', 'user_id', 'test_eager_users'), ('profile', 'profile_id', 'test_eager_profiles')])
+        result = await fetch_one_eager('test_eager_accounts', 1, [('account_user', 'user_id', 'test_eager_users'), ('profile', 'profile_id', 'test_eager_profiles')])
         expect(result).not_to_be_none()
         expect(result['status']).to_equal('active')
         expect(result['user_id']).to_equal(1)

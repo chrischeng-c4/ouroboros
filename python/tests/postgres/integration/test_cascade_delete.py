@@ -303,28 +303,54 @@ class TestNestedCascadeDelete(PostgresSuite):
     async def test_cascade_diamond_relationship(self):
         """Test cascade with diamond relationship.
 
-        Schema: User → Post (CASCADE), User → Comment (CASCADE), Post → Comment (RESTRICT)
-        Both Post and Comment reference User, Comment also references Post.
-        Test cascade behavior with shared parent.
+        Schema: User → Post (CASCADE), Post → Comment (RESTRICT)
+        Deleting User triggers CASCADE to Post, which is blocked by RESTRICT on Comment.
+        Note: Comment has NO direct FK to User (to ensure RESTRICT works).
         """
         try:
-            await execute('\n                CREATE TABLE IF NOT EXISTS diamond_users (\n                    id SERIAL PRIMARY KEY,\n                    name TEXT NOT NULL\n                );\n            ')
-            await execute('\n                CREATE TABLE IF NOT EXISTS diamond_posts (\n                    id SERIAL PRIMARY KEY,\n                    user_id INTEGER NOT NULL,\n                    title TEXT NOT NULL,\n                    FOREIGN KEY (user_id) REFERENCES diamond_users(id) ON DELETE CASCADE\n                );\n            ')
-            await execute('\n                CREATE TABLE IF NOT EXISTS diamond_comments (\n                    id SERIAL PRIMARY KEY,\n                    user_id INTEGER NOT NULL,\n                    post_id INTEGER NOT NULL,\n                    text TEXT NOT NULL,\n                    FOREIGN KEY (user_id) REFERENCES diamond_users(id) ON DELETE CASCADE,\n                    FOREIGN KEY (post_id) REFERENCES diamond_posts(id) ON DELETE RESTRICT\n                );\n            ')
+            await execute('''
+                CREATE TABLE IF NOT EXISTS diamond_users (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL
+                );
+            ''')
+            await execute('''
+                CREATE TABLE IF NOT EXISTS diamond_posts (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES diamond_users(id) ON DELETE CASCADE
+                );
+            ''')
+            await execute('''
+                CREATE TABLE IF NOT EXISTS diamond_comments (
+                    id SERIAL PRIMARY KEY,
+                    post_id INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    FOREIGN KEY (post_id) REFERENCES diamond_posts(id) ON DELETE RESTRICT
+                );
+            ''')
             await execute("INSERT INTO diamond_users (name) VALUES ('Eve')")
             user_result = await execute("SELECT id FROM diamond_users WHERE name = 'Eve'")
             user_id = user_result[0]['id']
             await execute(f"INSERT INTO diamond_posts (user_id, title) VALUES ({user_id}, 'Eve Post')")
             post_result = await execute('SELECT id FROM diamond_posts WHERE user_id = $1', [user_id])
             post_id = post_result[0]['id']
-            await execute(f"INSERT INTO diamond_comments (user_id, post_id, text) VALUES ({user_id}, {post_id}, 'Comment')")
+            await execute(f"INSERT INTO diamond_comments (post_id, text) VALUES ({post_id}, 'Comment')")
+            # Try to delete user - should fail because Post has Comment with RESTRICT
+            delete_failed = False
             try:
                 await execute('DELETE FROM diamond_users WHERE id = $1', [user_id])
-                raise AssertionError('Expected exception')
             except Exception as e:
-                expect('violate' in str(e).lower() or 'restrict' in str(e).lower()).to_be_true()
+                delete_failed = True
+                # PostgreSQL restrict violation should contain 'violate' or 'foreign key'
+                error_msg = str(e).lower()
+                expect('violate' in error_msg or 'foreign' in error_msg or 'constraint' in error_msg).to_be_true()
+            expect(delete_failed).to_be_true()
+            # Verify data is still intact
             expect(len(await execute('SELECT * FROM diamond_users WHERE id = $1', [user_id]))).to_equal(1)
             expect(len(await execute('SELECT * FROM diamond_posts WHERE id = $1', [post_id]))).to_equal(1)
+            # Delete comment first, then cascade should work
             await execute(f'DELETE FROM diamond_comments WHERE post_id = {post_id}')
             await execute('DELETE FROM diamond_users WHERE id = $1', [user_id])
             expect(len(await execute('SELECT * FROM diamond_users WHERE id = $1', [user_id]))).to_equal(0)

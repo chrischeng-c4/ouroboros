@@ -7,23 +7,23 @@ from ouroboros.qc import expect, fixture, test
 from tests.postgres.base import PostgresSuite
 from ouroboros.postgres import execute, insert_one, query_aggregate, query_with_cte
 
-class TestSubquery(PostgresSuite):
+@fixture
+async def test_tables():
+    """Create and populate test tables for subquery testing."""
+    await execute('\n        CREATE TABLE IF NOT EXISTS users (\n            id SERIAL PRIMARY KEY,\n            name VARCHAR(100) NOT NULL,\n            email VARCHAR(100) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
+    await execute('\n        CREATE TABLE IF NOT EXISTS orders (\n            id SERIAL PRIMARY KEY,\n            user_id INTEGER NOT NULL,\n            total DECIMAL(10, 2) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
+    users_data = [{'name': 'Alice', 'email': 'alice@example.com', 'status': 'active'}, {'name': 'Bob', 'email': 'bob@example.com', 'status': 'active'}, {'name': 'Charlie', 'email': 'charlie@example.com', 'status': 'inactive'}, {'name': 'David', 'email': 'david@example.com', 'status': 'active'}]
+    for data in users_data:
+        await insert_one('users', data)
+    orders_data = [{'user_id': 1, 'total': 100.0, 'status': 'completed'}, {'user_id': 1, 'total': 200.0, 'status': 'pending'}, {'user_id': 2, 'total': 150.0, 'status': 'completed'}]
+    for data in orders_data:
+        await insert_one('orders', data)
+    yield
+    await execute('DROP TABLE IF EXISTS orders')
+    await execute('DROP TABLE IF EXISTS users')
 
-    @test
-    @fixture
-    async def test_tables(self):
-        """Create and populate test tables for subquery testing."""
-        await execute('\n        CREATE TABLE IF NOT EXISTS users (\n            id SERIAL PRIMARY KEY,\n            name VARCHAR(100) NOT NULL,\n            email VARCHAR(100) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
-        await execute('\n        CREATE TABLE IF NOT EXISTS orders (\n            id SERIAL PRIMARY KEY,\n            user_id INTEGER NOT NULL,\n            total DECIMAL(10, 2) NOT NULL,\n            status VARCHAR(50) NOT NULL\n        )\n        ')
-        users_data = [{'name': 'Alice', 'email': 'alice@example.com', 'status': 'active'}, {'name': 'Bob', 'email': 'bob@example.com', 'status': 'active'}, {'name': 'Charlie', 'email': 'charlie@example.com', 'status': 'inactive'}, {'name': 'David', 'email': 'david@example.com', 'status': 'active'}]
-        for data in users_data:
-            await insert_one('users', data)
-        orders_data = [{'user_id': 1, 'total': 100.0, 'status': 'completed'}, {'user_id': 1, 'total': 200.0, 'status': 'pending'}, {'user_id': 2, 'total': 150.0, 'status': 'completed'}]
-        for data in orders_data:
-            await insert_one('orders', data)
-        yield
-        await execute('DROP TABLE IF EXISTS orders')
-        await execute('DROP TABLE IF EXISTS users')
+class TestSubquery(PostgresSuite):
+    pass
 
 class TestSubqueryIn(PostgresSuite):
     """Test IN subquery functionality."""

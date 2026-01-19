@@ -24,6 +24,25 @@ impl QueryBuilder {
         Ok(self)
     }
 
+    /// Specifies raw SQL expressions for SELECT (no validation).
+    ///
+    /// Use this method when columns are pre-validated or contain complex
+    /// SQL expressions like aliases or table-qualified names.
+    ///
+    /// # Arguments
+    ///
+    /// * `columns` - Raw SQL column expressions
+    ///
+    /// # Safety
+    ///
+    /// This method skips identifier validation. Callers must ensure
+    /// the column expressions are safe and properly quoted.
+    pub fn select_raw(mut self, columns: Vec<String>) -> Self {
+        self.select_columns = columns;
+        self.raw_select = true;
+        self
+    }
+
     /// Defer loading of specific columns (exclude from initial SELECT).
     ///
     /// This is useful for optimizing queries that don't need large columns
@@ -774,11 +793,21 @@ impl QueryBuilder {
             select_parts.extend(quoted_cols);
         } else if !self.select_columns.is_empty() {
             // Filter out deferred columns from select_columns
-            let quoted_cols: Vec<String> = self.select_columns.iter()
-                .filter(|c| !self.deferred_columns.contains(c))
-                .map(|c| quote_identifier(c))
-                .collect();
-            select_parts.extend(quoted_cols);
+            if self.raw_select {
+                // Raw select columns are already properly formatted SQL expressions
+                let cols: Vec<String> = self.select_columns.iter()
+                    .filter(|c| !self.deferred_columns.contains(c))
+                    .cloned()
+                    .collect();
+                select_parts.extend(cols);
+            } else {
+                // Regular select columns need quoting
+                let quoted_cols: Vec<String> = self.select_columns.iter()
+                    .filter(|c| !self.deferred_columns.contains(c))
+                    .map(|c| quote_identifier(c))
+                    .collect();
+                select_parts.extend(quoted_cols);
+            }
         }
 
         // Add window functions

@@ -119,6 +119,11 @@ impl PyExpectation {
         }
     }
 
+    /// Alias for to_not_be_none (alternative naming convention)
+    fn not_to_be_none(&self, py: Python<'_>) -> PyResult<()> {
+        self.to_not_be_none(py)
+    }
+
     /// Assert value equals expected (alias for to_equal for simple comparisons)
     fn to_be(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
         self.to_equal(py, expected)
@@ -153,6 +158,76 @@ impl PyExpectation {
                 format!("Expected {:?} to NOT be less than {:?}", self.value, expected)
             } else {
                 format!("Expected {:?} to be less than {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert greater than or equal
+    fn to_be_greater_than_or_equal(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        let result = self.value.bind(py).ge(expected.bind(py))?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT be >= {:?}", self.value, expected)
+            } else {
+                format!("Expected {:?} to be >= {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert less than or equal
+    fn to_be_less_than_or_equal(&self, py: Python<'_>, expected: PyObject) -> PyResult<()> {
+        let result = self.value.bind(py).le(expected.bind(py))?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT be <= {:?}", self.value, expected)
+            } else {
+                format!("Expected {:?} to be <= {:?}", self.value, expected)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert value is in a collection
+    fn to_be_in(&self, py: Python<'_>, collection: PyObject) -> PyResult<()> {
+        let bound_collection = collection.bind(py);
+        let result = bound_collection.contains(&self.value)?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to NOT be in {:?}", self.value, collection)
+            } else {
+                format!("Expected {:?} to be in {:?}", self.value, collection)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert value is NOT in a collection (convenience method)
+    fn to_not_be_in(&self, py: Python<'_>, collection: PyObject) -> PyResult<()> {
+        let bound_collection = collection.bind(py);
+        let result = !bound_collection.contains(&self.value)?;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!("Expected {:?} to be in {:?}", self.value, collection)
+            } else {
+                format!("Expected {:?} to NOT be in {:?}", self.value, collection)
             };
             Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
         }
@@ -273,6 +348,42 @@ impl PyExpectation {
                 format!("Expected '{}' to NOT end with '{}'", s, suffix)
             } else {
                 format!("Expected '{}' to end with '{}'", s, suffix)
+            };
+            Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
+        }
+    }
+
+    /// Assert approximate equality for floating-point numbers.
+    ///
+    /// Usage: `expect(3.14159).to_be_close_to(3.14, rel=0.01)`
+    ///
+    /// Args:
+    ///   expected: The expected value
+    ///   rel: Relative tolerance (default 1e-9). Values are considered equal if
+    ///        abs(actual - expected) <= rel * abs(expected)
+    ///   abs_tol: Absolute tolerance (default 0.0). Values are considered equal if
+    ///        abs(actual - expected) <= abs_tol
+    #[pyo3(signature = (expected, rel=1e-9, abs_tol=0.0))]
+    fn to_be_close_to(&self, py: Python<'_>, expected: f64, rel: f64, abs_tol: f64) -> PyResult<()> {
+        let actual: f64 = self.value.bind(py).extract()?;
+        let diff = (actual - expected).abs();
+        let tolerance = (rel * expected.abs()).max(abs_tol);
+        let result = diff <= tolerance;
+        let passed = if self.negated { !result } else { result };
+
+        if passed {
+            Ok(())
+        } else {
+            let msg = if self.negated {
+                format!(
+                    "Expected {} to NOT be close to {} (diff={}, tolerance={})",
+                    actual, expected, diff, tolerance
+                )
+            } else {
+                format!(
+                    "Expected {} to be close to {} (diff={}, tolerance={})",
+                    actual, expected, diff, tolerance
+                )
             };
             Err(PyErr::new::<pyo3::exceptions::PyAssertionError, _>(msg))
         }

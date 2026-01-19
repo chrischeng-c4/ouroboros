@@ -4,6 +4,7 @@ use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use base64::{Engine as _, engine::general_purpose};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use ouroboros_postgres::Connection;
 use std::sync::Arc;
 
@@ -114,13 +115,31 @@ pub(super) fn py_value_to_extracted(
         }
         "NoneType" => Ok(ExtractedValue::Null),
         "datetime" => {
-            // Handle datetime by converting to string representation
-            let s = value.str()?.to_string();
-            Ok(ExtractedValue::String(s))
+            // Extract datetime components and convert to NaiveDateTime
+            let year: i32 = value.getattr("year")?.extract()?;
+            let month: u32 = value.getattr("month")?.extract()?;
+            let day: u32 = value.getattr("day")?.extract()?;
+            let hour: u32 = value.getattr("hour")?.extract()?;
+            let minute: u32 = value.getattr("minute")?.extract()?;
+            let second: u32 = value.getattr("second")?.extract()?;
+            let microsecond: u32 = value.getattr("microsecond")?.extract()?;
+
+            let date = NaiveDate::from_ymd_opt(year, month, day)
+                .ok_or_else(|| PyTypeError::new_err("Invalid date"))?;
+            let time = NaiveTime::from_hms_micro_opt(hour, minute, second, microsecond)
+                .ok_or_else(|| PyTypeError::new_err("Invalid time"))?;
+            let datetime = NaiveDateTime::new(date, time);
+            Ok(ExtractedValue::Timestamp(datetime))
         }
         "date" => {
-            let s = value.str()?.to_string();
-            Ok(ExtractedValue::String(s))
+            // Extract date components and convert to NaiveDate
+            let year: i32 = value.getattr("year")?.extract()?;
+            let month: u32 = value.getattr("month")?.extract()?;
+            let day: u32 = value.getattr("day")?.extract()?;
+
+            let date = NaiveDate::from_ymd_opt(year, month, day)
+                .ok_or_else(|| PyTypeError::new_err("Invalid date"))?;
+            Ok(ExtractedValue::Date(date))
         }
         "UUID" | "uuid" => {
             let s = value.str()?.to_string();

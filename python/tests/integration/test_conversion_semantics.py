@@ -182,9 +182,14 @@ async def test_find_one_error_messages_unchanged():
     Success criteria (FR-010): Error messages unchanged
     """
     # Test 1: Invalid query type
-    exc_info = expect(lambda: await TestDoc.find_one("invalid_query")  # type: ignore).to_raise(Exception)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await TestDoc.find_one("invalid_query")  # type: ignore
+    except Exception as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Invalid query type should raise exception"
     # Error should mention type issue
     assert "type" in error_msg.lower() or "invalid" in error_msg.lower()
 
@@ -193,9 +198,14 @@ async def test_find_one_error_messages_unchanged():
     assert result is None
 
     # Test 3: Invalid ObjectId format
-    exc_info = expect(lambda: await TestDoc.find_one(TestDoc.id == "not_an_objectid")).to_raise(Exception)
-
-    error_msg = str(exc_info.value)
+    exception_raised = False
+    error_msg = ""
+    try:
+        await TestDoc.find_one(TestDoc.id == "not_an_objectid")
+    except Exception as e:
+        exception_raised = True
+        error_msg = str(e)
+    assert exception_raised, "Invalid ObjectId format should raise exception"
     # Error should mention ObjectId
     assert "objectid" in error_msg.lower() or "invalid" in error_msg.lower()
 

@@ -165,9 +165,9 @@ class TestAggregateWindowFunctions(PostgresSuite):
         """Test AVG() OVER with ORDER BY for moving average."""
         results = await execute("\n            SELECT\n                salesperson,\n                sale_date,\n                amount,\n                AVG(amount) OVER (\n                    PARTITION BY salesperson\n                    ORDER BY sale_date\n                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n                ) as cumulative_avg\n            FROM sales\n            WHERE salesperson = 'Alice'\n            ORDER BY sale_date\n            ")
         expect(len(results)).to_equal(3)
-        expect(float(results[0]['cumulative_avg'])).to_equal(pytest.approx(1000.0, rel=0.01))
-        expect(float(results[1]['cumulative_avg'])).to_equal(pytest.approx(1250.0, rel=0.01))
-        expect(float(results[2]['cumulative_avg'])).to_equal(pytest.approx(1500.0, rel=0.01))
+        expect(float(results[0]['cumulative_avg'])).to_be_close_to(1000.0, rel=0.01)
+        expect(float(results[1]['cumulative_avg'])).to_be_close_to(1250.0, rel=0.01)
+        expect(float(results[2]['cumulative_avg'])).to_be_close_to(1500.0, rel=0.01)
 
     @test
     async def test_sum_with_frame_specification(self, sales_table):

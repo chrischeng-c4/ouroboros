@@ -14,15 +14,23 @@ Run with:
 from ouroboros.postgres import execute
 from ouroboros.qc import expect, fixture, test
 from tests.postgres.base import PostgresSuite
-class TestExecuteIntegration(PostgresSuite):
 
-    @test
-    @fixture
-    async def test_table(self):
-        """Create a test table for execute integration tests."""
-        await execute('\n        CREATE TABLE IF NOT EXISTS test_execute_users (\n            id SERIAL PRIMARY KEY,\n            name TEXT NOT NULL,\n            email TEXT,\n            age INTEGER,\n            created_at TIMESTAMP DEFAULT NOW()\n        )\n    ')
-        await execute('TRUNCATE TABLE test_execute_users RESTART IDENTITY')
-        yield
+
+@fixture
+async def test_table():
+    """Create a test table for execute integration tests."""
+    await execute('''
+        CREATE TABLE IF NOT EXISTS test_execute_users (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT,
+            age INTEGER,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    ''')
+    await execute('TRUNCATE TABLE test_execute_users RESTART IDENTITY')
+    yield
+
 
 class TestExecuteIntegration(PostgresSuite):
     """Integration tests for execute function with real PostgreSQL."""
