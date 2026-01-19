@@ -5,8 +5,34 @@
 //! - Multiple scopes (transient, request, singleton)
 //! - Cycle detection
 //! - Async support
+//! - Type-safe dependency extraction
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use ouroboros_api::dependency::{DependencyContainer, DependencyDescriptor, DependencyScope};
+//!
+//! let mut container = DependencyContainer::new();
+//!
+//! // Register dependencies
+//! container.register(
+//!     DependencyDescriptor::new("config")
+//!         .scope(DependencyScope::Singleton)
+//! ).unwrap();
+//!
+//! container.register(
+//!     DependencyDescriptor::new("db")
+//!         .depends_on("config")
+//!         .scope(DependencyScope::Request)
+//! ).unwrap();
+//!
+//! // Compile to validate and compute resolution order
+//! container.compile().unwrap();
+//! ```
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::any::Any;
 
@@ -299,6 +325,210 @@ impl ResolutionContext {
 impl Default for ResolutionContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// ============================================================================
+// Dependency Factory Trait
+// ============================================================================
+
+/// Boxed async factory result
+pub type BoxedFactoryFuture = Pin<Box<dyn Future<Output = ApiResult<Arc<dyn Any + Send + Sync>>> + Send>>;
+
+/// Trait for async dependency factories
+///
+/// Implement this trait to create dependencies that require async initialization
+/// (e.g., database connections, HTTP clients).
+pub trait DependencyFactory: Send + Sync {
+    /// Create a new instance of the dependency
+    ///
+    /// # Arguments
+    /// * `resolver` - Access to other dependencies that this one depends on
+    ///
+    /// # Returns
+    /// The created dependency wrapped in Arc
+    fn create(&self, resolver: &DependencyResolver) -> BoxedFactoryFuture;
+
+    /// Get the dependency ID
+    fn id(&self) -> &str;
+
+    /// Get the scope for this factory
+    fn scope(&self) -> DependencyScope {
+        DependencyScope::Request
+    }
+
+    /// Get dependencies this factory depends on
+    fn depends_on(&self) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+// ============================================================================
+// Dependency Resolver
+// ============================================================================
+
+/// Type-safe dependency resolver for handler execution
+///
+/// This struct provides access to resolved dependencies during handler execution.
+/// It caches request-scoped dependencies and provides type-safe extraction.
+#[derive(Clone)]
+pub struct DependencyResolver {
+    /// Reference to the dependency container
+    container: Arc<DependencyContainer>,
+    /// Request-scoped cache
+    cache: Arc<RwLock<HashMap<String, CachedValue>>>,
+}
+
+impl DependencyResolver {
+    /// Create a new resolver from a container
+    pub fn new(container: Arc<DependencyContainer>) -> Self {
+        Self {
+            container,
+            cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Get a dependency by ID, returning the cached value
+    pub fn get_cached(&self, id: &str) -> Option<CachedValue> {
+        // First check request cache
+        if let Ok(cache) = self.cache.read() {
+            if let Some(value) = cache.get(id) {
+                return Some(value.clone());
+            }
+        }
+
+        // Then check singleton cache
+        self.container.get_singleton(id)
+    }
+
+    /// Get a dependency by ID and downcast to the expected type
+    pub fn resolve<T: Any + Send + Sync + Clone>(&self, id: &str) -> ApiResult<T> {
+        let cached = self.get_cached(id).ok_or_else(|| {
+            ApiError::Internal(format!("Dependency '{}' not resolved", id))
+        })?;
+
+        cached.value.downcast_ref::<T>().cloned().ok_or_else(|| {
+            ApiError::Internal(format!(
+                "Dependency '{}' has wrong type. Expected {}, got {}",
+                id,
+                std::any::type_name::<T>(),
+                cached.type_name
+            ))
+        })
+    }
+
+    /// Get a dependency as Arc<T> without cloning
+    pub fn resolve_arc<T: Any + Send + Sync>(&self, id: &str) -> ApiResult<Arc<T>> {
+        let cached = self.get_cached(id).ok_or_else(|| {
+            ApiError::Internal(format!("Dependency '{}' not resolved", id))
+        })?;
+
+        // Try to downcast the Arc directly
+        Arc::downcast::<T>(cached.value.clone()).map_err(|_| {
+            ApiError::Internal(format!(
+                "Dependency '{}' has wrong type. Expected {}, got {}",
+                id,
+                std::any::type_name::<T>(),
+                cached.type_name
+            ))
+        })
+    }
+
+    /// Cache a resolved value
+    pub fn cache(&self, id: String, value: CachedValue) -> ApiResult<()> {
+        let scope = self.container.get(&id)
+            .map(|d| d.scope)
+            .unwrap_or(DependencyScope::Request);
+
+        match scope {
+            DependencyScope::Singleton => {
+                self.container.set_singleton(id, value)
+            }
+            DependencyScope::Request | DependencyScope::Transient => {
+                self.cache.write()
+                    .map_err(|e| ApiError::Internal(format!("Lock error: {}", e)))?
+                    .insert(id, value);
+                Ok(())
+            }
+        }
+    }
+
+    /// Get the underlying container
+    pub fn container(&self) -> &Arc<DependencyContainer> {
+        &self.container
+    }
+
+    /// Clear request-scoped cache (call at end of request)
+    pub fn clear_request_cache(&self) {
+        if let Ok(mut cache) = self.cache.write() {
+            cache.clear();
+        }
+    }
+
+    /// Check if a dependency is resolved
+    pub fn is_resolved(&self, id: &str) -> bool {
+        self.get_cached(id).is_some()
+    }
+}
+
+impl std::fmt::Debug for DependencyResolver {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DependencyResolver")
+            .field("container_compiled", &self.container.is_compiled())
+            .finish()
+    }
+}
+
+// ============================================================================
+// Depends Marker Type
+// ============================================================================
+
+/// Marker type for dependency injection in handlers
+///
+/// Use this type in handler parameters to inject dependencies.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// async fn my_handler(db: Depends<Database>) -> ApiResult<Response> {
+///     let users = db.query("SELECT * FROM users").await?;
+///     Ok(Response::ok())
+/// }
+/// ```
+#[derive(Clone)]
+pub struct Depends<T> {
+    inner: T,
+}
+
+impl<T> Depends<T> {
+    /// Create a new Depends wrapper
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+
+    /// Get the inner value
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+}
+
+impl<T> std::ops::Deref for Depends<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T> std::ops::DerefMut for Depends<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for Depends<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Depends").field(&self.inner).finish()
     }
 }
 
