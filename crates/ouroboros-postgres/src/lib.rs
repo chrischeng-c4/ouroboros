@@ -209,6 +209,30 @@ pub mod validation;
 /// tracing spans for monitoring, and slow query logging.
 pub mod executor;
 
+/// Auto-migration detection for comparing models with database schema.
+///
+/// Compares Python model definitions with actual database schema and
+/// generates migration SQL automatically.
+pub mod auto_detect;
+
+/// CLI migration tool for database management.
+///
+/// Provides command-line interface for applying, reverting, and
+/// managing database migrations.
+pub mod cli;
+
+/// Pydantic-style validation integration.
+///
+/// Support for custom field validators, model validators, and
+/// computed fields similar to Pydantic/SQLModel.
+pub mod pydantic_validation;
+
+/// Migration history visualization.
+///
+/// ASCII tree visualization, branch detection, and export formats
+/// (Mermaid, JSON, Markdown) for migration history.
+pub mod history_vis;
+
 pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
@@ -221,5 +245,30 @@ pub use migration::{Migration, MigrationRunner, MigrationStatus};
 pub use schema::{SchemaInspector, CascadeRule, BackRef, ManyToManyConfig};
 pub use validation::validate_foreign_key_reference;
 pub use executor::{QueryExecutor, ExecutorConfig, execute_with_retry};
+
+// Auto-detection re-exports
+pub use auto_detect::{
+    AutoDetector, AutoDetectConfig, AutoDetectResult,
+    ModelDefinition, ModelField, ModelIndex, ForeignKeyRef,
+};
+
+// CLI re-exports
+pub use cli::{
+    MigrationCli, MigrationCliConfig, MigrationCommand, CliResult,
+};
+
+// Pydantic validation re-exports
+pub use pydantic_validation::{
+    ValidationError, ValidationErrors, ValidationMode,
+    FieldValidator, FieldValidatorConfig, ModelValidator, ModelValidatorConfig,
+    ComputedField, ComputedFieldConfig, ValidationRegistry,
+    EmailValidator, UrlValidator, LengthValidator, RangeValidator, PatternValidator,
+};
+
+// History visualization re-exports
+pub use history_vis::{
+    MigrationTree, MigrationNode, AsciiRenderer, AsciiConfig,
+    HistoryExporter, ExportFormat, HistoryVisualizer,
+};
 
 pub use ouroboros_common::{DataBridgeError, Result};
