@@ -1,0 +1,111 @@
+change_id: argus-mcp-daemon-2
+schema_version: '2.0'
+created_at: 2026-01-19T05:49:12.093317Z
+updated_at: 2026-01-19T06:52:00.000000Z
+phase: archived
+iteration: 1
+last_action: manual-archive
+archived_at: 2026-01-19T07:59:00.000000Z
+checksums:
+  specs/argus-daemon.md:
+    hash: sha256:e124e4b8d945371c52db4bc25b526ea97d6806a243d5dfc5aafe169b62c4b5b2
+    validated_at: 2026-01-19T06:52:00.000000Z
+  specs/_skeleton.md:
+    hash: sha256:b36a8641f8c91dcdda73cbb4ba9918e7ed1881a0d5c5de3fad5d6002b7429478
+    validated_at: 2026-01-19T05:51:05.061627Z
+  tasks.md:
+    hash: sha256:8ede28b960797d240063bee53cc245959332deb45138bc4851222038b3738ed9
+    validated_at: 2026-01-19T06:52:00.000000Z
+  proposal.md:
+    hash: sha256:aa656c117c742f25211609dbfc31e214b05fd48d23cc8d47c89118d40fdc8c7e
+    validated_at: 2026-01-19T05:51:05.061294Z
+  specs/argus-mcp.md:
+    hash: sha256:9e96f154e5bbd98d8e52443d34c9658004040e546f4f65ef8f97a2d6b9a44805
+    validated_at: 2026-01-19T05:51:05.061386Z
+  CHALLENGE.md:
+    hash: sha256:ef1bc40784e129a59bbb03e2a4461756a8a4055733ec212e64e3832e648ff06c
+    validated_at: 2026-01-19T06:52:00.000000Z
+validations:
+- step: validate-proposal
+  timestamp: 2026-01-19T05:49:12.093357Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: false
+    high: 12
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors:
+  - '[specs/argus-mcp.md] Scenario heading ''Scenario: Successfully resolve type via MCP'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-mcp.md] Scenario heading ''Scenario: Handle missing daemon'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-mcp.md] Scenario heading ''Scenario: Configuration generation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-mcp.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/argus-mcp.md] Missing **WHEN** clause in scenarios'
+  - '[specs/argus-mcp.md] Missing **THEN** clause in scenarios'
+  - '[specs/argus-daemon.md] Scenario heading ''Scenario: Fast type resolution from cache'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-daemon.md] Scenario heading ''Scenario: Incremental update on file change'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-daemon.md] Scenario heading ''Scenario: Multiple workspace isolation'' doesn''t match pattern ''WHEN\s.*THEN\s'''
+  - '[specs/argus-daemon.md] Found 0 scenarios, but minimum 1 required'
+  - '[specs/argus-daemon.md] Missing **WHEN** clause in scenarios'
+  - '[specs/argus-daemon.md] Missing **THEN** clause in scenarios'
+  warnings: []
+- step: validate-proposal
+  timestamp: 2026-01-19T05:51:05.061255Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 0
+    medium: 0
+    low: 0
+    verdict: null
+    issues_parsed: null
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T05:54:49.038534Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 2
+    medium: 2
+    low: 2
+    verdict: NEEDS_REVISION
+    issues_parsed: 6
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T06:01:36.646547Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 2
+    medium: 2
+    low: 1
+    verdict: NEEDS_REVISION
+    issues_parsed: 5
+  errors: []
+  warnings: []
+- step: validate-challenge
+  timestamp: 2026-01-19T06:07:25.195339Z
+  rules_version: '2.0'
+  rules_hash: null
+  mode: normal
+  result:
+    valid: true
+    high: 2
+    medium: 1
+    low: 2
+    verdict: NEEDS_REVISION
+    issues_parsed: 5
+  errors: []
+  warnings: []
+telemetry: null

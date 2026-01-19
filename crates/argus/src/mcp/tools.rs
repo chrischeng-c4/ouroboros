@@ -26,6 +26,7 @@ impl ArgusTools {
             Self::argus_definition(),
             Self::argus_references(),
             Self::argus_index_status(),
+            Self::argus_invalidate(),
         ]
     }
 
@@ -190,6 +191,26 @@ impl ArgusTools {
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {}
+            }),
+        }
+    }
+
+    fn argus_invalidate() -> ToolSchema {
+        ToolSchema {
+            name: "argus_invalidate".to_string(),
+            description: "Invalidate the cache for specific files, forcing re-analysis on next access".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "files": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "List of file paths to invalidate"
+                    }
+                },
+                "required": ["files"]
             }),
         }
     }

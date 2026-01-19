@@ -20,6 +20,7 @@ pub struct McpServer {
 /// MCP JSON-RPC request
 #[derive(Debug, Deserialize)]
 struct McpRequest {
+    #[allow(dead_code)]
     jsonrpc: String,
     id: Value,
     method: String,
@@ -336,6 +337,22 @@ impl McpServer {
             }
             "argus_index_status" => {
                 self.client.index_status().await
+            }
+            "argus_invalidate" => {
+                let args = arguments.as_ref().ok_or_else(|| McpError {
+                    code: -32602,
+                    message: "Missing arguments".to_string(),
+                })?;
+                let files = args.get("files")
+                    .and_then(|f| f.as_array())
+                    .ok_or_else(|| McpError {
+                        code: -32602,
+                        message: "Missing files argument".to_string(),
+                    })?;
+                let file_strs: Vec<&str> = files.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect();
+                self.client.invalidate(&file_strs).await
             }
             _ => {
                 return Err(McpError {

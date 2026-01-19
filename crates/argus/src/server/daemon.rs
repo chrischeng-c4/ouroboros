@@ -1,17 +1,17 @@
 //! Argus Daemon - Long-running code analysis server
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{broadcast, RwLock};
-
-use crate::watch::{FileWatcher, WatchConfig};
+use tokio::sync::{broadcast, mpsc, RwLock};
 
 use super::handler::RequestHandler;
 use super::protocol::{Request, Response, RpcError};
+use super::watch_bridge::{spawn_watch_bridge, BridgeEvent, WatchBridgeHandle};
 
 /// Daemon configuration
 #[derive(Debug, Clone)]
@@ -63,12 +63,23 @@ impl DaemonConfig {
     }
 }
 
+/// Status of the analysis queue
+#[derive(Debug, Clone, Default)]
+pub struct AnalysisQueueStatus {
+    /// Number of files pending analysis
+    pub pending_count: usize,
+    /// Last time analysis was performed
+    pub last_analysis: Option<Instant>,
+}
+
 /// Argus Daemon server
 pub struct ArgusDaemon {
     config: DaemonConfig,
     handler: Arc<RequestHandler>,
     shutdown_tx: broadcast::Sender<()>,
     is_running: Arc<RwLock<bool>>,
+    /// Analysis queue status
+    queue_status: Arc<RwLock<AnalysisQueueStatus>>,
 }
 
 impl ArgusDaemon {
@@ -82,6 +93,7 @@ impl ArgusDaemon {
             handler: Arc::new(handler),
             shutdown_tx,
             is_running: Arc::new(RwLock::new(false)),
+            queue_status: Arc::new(RwLock::new(AnalysisQueueStatus::default())),
         })
     }
 
@@ -112,8 +124,29 @@ impl ArgusDaemon {
         }
 
         // Start file watcher if enabled
-        let _watcher_handle = if self.config.watch {
-            Some(self.start_watcher().await?)
+        let (watch_rx, watcher_handle) = if self.config.watch {
+            let (rx, handle) = self.start_watcher().await?;
+            (Some(rx), Some(handle))
+        } else {
+            (None, None)
+        };
+
+        // Start the background analysis task if watching
+        let analysis_task = if let Some(mut watch_rx) = watch_rx {
+            let handler = Arc::clone(&self.handler);
+            let queue_status = Arc::clone(&self.queue_status);
+            let debounce = self.config.debounce;
+            let mut shutdown_rx = self.shutdown_tx.subscribe();
+
+            Some(tokio::spawn(async move {
+                run_background_analysis(
+                    &mut watch_rx,
+                    handler,
+                    queue_status,
+                    debounce,
+                    &mut shutdown_rx,
+                ).await;
+            }))
         } else {
             None
         };
@@ -127,10 +160,10 @@ impl ArgusDaemon {
                     match result {
                         Ok((stream, _addr)) => {
                             let handler = Arc::clone(&self.handler);
-                            let mut shutdown_rx = self.shutdown_tx.subscribe();
+                            let mut conn_shutdown_rx = self.shutdown_tx.subscribe();
 
                             tokio::spawn(async move {
-                                if let Err(e) = handle_connection(stream, handler, &mut shutdown_rx).await {
+                                if let Err(e) = handle_connection(stream, handler, &mut conn_shutdown_rx).await {
                                     eprintln!("Connection error: {}", e);
                                 }
                             });
@@ -153,36 +186,25 @@ impl ArgusDaemon {
             *running = false;
         }
 
+        // Stop the watcher
+        if let Some(mut handle) = watcher_handle {
+            handle.stop();
+        }
+
+        // Wait for analysis task to finish
+        if let Some(task) = analysis_task {
+            let _ = task.await;
+        }
+
         // Remove socket file
         let _ = std::fs::remove_file(&self.config.socket_path);
 
         Ok(())
     }
 
-    /// Start file watcher
-    async fn start_watcher(&self) -> Result<tokio::task::JoinHandle<()>, String> {
-        let watch_config = WatchConfig::new(self.config.root.clone())
-            .with_debounce(self.config.debounce);
-
-        let mut watcher = FileWatcher::new(watch_config)
-            .map_err(|e| format!("Failed to create watcher: {}", e))?;
-
-        watcher.start()
-            .map_err(|e| format!("Failed to start watcher: {}", e))?;
-
-        let handler = Arc::clone(&self.handler);
-
-        // File watcher runs in its own thread via notify crate
-        // For now, just spawn a placeholder task
-        // TODO: Integrate with file watcher events properly
-        let handle = tokio::spawn(async move {
-            let _ = handler;
-            loop {
-                tokio::time::sleep(Duration::from_secs(60)).await;
-            }
-        });
-
-        Ok(handle)
+    /// Start file watcher using the async bridge
+    async fn start_watcher(&self) -> Result<(mpsc::Receiver<BridgeEvent>, WatchBridgeHandle), String> {
+        spawn_watch_bridge(self.config.root.clone(), self.config.debounce)
     }
 
     /// Request shutdown
@@ -198,6 +220,117 @@ impl ArgusDaemon {
     /// Get the socket path
     pub fn socket_path(&self) -> &PathBuf {
         &self.config.socket_path
+    }
+
+    /// Get the analysis queue status
+    pub async fn queue_status(&self) -> AnalysisQueueStatus {
+        self.queue_status.read().await.clone()
+    }
+}
+
+/// Run background analysis loop
+///
+/// Consumes file watcher events, maintains a debounced queue, and
+/// re-analyzes changed files in the background.
+async fn run_background_analysis(
+    watch_rx: &mut mpsc::Receiver<BridgeEvent>,
+    handler: Arc<RequestHandler>,
+    queue_status: Arc<RwLock<AnalysisQueueStatus>>,
+    debounce: Duration,
+    shutdown_rx: &mut broadcast::Receiver<()>,
+) {
+    // Pending files to analyze (debounce queue)
+    let mut pending_files: HashSet<PathBuf> = HashSet::new();
+    let mut last_change: Option<Instant> = None;
+
+    // Analysis interval for debouncing
+    let mut debounce_interval = tokio::time::interval(Duration::from_millis(50));
+
+    loop {
+        tokio::select! {
+            // Receive watch events
+            event = watch_rx.recv() => {
+                match event {
+                    Some(BridgeEvent::FilesChanged(paths)) => {
+                        // Add files to pending queue
+                        for path in paths {
+                            pending_files.insert(path);
+                        }
+                        last_change = Some(Instant::now());
+
+                        // Update queue status
+                        {
+                            let mut status = queue_status.write().await;
+                            status.pending_count = pending_files.len();
+                        }
+                    }
+                    Some(BridgeEvent::Error(e)) => {
+                        eprintln!("Watch error: {}", e);
+                    }
+                    Some(BridgeEvent::Ready) => {
+                        println!("File watcher ready");
+                    }
+                    Some(BridgeEvent::Stopped) | None => {
+                        println!("File watcher stopped");
+                        break;
+                    }
+                }
+            }
+
+            // Check debounce interval
+            _ = debounce_interval.tick() => {
+                // Check if we should flush the queue
+                if let Some(last) = last_change {
+                    if last.elapsed() >= debounce && !pending_files.is_empty() {
+                        // Take the files and analyze them
+                        let files: Vec<PathBuf> = pending_files.drain().collect();
+                        last_change = None;
+
+                        // Update queue status
+                        {
+                            let mut status = queue_status.write().await;
+                            status.pending_count = 0;
+                        }
+
+                        // Analyze files in a blocking task
+                        let handler_clone = Arc::clone(&handler);
+                        let queue_status_clone = Arc::clone(&queue_status);
+
+                        // Spawn blocking analysis
+                        tokio::task::spawn_blocking(move || {
+                            for path in &files {
+                                // Invalidate cache for the file
+                                let rt = tokio::runtime::Handle::current();
+                                rt.block_on(async {
+                                    handler_clone.invalidate_file(path).await;
+                                });
+                            }
+
+                            // Re-analyze files by triggering a check
+                            // The handler will re-analyze on next access
+                            let rt = tokio::runtime::Handle::current();
+                            rt.block_on(async {
+                                for path in &files {
+                                    // Pre-warm the cache by analyzing the file
+                                    if let Some(path_str) = path.to_str() {
+                                        let _ = handler_clone.analyze_file_async(path_str).await;
+                                    }
+                                }
+
+                                // Update last analysis time
+                                let mut status = queue_status_clone.write().await;
+                                status.last_analysis = Some(Instant::now());
+                            });
+                        });
+                    }
+                }
+            }
+
+            // Handle shutdown
+            _ = shutdown_rx.recv() => {
+                break;
+            }
+        }
     }
 }
 
@@ -357,6 +490,43 @@ impl DaemonClient {
     pub async fn shutdown(&self) -> Result<(), String> {
         self.request("shutdown", None).await?;
         Ok(())
+    }
+
+    /// Invalidate cache for specific files
+    ///
+    /// This removes the cached analysis for the specified files, forcing
+    /// them to be re-analyzed on the next request.
+    pub async fn invalidate(&self, files: &[&str]) -> Result<serde_json::Value, String> {
+        let file_list: Vec<String> = files.iter().map(|s| s.to_string()).collect();
+        self.request("invalidate", Some(serde_json::json!({ "files": file_list }))).await
+    }
+
+    /// Request hover information at a position
+    pub async fn hover(&self, file: &str, line: u32, column: u32) -> Result<serde_json::Value, String> {
+        self.request("hover", Some(serde_json::json!({
+            "file": file,
+            "line": line,
+            "column": column
+        }))).await
+    }
+
+    /// Request definition location at a position
+    pub async fn definition(&self, file: &str, line: u32, column: u32) -> Result<serde_json::Value, String> {
+        self.request("definition", Some(serde_json::json!({
+            "file": file,
+            "line": line,
+            "column": column
+        }))).await
+    }
+
+    /// Request all references at a position
+    pub async fn references(&self, file: &str, line: u32, column: u32, include_declaration: bool) -> Result<serde_json::Value, String> {
+        self.request("references", Some(serde_json::json!({
+            "file": file,
+            "line": line,
+            "column": column,
+            "include_declaration": include_declaration
+        }))).await
     }
 }
 

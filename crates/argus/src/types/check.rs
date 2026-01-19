@@ -1053,6 +1053,497 @@ impl<'a> TypeChecker<'a> {
     }
 }
 
+// ============================================================================
+// SemanticModel builder - produces an owned SemanticModel from type checking
+// ============================================================================
+
+use std::path::PathBuf;
+use super::model::{
+    ParamInfo, ScopeId, SemanticModel, SemanticSymbolKind, SymbolData, TypeInfo,
+};
+
+/// Builder for creating SemanticModel from parsed code
+///
+/// This struct traverses the AST and collects type information,
+/// producing an owned SemanticModel that can be cached and queried.
+pub struct SemanticModelBuilder<'a> {
+    source: &'a str,
+    file_path: PathBuf,
+    model: SemanticModel,
+    current_scope: ScopeId,
+    scope_stack: Vec<ScopeId>,
+}
+
+impl<'a> SemanticModelBuilder<'a> {
+    /// Create a new builder for the given source
+    pub fn new(source: &'a str, file_path: PathBuf) -> Self {
+        let mut model = SemanticModel::new();
+        let root_scope = model.add_scope(None, Range::default());
+
+        Self {
+            source,
+            file_path,
+            model,
+            current_scope: root_scope,
+            scope_stack: vec![root_scope],
+        }
+    }
+
+    /// Build a SemanticModel from a parsed file
+    pub fn build(mut self, file: &ParsedFile) -> SemanticModel {
+        let root = file.tree.root_node();
+        self.visit_node(&root);
+        self.model.finalize();
+        self.model
+    }
+
+    /// Push a new scope
+    fn push_scope(&mut self, range: Range) -> ScopeId {
+        let new_scope = self.model.add_scope(Some(self.current_scope), range);
+        self.scope_stack.push(self.current_scope);
+        self.current_scope = new_scope;
+        new_scope
+    }
+
+    /// Pop the current scope
+    fn pop_scope(&mut self) {
+        if let Some(parent) = self.scope_stack.pop() {
+            self.current_scope = parent;
+        }
+    }
+
+    /// Parse a type from a node using the annotation parser
+    fn parse_type_from_node(&self, node: &Node) -> TypeInfo {
+        let ty = parse_type_annotation(self.source, node);
+        TypeInfo::from_type(&ty)
+    }
+
+    /// Visit a node and its children
+    fn visit_node(&mut self, node: &Node) {
+        // Skip error nodes
+        if node.is_error() || node.is_missing() {
+            return;
+        }
+
+        match node.kind() {
+            "function_definition" | "async_function_definition" => {
+                self.visit_function(node);
+                return;
+            }
+            "class_definition" => {
+                self.visit_class(node);
+                return;
+            }
+            "assignment" => {
+                self.visit_assignment(node);
+            }
+            _ => {}
+        }
+
+        // Visit children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.visit_node(&child);
+        }
+    }
+
+    /// Visit a function definition
+    fn visit_function(&mut self, node: &Node) {
+        let name_node = node.child_by_field_name("name");
+        let name = name_node
+            .map(|n| self.node_text(&n).to_string())
+            .unwrap_or_default();
+        let def_range = name_node
+            .as_ref()
+            .map(|n| Range::from_node(n))
+            .unwrap_or_default();
+
+        // Get return type
+        let return_type = node
+            .child_by_field_name("return_type")
+            .map(|n| self.parse_type_from_node(&n))
+            .unwrap_or(TypeInfo::Unknown);
+
+        // Get parameters
+        let params = self.collect_parameters(node);
+
+        // Build callable type
+        let type_info = TypeInfo::Callable {
+            params,
+            return_type: Box::new(return_type),
+        };
+
+        // Extract docstring
+        let documentation = self.extract_docstring(node);
+
+        // Add function symbol
+        let symbol_id = self.model.add_symbol(SymbolData {
+            name,
+            kind: SemanticSymbolKind::Function,
+            def_range: def_range.clone(),
+            file_path: self.file_path.clone(),
+            type_info: type_info.clone(),
+            documentation,
+            scope_id: self.current_scope,
+            parent_id: None,
+        });
+
+        // Add typed range for the function name
+        self.model.add_typed_range(def_range, type_info, Some(symbol_id));
+
+        // Enter function scope
+        let func_range = Range::from_node(node);
+        self.push_scope(func_range);
+
+        // Process parameters
+        if let Some(ref params) = node.child_by_field_name("parameters") {
+            self.visit_parameters(params);
+        }
+
+        // Process body
+        if let Some(ref body) = node.child_by_field_name("body") {
+            self.visit_node(body);
+        }
+
+        self.pop_scope();
+    }
+
+    /// Visit a class definition
+    fn visit_class(&mut self, node: &Node) {
+        let name_node = node.child_by_field_name("name");
+        let name = name_node
+            .map(|n| self.node_text(&n).to_string())
+            .unwrap_or_default();
+        let def_range = name_node
+            .as_ref()
+            .map(|n| Range::from_node(n))
+            .unwrap_or_default();
+
+        let type_info = TypeInfo::Instance {
+            name: name.clone(),
+            module: None,
+            type_args: vec![],
+        };
+
+        let documentation = self.extract_docstring(node);
+
+        let class_id = self.model.add_symbol(SymbolData {
+            name,
+            kind: SemanticSymbolKind::Class,
+            def_range: def_range.clone(),
+            file_path: self.file_path.clone(),
+            type_info: type_info.clone(),
+            documentation,
+            scope_id: self.current_scope,
+            parent_id: None,
+        });
+
+        self.model.add_typed_range(def_range, type_info, Some(class_id));
+
+        // Enter class scope
+        let class_range = Range::from_node(node);
+        self.push_scope(class_range);
+
+        // Process body
+        if let Some(ref body) = node.child_by_field_name("body") {
+            self.visit_class_body(body, class_id);
+        }
+
+        self.pop_scope();
+    }
+
+    /// Visit class body and add methods/attributes
+    fn visit_class_body(&mut self, body: &Node, class_id: super::model::SymbolId) {
+        let mut cursor = body.walk();
+        for child in body.children(&mut cursor) {
+            match child.kind() {
+                "function_definition" | "async_function_definition" => {
+                    self.visit_method(&child, class_id);
+                }
+                "expression_statement" => {
+                    // Check for class attributes (type annotations)
+                    if let Some(expr) = child.child(0) {
+                        if expr.kind() == "assignment" || expr.kind() == "type" {
+                            self.visit_class_attribute(&expr, class_id);
+                        }
+                    }
+                }
+                _ => self.visit_node(&child),
+            }
+        }
+    }
+
+    /// Visit a method (function inside class)
+    fn visit_method(&mut self, node: &Node, class_id: super::model::SymbolId) {
+        let name_node = node.child_by_field_name("name");
+        let name = name_node
+            .map(|n| self.node_text(&n).to_string())
+            .unwrap_or_default();
+        let def_range = name_node
+            .as_ref()
+            .map(|n| Range::from_node(n))
+            .unwrap_or_default();
+
+        let return_type = node
+            .child_by_field_name("return_type")
+            .map(|n| self.parse_type_from_node(&n))
+            .unwrap_or(TypeInfo::Unknown);
+
+        let params = self.collect_parameters(node);
+
+        let type_info = TypeInfo::Callable {
+            params,
+            return_type: Box::new(return_type),
+        };
+
+        let documentation = self.extract_docstring(node);
+
+        let method_id = self.model.add_symbol(SymbolData {
+            name,
+            kind: SemanticSymbolKind::Method,
+            def_range: def_range.clone(),
+            file_path: self.file_path.clone(),
+            type_info: type_info.clone(),
+            documentation,
+            scope_id: self.current_scope,
+            parent_id: Some(class_id),
+        });
+
+        self.model.add_typed_range(def_range, type_info, Some(method_id));
+
+        // Process method body in its own scope
+        let method_range = Range::from_node(node);
+        self.push_scope(method_range);
+
+        if let Some(ref params) = node.child_by_field_name("parameters") {
+            self.visit_parameters(params);
+        }
+
+        if let Some(ref body) = node.child_by_field_name("body") {
+            self.visit_node(body);
+        }
+
+        self.pop_scope();
+    }
+
+    /// Visit a class attribute
+    fn visit_class_attribute(&mut self, node: &Node, class_id: super::model::SymbolId) {
+        if let Some(left) = node.child_by_field_name("left") {
+            if left.kind() == "identifier" {
+                let name = self.node_text(&left).to_string();
+                let def_range = Range::from_node(&left);
+
+                let type_info = node
+                    .child_by_field_name("type")
+                    .map(|n| self.parse_type_from_node(&n))
+                    .unwrap_or(TypeInfo::Unknown);
+
+                let symbol_id = self.model.add_symbol(SymbolData {
+                    name,
+                    kind: SemanticSymbolKind::Attribute,
+                    def_range: def_range.clone(),
+                    file_path: self.file_path.clone(),
+                    type_info: type_info.clone(),
+                    documentation: None,
+                    scope_id: self.current_scope,
+                    parent_id: Some(class_id),
+                });
+
+                self.model.add_typed_range(def_range, type_info, Some(symbol_id));
+            }
+        }
+    }
+
+    /// Visit an assignment
+    fn visit_assignment(&mut self, node: &Node) {
+        if let Some(left) = node.child_by_field_name("left") {
+            if left.kind() == "identifier" {
+                let name = self.node_text(&left).to_string();
+                let def_range = Range::from_node(&left);
+
+                // Try to get type from annotation, or use Unknown
+                let type_info = node
+                    .child_by_field_name("type")
+                    .map(|n| self.parse_type_from_node(&n))
+                    .unwrap_or(TypeInfo::Unknown);
+
+                let symbol_id = self.model.add_symbol(SymbolData {
+                    name,
+                    kind: SemanticSymbolKind::Variable,
+                    def_range: def_range.clone(),
+                    file_path: self.file_path.clone(),
+                    type_info: type_info.clone(),
+                    documentation: None,
+                    scope_id: self.current_scope,
+                    parent_id: None,
+                });
+
+                self.model.add_typed_range(def_range, type_info, Some(symbol_id));
+            }
+        }
+
+        // Visit right-hand side
+        if let Some(ref right) = node.child_by_field_name("right") {
+            self.visit_node(right);
+        }
+    }
+
+    /// Visit function parameters
+    fn visit_parameters(&mut self, params: &Node) {
+        let mut cursor = params.walk();
+        for child in params.children(&mut cursor) {
+            match child.kind() {
+                "identifier" => {
+                    let name = self.node_text(&child).to_string();
+                    let def_range = Range::from_node(&child);
+
+                    let symbol_id = self.model.add_symbol(SymbolData {
+                        name,
+                        kind: SemanticSymbolKind::Parameter,
+                        def_range: def_range.clone(),
+                        file_path: self.file_path.clone(),
+                        type_info: TypeInfo::Unknown,
+                        documentation: None,
+                        scope_id: self.current_scope,
+                        parent_id: None,
+                    });
+
+                    self.model.add_typed_range(def_range, TypeInfo::Unknown, Some(symbol_id));
+                }
+                "typed_parameter" | "typed_default_parameter" | "default_parameter" => {
+                    if let Some(name_node) = child.child_by_field_name("name") {
+                        let name = self.node_text(&name_node).to_string();
+                        let def_range = Range::from_node(&name_node);
+
+                        let type_info = child
+                            .child_by_field_name("type")
+                            .map(|n| self.parse_type_from_node(&n))
+                            .unwrap_or(TypeInfo::Unknown);
+
+                        let symbol_id = self.model.add_symbol(SymbolData {
+                            name,
+                            kind: SemanticSymbolKind::Parameter,
+                            def_range: def_range.clone(),
+                            file_path: self.file_path.clone(),
+                            type_info: type_info.clone(),
+                            documentation: None,
+                            scope_id: self.current_scope,
+                            parent_id: None,
+                        });
+
+                        self.model.add_typed_range(def_range, type_info, Some(symbol_id));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Collect parameters as ParamInfo for type signatures
+    fn collect_parameters(&self, node: &Node) -> Vec<ParamInfo> {
+        let mut params = Vec::new();
+
+        if let Some(params_node) = node.child_by_field_name("parameters") {
+            let mut cursor = params_node.walk();
+            for child in params_node.children(&mut cursor) {
+                let (name, type_info, has_default, is_variadic, is_keyword) = match child.kind() {
+                    "identifier" => {
+                        let name = self.node_text(&child).to_string();
+                        (name, TypeInfo::Unknown, false, false, false)
+                    }
+                    "typed_parameter" => {
+                        let name = child
+                            .child_by_field_name("name")
+                            .map(|n| self.node_text(&n).to_string())
+                            .unwrap_or_default();
+                        let ty = child
+                            .child_by_field_name("type")
+                            .map(|n| self.parse_type_from_node(&n))
+                            .unwrap_or(TypeInfo::Unknown);
+                        (name, ty, false, false, false)
+                    }
+                    "default_parameter" => {
+                        let name = child
+                            .child_by_field_name("name")
+                            .map(|n| self.node_text(&n).to_string())
+                            .unwrap_or_default();
+                        (name, TypeInfo::Unknown, true, false, false)
+                    }
+                    "typed_default_parameter" => {
+                        let name = child
+                            .child_by_field_name("name")
+                            .map(|n| self.node_text(&n).to_string())
+                            .unwrap_or_default();
+                        let ty = child
+                            .child_by_field_name("type")
+                            .map(|n| self.parse_type_from_node(&n))
+                            .unwrap_or(TypeInfo::Unknown);
+                        (name, ty, true, false, false)
+                    }
+                    "list_splat_pattern" => {
+                        let name = child
+                            .child(1)
+                            .map(|n| self.node_text(&n).to_string())
+                            .unwrap_or_else(|| "*args".to_string());
+                        (name, TypeInfo::Unknown, false, true, false)
+                    }
+                    "dictionary_splat_pattern" => {
+                        let name = child
+                            .child(1)
+                            .map(|n| self.node_text(&n).to_string())
+                            .unwrap_or_else(|| "**kwargs".to_string());
+                        (name, TypeInfo::Unknown, false, false, true)
+                    }
+                    _ => continue,
+                };
+
+                params.push(ParamInfo {
+                    name,
+                    type_info,
+                    has_default,
+                    is_variadic,
+                    is_keyword,
+                });
+            }
+        }
+
+        params
+    }
+
+    /// Extract docstring from a function or class
+    fn extract_docstring(&self, node: &Node) -> Option<String> {
+        let body = node.child_by_field_name("body")?;
+        let mut cursor = body.walk();
+        let first_child = body.children(&mut cursor).next()?;
+
+        if first_child.kind() == "expression_statement" {
+            if let Some(expr) = first_child.child(0) {
+                if expr.kind() == "string" {
+                    let text = self.node_text(&expr);
+                    let doc = text
+                        .trim_start_matches("\"\"\"")
+                        .trim_start_matches("'''")
+                        .trim_end_matches("\"\"\"")
+                        .trim_end_matches("'''")
+                        .trim();
+                    return Some(doc.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// Get text of a node
+    fn node_text(&self, node: &Node) -> &str {
+        node.utf8_text(self.source.as_bytes()).unwrap_or("")
+    }
+}
+
+/// Create a SemanticModel from a parsed file
+pub fn build_semantic_model(file: &ParsedFile, source: &str, file_path: PathBuf) -> SemanticModel {
+    SemanticModelBuilder::new(source, file_path).build(file)
+}
+
 #[cfg(test)]
 #[path = "check_tests.rs"]
 mod tests;

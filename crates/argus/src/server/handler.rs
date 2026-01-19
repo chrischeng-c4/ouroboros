@@ -10,16 +10,20 @@ use crate::diagnostic::Diagnostic;
 use crate::lint::CheckerRegistry;
 use crate::semantic::{SymbolTable, SymbolTableBuilder};
 use crate::syntax::{Language, MultiParser, ParsedFile};
-use crate::types::StubLoader;
+use crate::types::{build_semantic_model, SemanticModel, StubLoader};
 use crate::LintConfig;
 
 use super::protocol::*;
 
 /// Cached analysis for a file
 struct FileAnalysis {
+    #[allow(dead_code)]
     parsed: ParsedFile,
     symbol_table: SymbolTable,
+    semantic_model: SemanticModel,
     diagnostics: Vec<Diagnostic>,
+    #[allow(dead_code)]
+    source: String,
 }
 
 /// Request handler with caching
@@ -33,6 +37,7 @@ pub struct RequestHandler {
     /// Lint configuration
     config: Arc<LintConfig>,
     /// Type stubs
+    #[allow(dead_code)]
     stubs: Arc<RwLock<StubLoader>>,
     /// Parser (not thread-safe, needs mutex)
     parser: Arc<tokio::sync::Mutex<MultiParser>>,
@@ -133,7 +138,13 @@ impl RequestHandler {
         let analysis = cache.get(&path)
             .ok_or_else(|| RpcError::invalid_params("File not found in cache"))?;
 
-        // Find symbol at position
+        // First try SemanticModel for type info
+        if let Some(type_info) = analysis.semantic_model.type_at(params.line, params.column) {
+            return serde_json::to_value(type_info.display())
+                .map_err(|e| RpcError::internal_error(e.to_string()));
+        }
+
+        // Fall back to symbol table
         let symbol = analysis.symbol_table.find_at_position(params.line, params.column);
 
         match symbol {
@@ -212,6 +223,19 @@ impl RequestHandler {
         let analysis = cache.get(&path)
             .ok_or_else(|| RpcError::invalid_params("File not found in cache"))?;
 
+        // First try SemanticModel for hover info
+        if let Some(hover_content) = analysis.semantic_model.hover_at(params.line, params.column) {
+            let response = serde_json::json!({
+                "contents": {
+                    "kind": "markdown",
+                    "value": hover_content
+                }
+            });
+            return serde_json::to_value(response)
+                .map_err(|e| RpcError::internal_error(e.to_string()));
+        }
+
+        // Fall back to symbol table
         let symbol = analysis.symbol_table.find_at_position(params.line, params.column);
 
         match symbol {
@@ -237,6 +261,20 @@ impl RequestHandler {
         let analysis = cache.get(&path)
             .ok_or_else(|| RpcError::invalid_params("File not found in cache"))?;
 
+        // First try SemanticModel for definition
+        if let Some(symbol_data) = analysis.semantic_model.definition_at(params.line, params.column) {
+            let loc = LocationInfo {
+                file: symbol_data.file_path.to_string_lossy().to_string(),
+                line: symbol_data.def_range.start.line,
+                column: symbol_data.def_range.start.character,
+                end_line: symbol_data.def_range.end.line,
+                end_column: symbol_data.def_range.end.character,
+            };
+            return serde_json::to_value(loc)
+                .map_err(|e| RpcError::internal_error(e.to_string()));
+        }
+
+        // Fall back to symbol table
         let symbol = analysis.symbol_table.find_definition_at(params.line, params.column);
 
         match symbol {
@@ -268,6 +306,24 @@ impl RequestHandler {
         let analysis = cache.get(&path)
             .ok_or_else(|| RpcError::invalid_params("File not found in cache"))?;
 
+        // First try SemanticModel for references
+        let sem_refs = analysis.semantic_model.references_at(params.line, params.column, params.include_declaration);
+        if !sem_refs.is_empty() {
+            let locations: Vec<LocationInfo> = sem_refs
+                .into_iter()
+                .map(|r| LocationInfo {
+                    file: path.to_string_lossy().to_string(),
+                    line: r.range.start.line,
+                    column: r.range.start.character,
+                    end_line: r.range.end.line,
+                    end_column: r.range.end.character,
+                })
+                .collect();
+            return serde_json::to_value(locations)
+                .map_err(|e| RpcError::internal_error(e.to_string()));
+        }
+
+        // Fall back to symbol table
         let refs = analysis.symbol_table.find_references_at(
             params.line,
             params.column,
@@ -410,11 +466,18 @@ impl RequestHandler {
         let checker = self.registry.get(language)?;
         let diagnostics = checker.check(&parsed, &self.config);
 
-        // Build symbol table
+        // Build symbol table (legacy - for backwards compatibility)
         let symbol_table = if language == Language::Python {
             SymbolTableBuilder::new().build_python(&parsed)
         } else {
             SymbolTable::default()
+        };
+
+        // Build semantic model for type analysis
+        let semantic_model = if language == Language::Python {
+            build_semantic_model(&parsed, &source, path.to_path_buf())
+        } else {
+            SemanticModel::new()
         };
 
         let diag_infos = self.convert_diagnostics(path, &diagnostics);
@@ -425,7 +488,9 @@ impl RequestHandler {
             cache.insert(path.to_path_buf(), FileAnalysis {
                 parsed,
                 symbol_table,
+                semantic_model,
                 diagnostics,
+                source: source.clone(),
             });
         }
 
@@ -444,6 +509,35 @@ impl RequestHandler {
             code: d.code.clone(),
             message: d.message.clone(),
         }).collect()
+    }
+
+    // =========================================================================
+    // Public methods for background analysis
+    // =========================================================================
+
+    /// Invalidate the cache for a specific file
+    ///
+    /// Used by the background analysis loop to clear stale cache entries
+    /// when files change on disk.
+    pub async fn invalidate_file(&self, path: &Path) {
+        let mut cache = self.cache.write().await;
+        cache.remove(path);
+    }
+
+    /// Analyze a file asynchronously and cache the results
+    ///
+    /// Used by the background analysis loop to pre-warm the cache
+    /// after file changes.
+    pub async fn analyze_file_async(&self, path_str: &str) -> Option<()> {
+        let path = self.resolve_path(path_str);
+        self.check_file(&path).await?;
+        Some(())
+    }
+
+    /// Get the current cache size
+    pub async fn cache_size(&self) -> usize {
+        let cache = self.cache.read().await;
+        cache.len()
     }
 }
 

@@ -13,7 +13,7 @@ use crate::diagnostic::{Diagnostic as ArgusDiagnostic, DiagnosticSeverity as Arg
 use crate::lint::CheckerRegistry;
 use crate::semantic::{SymbolTable, SymbolTableBuilder};
 use crate::syntax::{MultiParser, ParsedFile};
-use crate::types::{StubLoader, TypeChecker};
+use crate::types::StubLoader;
 use crate::{LintConfig, Language};
 
 /// Document state tracked by the server
