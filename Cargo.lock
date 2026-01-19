@@ -3482,6 +3482,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "ouroboros-common",
+ "parking_lot",
  "pyo3",
  "pyo3-async-runtimes",
  "tempfile",
