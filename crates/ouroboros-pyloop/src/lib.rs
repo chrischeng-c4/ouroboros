@@ -41,6 +41,8 @@ mod timer_wheel;
 pub mod file_io;
 pub mod signal;
 pub mod executor;
+#[cfg(unix)]
+pub mod unix_socket;
 
 pub use error::PyLoopError;
 pub use loop_impl::PyLoop;
@@ -68,6 +70,15 @@ pub use signal::{SignalType, SignalHandler, ctrl_c};
 
 // Executor re-exports
 pub use executor::{ThreadPoolExecutor, run_in_executor, spawn_blocking, set_default_executor};
+
+// Unix socket re-exports
+#[cfg(unix)]
+pub use unix_socket::{
+    UnixTransport, UnixServer, UnixStreamReader, UnixStreamWriter,
+    create_unix_connection, create_unix_connection_with_timeout,
+    create_unix_server, create_unix_server_with_permissions,
+    open_unix_connection,
+};
 
 /// Initialize the Tokio runtime for use with PyLoop.
 ///
