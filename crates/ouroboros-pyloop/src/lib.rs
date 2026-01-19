@@ -34,6 +34,7 @@ mod error;
 mod loop_impl;
 mod future;
 mod handle;
+mod network;
 mod task;
 mod timer_wheel;
 
@@ -41,6 +42,11 @@ pub use error::PyLoopError;
 pub use loop_impl::PyLoop;
 pub use future::PyFuture;
 pub use handle::{Handle, TimerHandle};
+pub use network::{
+    TcpTransport, TcpServer, StreamReader, StreamWriter,
+    create_connection, create_connection_with_timeout,
+    create_server, open_connection, open_connection_with_timeout,
+};
 pub use task::{PyCancelledError, Task};
 pub use timer_wheel::{TimerWheel, TimerEntry, ScheduledCallback};
 
