@@ -336,6 +336,19 @@ impl Response {
     pub fn as_serializable(&self) -> &SerializableResponse {
         &self.inner
     }
+
+    /// Set a header (mutating version)
+    ///
+    /// Unlike `header()` which uses builder pattern (consumes self),
+    /// this method modifies the response in place.
+    pub fn set_header(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        self.inner.headers.insert(name.into().to_lowercase(), value.into());
+    }
+
+    /// Get a header value
+    pub fn get_header(&self, name: &str) -> Option<&str> {
+        self.inner.headers.get(&name.to_lowercase()).map(|s| s.as_str())
+    }
 }
 
 impl Default for Response {

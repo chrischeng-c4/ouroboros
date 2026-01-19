@@ -323,6 +323,11 @@ impl Request {
         self.inner.method
     }
 
+    /// Get HTTP method as string
+    pub fn method_str(&self) -> &'static str {
+        self.inner.method.as_str()
+    }
+
     /// Get request path
     pub fn path(&self) -> &str {
         &self.inner.path
