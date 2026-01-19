@@ -17,6 +17,10 @@ once_cell.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }
+libc = "0.2"
+
+# Additional dependencies
+num_cpus = "1.16"
 
 # Shared utilities
 ouroboros-common = { path = "../ouroboros-common" }
@@ -26,3 +30,4 @@ crate-type = ["rlib"]
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3"

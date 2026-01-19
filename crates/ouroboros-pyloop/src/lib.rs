@@ -38,6 +38,9 @@ mod network;
 mod subprocess;
 mod task;
 mod timer_wheel;
+pub mod file_io;
+pub mod signal;
+pub mod executor;
 
 pub use error::PyLoopError;
 pub use loop_impl::PyLoop;
@@ -56,6 +59,15 @@ pub use subprocess::{
 };
 pub use task::{PyCancelledError, Task};
 pub use timer_wheel::{TimerWheel, TimerEntry, ScheduledCallback};
+
+// File I/O re-exports
+pub use file_io::{AsyncFile, FileBuilder, read_file, write_file, append_file, copy_file, remove_file};
+
+// Signal handling re-exports
+pub use signal::{SignalType, SignalHandler, ctrl_c};
+
+// Executor re-exports
+pub use executor::{ThreadPoolExecutor, run_in_executor, spawn_blocking, set_default_executor};
 
 /// Initialize the Tokio runtime for use with PyLoop.
 ///

@@ -3473,11 +3473,14 @@ name = "ouroboros-pyloop"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "libc",
  "nix",
+ "num_cpus",
  "once_cell",
  "ouroboros-common",
  "pyo3",
  "pyo3-async-runtimes",
+ "tempfile",
  "thiserror 2.0.17",
  "tokio",
  "tokio-test",
