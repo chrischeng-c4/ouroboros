@@ -19,6 +19,13 @@ mod cache;
 mod config;
 mod model;
 mod env;
+mod deep_inference;
+mod mutable_ast;
+mod refactoring;
+mod codegen;
+mod semantic_search;
+mod incremental;
+mod frameworks;
 
 pub use ty::{LiteralValue, Param, ParamKind, Type, TypeVarId, Variance};
 pub use class_info::{ClassInfo, GenericParam};
@@ -41,4 +48,39 @@ pub use env::{
     detect_python_environment, detect_with_config, detect_all_venvs,
     find_site_packages, is_venv_directory, get_venv_python_version,
     DetectedEnv, EnvInfo, VenvType,
+};
+pub use deep_inference::{
+    TypeContext, TypeBinding, TypeVarInfo as DeepTypeVarInfo, ProtocolDef, MethodSignature,
+    GenericKey, DeepTypeInferencer, FileAnalysis, ImportInfo, ImportGraph,
+    TypeTraceStep, DeepInferenceResult, CrossFileRef,
+    infer_type_deep, trace_type_chain,
+};
+pub use mutable_ast::{
+    NodeId, NodeRef, MutableNode, Span, NodeMetadata,
+    MutableAst, AstEdit, TreeDiff,
+};
+pub use refactoring::{
+    RefactorRequest, RefactorKind, RefactorOptions, SignatureChanges,
+    RefactorResult, TextEdit, ImportChange, RefactorDiagnostic, DiagnosticLevel,
+    RefactoringEngine,
+};
+pub use codegen::{
+    CodeGenRequest, CodeGenKind, DocstringStyle, TestFramework, CodeGenOptions,
+    CodeGenResult, CodeGenerator,
+};
+pub use semantic_search::{
+    SearchQuery, SearchKind, CallDirection, TypeHierarchyDirection, SearchScope,
+    SearchResult, SearchMatch, MatchKind, MatchContext, SearchStats,
+    SemanticSearchEngine, SymbolLocation, TypeLocation,
+};
+pub use incremental::{
+    FileChange, ChangeKind, ChangeTracker, DependencyGraph,
+    IncrementalConfig, AnalysisResult, IncrementalAnalyzer, CachedAnalysis,
+};
+pub use frameworks::{
+    Framework, FrameworkDetection, FrameworkDetector, FrameworkTypeProvider, MethodType,
+    DjangoTypeProvider, DjangoModel, DjangoField, DjangoFieldType, DjangoRelation, DjangoRelationType,
+    FastAPITypeProvider, FastAPIEndpoint,
+    PydanticTypeProvider, PydanticModel, PydanticField, PydanticConfig, PydanticExtra,
+    FrameworkRegistry,
 };
