@@ -2,7 +2,7 @@
 //!
 //! Provides crash recovery and atomic operations for cell store.
 
-use crate::{Result, SheetDbError};
+use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs::File;

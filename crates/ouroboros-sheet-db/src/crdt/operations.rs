@@ -2,7 +2,7 @@
 //!
 //! Implements Last-Write-Wins (LWW) CRDT for cell values with conflict resolution.
 
-use crate::{Result, SheetDbError};
+use crate::Result;
 use ouroboros_sheet_core::CellValue;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;

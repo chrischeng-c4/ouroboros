@@ -10,7 +10,8 @@ name = "ouroboros"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3.workspace = true
+# Use extension-module for the final Python extension (not for intermediate library crates)
+pyo3 = { workspace = true, features = ["extension-module"] }
 pyo3-async-runtimes.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
