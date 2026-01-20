@@ -37,6 +37,11 @@ enum Commands {
         #[command(subcommand)]
         action: ArgusAction,
     },
+    /// Talos - Rust-based build tool for web applications
+    Talos {
+        #[command(subcommand)]
+        action: TalosAction,
+    },
     /// Lint - alias for argus check (deprecated, use 'ob argus')
     #[command(hide = true)]
     Lint {
@@ -129,6 +134,68 @@ enum QcAction {
 }
 
 #[derive(Subcommand)]
+enum TalosAction {
+    /// Initialize a new project
+    Init {
+        /// Project name
+        name: Option<String>,
+    },
+
+    /// Install dependencies from package.json
+    Install {
+        /// Specific packages to install
+        packages: Vec<String>,
+    },
+
+    /// Add a new dependency
+    Add {
+        /// Package to add
+        package: String,
+
+        /// Add as dev dependency
+        #[arg(short, long)]
+        dev: bool,
+    },
+
+    /// Remove a dependency
+    Remove {
+        /// Package to remove
+        package: String,
+    },
+
+    /// Update dependencies
+    Update {
+        /// Specific package to update
+        package: Option<String>,
+    },
+
+    /// Start development server with HMR
+    Dev {
+        /// Port to run on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Host to bind to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+
+    /// Build for production
+    Build {
+        /// Watch mode
+        #[arg(short, long)]
+        watch: bool,
+
+        /// Output directory
+        #[arg(short, long, default_value = "dist")]
+        output: String,
+    },
+
+    /// Type check TypeScript files
+    Check,
+}
+
+#[derive(Subcommand)]
 enum ArgusAction {
     /// Check files for issues (linting + analysis)
     Check {
@@ -193,6 +260,32 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Talos { action } => match action {
+            TalosAction::Init { name } => {
+                run_talos_init(name)?;
+            }
+            TalosAction::Install { packages } => {
+                run_talos_install(packages)?;
+            }
+            TalosAction::Add { package, dev } => {
+                run_talos_add(&package, dev)?;
+            }
+            TalosAction::Remove { package } => {
+                run_talos_remove(&package)?;
+            }
+            TalosAction::Update { package } => {
+                run_talos_update(package)?;
+            }
+            TalosAction::Dev { port, host } => {
+                run_talos_dev(&host, port)?;
+            }
+            TalosAction::Build { watch, output } => {
+                run_talos_build(&output, watch)?;
+            }
+            TalosAction::Check => {
+                run_talos_check()?;
+            }
+        },
         Commands::Qc { action } => match action {
             QcAction::Run {
                 path,
@@ -1126,5 +1219,82 @@ fn list_argus_rules(lang: Option<String>) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+// =============================================================================
+// Talos Commands
+// =============================================================================
+
+/// Initialize a new Talos project
+fn run_talos_init(name: Option<String>) -> Result<()> {
+    let project_name = name.unwrap_or_else(|| "my-app".to_string());
+    println!("🚀 Initializing Talos project: {}", project_name);
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Install dependencies
+fn run_talos_install(packages: Vec<String>) -> Result<()> {
+    if packages.is_empty() {
+        println!("📦 Installing dependencies from package.json...");
+    } else {
+        println!("📦 Installing: {}", packages.join(", "));
+    }
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Add a dependency
+fn run_talos_add(package: &str, dev: bool) -> Result<()> {
+    println!("➕ Adding package: {}", package);
+    if dev {
+        println!("   (as dev dependency)");
+    }
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Remove a dependency
+fn run_talos_remove(package: &str) -> Result<()> {
+    println!("➖ Removing package: {}", package);
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Update dependencies
+fn run_talos_update(package: Option<String>) -> Result<()> {
+    if let Some(pkg) = package {
+        println!("🔄 Updating package: {}", pkg);
+    } else {
+        println!("🔄 Updating all dependencies...");
+    }
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Start development server
+fn run_talos_dev(host: &str, port: u16) -> Result<()> {
+    println!("🚀 Starting Talos development server...");
+    println!("   Local: http://{}:{}", host, port);
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Build for production
+fn run_talos_build(output: &str, watch: bool) -> Result<()> {
+    println!("🔨 Building for production...");
+    println!("   Output: {}", output);
+    if watch {
+        println!("   Watch mode enabled");
+    }
+    println!("⚠️  This feature is under development");
+    Ok(())
+}
+
+/// Type check
+fn run_talos_check() -> Result<()> {
+    println!("🔍 Type checking TypeScript files...");
+    println!("⚠️  This feature is under development");
     Ok(())
 }

@@ -1,0 +1,31 @@
+[package]
+name = "ouroboros-talos-pkg-manager"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace dependencies
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# HTTP client for registry
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+
+# Version handling
+semver = { workspace = true }
+
+# Utilities
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.15"

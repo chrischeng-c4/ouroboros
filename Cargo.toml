@@ -21,6 +21,14 @@ members = [
     "crates/ouroboros-sheet-history",
     "crates/ouroboros-sheet-server",
     "crates/ouroboros-sheet-wasm",
+    # Talos build tool crates
+    "crates/ouroboros-talos",
+    "crates/ouroboros-talos-bundler",
+    "crates/ouroboros-talos-transform",
+    "crates/ouroboros-talos-resolver",
+    "crates/ouroboros-talos-dev-server",
+    "crates/ouroboros-talos-pkg-manager",
+    "crates/ouroboros-talos-asset",
 ]
 resolver = "2"
 
@@ -100,6 +108,16 @@ async-nats = "0.38"
 deadpool-redis = "0.18"
 cron = "0.12"
 tokio-util = { version = "0.7", features = ["rt"] }
+
+# Build tool dependencies (for ouroboros-talos crates)
+# TODO: Add SWC integration in later phase when version compatibility is resolved
+# swc_core = { version = "0.106", features = ["ecma_transforms", "ecma_parser", "ecma_codegen", "ecma_transforms_react", "ecma_transforms_typescript"] }
+node-resolve = "2.2"
+petgraph = "0.6"
+# lightningcss = "1.0.0-alpha.68"  # Temporarily disabled due to SWC dependency
+image = "0.25"
+semver = "1.0"
+notify = "7"
 
 [profile.release]
 opt-level = 3

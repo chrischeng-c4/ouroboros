@@ -1,0 +1,21 @@
+[package]
+name = "ouroboros-talos-asset"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace dependencies
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# Image processing
+image = { workspace = true }
+
+# Hashing
+sha2 = "0.10"
+
+[dev-dependencies]

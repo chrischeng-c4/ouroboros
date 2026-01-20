@@ -23,3 +23,6 @@ pyo3 = { version = "0.24", features = ["auto-initialize"] }
 # Internal crates
 ouroboros-qc = { path = "../ouroboros-qc" }
 argus = { path = "../argus" }
+ouroboros-talos-bundler = { path = "../ouroboros-talos-bundler" }
+ouroboros-talos-dev-server = { path = "../ouroboros-talos-dev-server" }
+ouroboros-talos-pkg-manager = { path = "../ouroboros-talos-pkg-manager" }
