@@ -218,6 +218,8 @@ pub struct SymbolLocation {
     pub kind: MatchKind,
     /// Type (if known)
     pub ty: Option<Type>,
+    /// Documentation string (docstring)
+    pub docstring: Option<String>,
 }
 
 /// Location of a type.
@@ -620,27 +622,43 @@ impl SemanticSearchEngine {
         let mut result = SearchResult::empty();
         let query_lower = doc_query.to_lowercase();
 
-        // Search through symbols that might have documentation
-        // Note: We don't have direct access to docstrings from SymbolLocation,
-        // so this is a placeholder implementation that searches symbol names
+        // Search through symbols that have documentation
         for (_name, locations) in &self.symbol_index {
             for location in locations {
-                // In a full implementation, we would check the actual docstring
-                // For now, just match against function/class names
-                if matches!(location.kind, MatchKind::FunctionDef | MatchKind::ClassDef | MatchKind::MethodDef) {
-                    if location.name.to_lowercase().contains(&query_lower) {
-                        result.matches.push(SearchMatch {
-                            file: location.file.clone(),
-                            span: location.span,
-                            symbol: Some(location.name.clone()),
-                            kind: location.kind.clone(),
-                            score: 0.6, // Lower score for doc search
-                            context: None,
-                        });
+                // Skip symbols without docstrings
+                let docstring = match &location.docstring {
+                    Some(doc) => doc,
+                    None => continue,
+                };
 
-                        if result.matches.len() >= query.max_results {
-                            break;
-                        }
+                // Search in the docstring content
+                if docstring.to_lowercase().contains(&query_lower) {
+                    // Calculate relevance score based on match position and frequency
+                    let score: f64 = self.calculate_doc_search_score(&query_lower, docstring);
+
+                    // Convert docstring to context
+                    let doc_lines: Vec<String> = docstring
+                        .lines()
+                        .map(|s| s.to_string())
+                        .collect();
+
+                    let context = MatchContext {
+                        before: Vec::new(),
+                        matched: doc_lines,
+                        after: Vec::new(),
+                    };
+
+                    result.matches.push(SearchMatch {
+                        file: location.file.clone(),
+                        span: location.span,
+                        symbol: Some(location.name.clone()),
+                        kind: location.kind.clone(),
+                        score,
+                        context: Some(context),
+                    });
+
+                    if result.matches.len() >= query.max_results {
+                        break;
                     }
                 }
             }
@@ -652,6 +670,30 @@ impl SemanticSearchEngine {
 
         result.total_count = result.matches.len();
         result
+    }
+
+    /// Calculate relevance score for documentation search.
+    fn calculate_doc_search_score(&self, query: &str, docstring: &str) -> f64 {
+        let doc_lower = docstring.to_lowercase();
+
+        // Base score for having a match
+        let mut score: f64 = 0.6_f64;
+
+        // Bonus if query appears at the start (likely in summary line)
+        if doc_lower.starts_with(query) {
+            score += 0.2_f64;
+        } else if doc_lower.find(query).unwrap_or(usize::MAX) < 100 {
+            // Bonus if match is in first 100 chars
+            score += 0.1_f64;
+        }
+
+        // Bonus for exact phrase match (not just contains)
+        if doc_lower.split_whitespace().any(|word| word == query) {
+            score += 0.1_f64;
+        }
+
+        // Cap at 0.95 (reserve 1.0 for perfect matches)
+        score.min(0.95_f64)
     }
 
     /// Search call hierarchy.
@@ -904,6 +946,358 @@ impl SemanticSearchEngine {
         self.index_file(file, symbols);
     }
 
+    /// Update docstrings for indexed symbols.
+    pub fn update_docstrings(&mut self, docstrings: std::collections::HashMap<String, String>) {
+        for (symbol_name, docstring) in docstrings {
+            if let Some(locations) = self.symbol_index.get_mut(&symbol_name) {
+                for location in locations {
+                    location.docstring = Some(docstring.clone());
+                }
+            }
+        }
+    }
+
+    /// Extract docstrings from source code.
+    /// Returns a map of symbol name -> docstring.
+    pub fn extract_docstrings(&self, content: &str, language: crate::syntax::Language) -> Result<std::collections::HashMap<String, String>, String> {
+        use crate::syntax::MultiParser;
+
+        let mut parser = MultiParser::new().map_err(|e| format!("Failed to create parser: {:?}", e))?;
+        let parsed = parser.parse(content, language).ok_or("Failed to parse file")?;
+
+        let docstrings = self.extract_docstrings_from_ast(&parsed.tree.root_node(), content, language);
+
+        Ok(docstrings)
+    }
+
+    /// Extract docstrings from AST nodes.
+    fn extract_docstrings_from_ast(
+        &self,
+        root: &tree_sitter::Node,
+        source: &str,
+        language: crate::syntax::Language,
+    ) -> std::collections::HashMap<String, String> {
+        let mut docstrings = std::collections::HashMap::new();
+
+        self.visit_for_docstrings(root, source, language, &mut docstrings);
+
+        docstrings
+    }
+
+    /// Recursively visit AST nodes to extract docstrings.
+    fn visit_for_docstrings(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        language: crate::syntax::Language,
+        docstrings: &mut std::collections::HashMap<String, String>,
+    ) {
+        match language {
+            crate::syntax::Language::Python => {
+                match node.kind() {
+                    "function_definition" | "class_definition" => {
+                        // Extract function/class name
+                        if let Some(name_node) = node.child_by_field_name("name") {
+                            let symbol_name = &source[name_node.start_byte()..name_node.end_byte()];
+
+                            // Look for docstring (first string in body)
+                            if let Some(body_node) = node.child_by_field_name("body") {
+                                let docstring = self.extract_python_docstring(&body_node, source);
+                                if let Some(doc) = docstring {
+                                    docstrings.insert(symbol_name.to_string(), doc);
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            crate::syntax::Language::TypeScript => {
+                match node.kind() {
+                    "function_declaration" | "method_definition" | "class_declaration" => {
+                        // Extract name
+                        if let Some(name_node) = node.child_by_field_name("name") {
+                            let symbol_name = &source[name_node.start_byte()..name_node.end_byte()];
+
+                            // Look for JSDoc comment before this node
+                            if let Some(prev_sibling) = node.prev_sibling() {
+                                if prev_sibling.kind() == "comment" {
+                                    let comment_text = &source[prev_sibling.start_byte()..prev_sibling.end_byte()];
+                                    if comment_text.starts_with("/**") {
+                                        // JSDoc comment
+                                        let cleaned = self.clean_jsdoc(comment_text);
+                                        docstrings.insert(symbol_name.to_string(), cleaned);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {
+                // Other languages not yet implemented
+            }
+        }
+
+        // Visit children
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.visit_for_docstrings(&child, source, language, docstrings);
+        }
+    }
+
+    /// Extract Python docstring from function/class body.
+    fn extract_python_docstring(&self, body_node: &tree_sitter::Node, source: &str) -> Option<String> {
+        // Python docstring is the first expression_statement containing a string
+        let mut cursor = body_node.walk();
+        for child in body_node.children(&mut cursor) {
+            if child.kind() == "expression_statement" {
+                // Check if it contains a string
+                let mut expr_cursor = child.walk();
+                for expr_child in child.children(&mut expr_cursor) {
+                    if expr_child.kind() == "string" {
+                        let string_content = &source[expr_child.start_byte()..expr_child.end_byte()];
+                        // Remove quotes and clean up
+                        let cleaned = self.clean_python_docstring(string_content);
+                        return Some(cleaned);
+                    }
+                }
+            } else if child.kind() != "comment" {
+                // First non-comment, non-string statement - no docstring
+                break;
+            }
+        }
+        None
+    }
+
+    /// Clean Python docstring (remove quotes, trim).
+    fn clean_python_docstring(&self, raw: &str) -> String {
+        let trimmed = raw.trim();
+
+        // Remove triple quotes or single quotes
+        let cleaned = if trimmed.starts_with("\"\"\"") && trimmed.ends_with("\"\"\"") {
+            &trimmed[3..trimmed.len() - 3]
+        } else if trimmed.starts_with("'''") && trimmed.ends_with("'''") {
+            &trimmed[3..trimmed.len() - 3]
+        } else if trimmed.starts_with('"') && trimmed.ends_with('"') {
+            &trimmed[1..trimmed.len() - 1]
+        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'') {
+            &trimmed[1..trimmed.len() - 1]
+        } else {
+            trimmed
+        };
+
+        cleaned.trim().to_string()
+    }
+
+    /// Clean JSDoc comment (remove /** */ and leading *).
+    fn clean_jsdoc(&self, raw: &str) -> String {
+        let trimmed = raw.trim();
+
+        // Remove /** and */
+        let content = if trimmed.starts_with("/**") && trimmed.ends_with("*/") {
+            &trimmed[3..trimmed.len() - 2]
+        } else if trimmed.starts_with("/*") && trimmed.ends_with("*/") {
+            &trimmed[2..trimmed.len() - 2]
+        } else {
+            trimmed
+        };
+
+        // Remove leading * from each line
+        content
+            .lines()
+            .map(|line| {
+                let l = line.trim();
+                if l.starts_with('*') {
+                    l[1..].trim()
+                } else {
+                    l
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string()
+    }
+
+    /// Build call graph from source code.
+    pub fn build_call_graph(&mut self, file: PathBuf, content: &str, language: crate::syntax::Language) -> Result<(), String> {
+        use crate::syntax::MultiParser;
+
+        let mut parser = MultiParser::new().map_err(|e| format!("Failed to create parser: {:?}", e))?;
+        let parsed = parser.parse(content, language).ok_or("Failed to parse file")?;
+
+        let call_sites = self.extract_call_sites(file.clone(), &parsed.tree.root_node(), content, language);
+
+        for site in call_sites {
+            self.call_graph.add_call(site);
+        }
+
+        Ok(())
+    }
+
+    /// Extract all call sites from an AST.
+    fn extract_call_sites(
+        &self,
+        file: PathBuf,
+        root: &tree_sitter::Node,
+        source: &str,
+        language: crate::syntax::Language,
+    ) -> Vec<CallSite> {
+        let mut call_sites = Vec::new();
+        let mut current_function: Option<String> = None;
+
+        self.visit_for_calls(
+            root,
+            source,
+            language,
+            &mut current_function,
+            &file,
+            &mut call_sites,
+        );
+
+        call_sites
+    }
+
+    /// Recursively visit AST nodes to find function calls.
+    fn visit_for_calls(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+        language: crate::syntax::Language,
+        current_function: &mut Option<String>,
+        file: &PathBuf,
+        call_sites: &mut Vec<CallSite>,
+    ) {
+        match language {
+            crate::syntax::Language::Python => {
+                match node.kind() {
+                    "function_definition" => {
+                        // Extract function name
+                        if let Some(name_node) = node.child_by_field_name("name") {
+                            let func_name = &source[name_node.start_byte()..name_node.end_byte()];
+                            let prev_function = current_function.clone();
+                            *current_function = Some(func_name.to_string());
+
+                            // Visit children (function body)
+                            let mut cursor = node.walk();
+                            for child in node.children(&mut cursor) {
+                                self.visit_for_calls(&child, source, language, current_function, file, call_sites);
+                            }
+
+                            // Restore previous function context
+                            *current_function = prev_function;
+                            return; // Don't visit children again
+                        }
+                    }
+                    "call" => {
+                        // Extract callee name
+                        if let Some(func_node) = node.child_by_field_name("function") {
+                            let callee_name = self.extract_function_name(&func_node, source);
+
+                            if let Some(ref caller) = current_function {
+                                call_sites.push(CallSite {
+                                    file: file.clone(),
+                                    span: Span {
+                                        start: node.start_byte(),
+                                        end: node.end_byte(),
+                                        start_line: node.start_position().row,
+                                        start_col: node.start_position().column,
+                                        end_line: node.end_position().row,
+                                        end_col: node.end_position().column,
+                                    },
+                                    callee: callee_name,
+                                    caller: caller.clone(),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            crate::syntax::Language::TypeScript => {
+                match node.kind() {
+                    "function_declaration" | "method_definition" => {
+                        if let Some(name_node) = node.child_by_field_name("name") {
+                            let func_name = &source[name_node.start_byte()..name_node.end_byte()];
+                            let prev_function = current_function.clone();
+                            *current_function = Some(func_name.to_string());
+
+                            let mut cursor = node.walk();
+                            for child in node.children(&mut cursor) {
+                                self.visit_for_calls(&child, source, language, current_function, file, call_sites);
+                            }
+
+                            *current_function = prev_function;
+                            return;
+                        }
+                    }
+                    "call_expression" => {
+                        if let Some(func_node) = node.child_by_field_name("function") {
+                            let callee_name = self.extract_function_name(&func_node, source);
+
+                            if let Some(ref caller) = current_function {
+                                call_sites.push(CallSite {
+                                    file: file.clone(),
+                                    span: Span {
+                                        start: node.start_byte(),
+                                        end: node.end_byte(),
+                                        start_line: node.start_position().row,
+                                        start_col: node.start_position().column,
+                                        end_line: node.end_position().row,
+                                        end_col: node.end_position().column,
+                                    },
+                                    callee: callee_name,
+                                    caller: caller.clone(),
+                                });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            _ => {
+                // Other languages not yet implemented
+            }
+        }
+
+        // Visit children for all nodes
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            self.visit_for_calls(&child, source, language, current_function, file, call_sites);
+        }
+    }
+
+    /// Extract function name from a node (handles attributes like obj.method).
+    fn extract_function_name(&self, node: &tree_sitter::Node, source: &str) -> String {
+        match node.kind() {
+            "identifier" => {
+                source[node.start_byte()..node.end_byte()].to_string()
+            }
+            "attribute" => {
+                // For obj.method, extract just "method"
+                if let Some(attr_node) = node.child_by_field_name("attribute") {
+                    source[attr_node.start_byte()..attr_node.end_byte()].to_string()
+                } else {
+                    source[node.start_byte()..node.end_byte()].to_string()
+                }
+            }
+            "member_expression" => {
+                // TypeScript: obj.method
+                if let Some(property_node) = node.child_by_field_name("property") {
+                    source[property_node.start_byte()..property_node.end_byte()].to_string()
+                } else {
+                    source[node.start_byte()..node.end_byte()].to_string()
+                }
+            }
+            _ => {
+                // Fallback: use full text
+                source[node.start_byte()..node.end_byte()].to_string()
+            }
+        }
+    }
+
     /// Convert a SymbolTable to a Vec of SymbolLocations.
     fn convert_symbol_table_to_locations(
         &self,
@@ -929,6 +1323,7 @@ impl SemanticSearchEngine {
                 name: symbol.name.clone(),
                 kind,
                 ty,
+                docstring: None, // TODO: Extract from AST
             });
         }
 
@@ -1296,5 +1691,508 @@ mod tests {
         // Note: This will be empty because we haven't implemented protocol checking yet
         // but at least it doesn't crash
         assert!(result.is_empty() || !result.is_empty());
+    }
+
+    #[test]
+    fn test_build_call_graph() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let file = PathBuf::from("test.py");
+
+        let code = r#"
+def func1():
+    func2()
+    func3()
+
+def func2():
+    func3()
+
+def func3():
+    pass
+"#;
+
+        // Build call graph
+        let result = engine.build_call_graph(file.clone(), code, Language::Python);
+        assert!(result.is_ok());
+
+        // Verify call graph contains expected relationships
+        let callers_of_func2 = engine.call_graph.get_callers("func2");
+        assert_eq!(callers_of_func2.len(), 1);
+        assert_eq!(callers_of_func2[0].caller, "func1");
+
+        let callers_of_func3 = engine.call_graph.get_callers("func3");
+        assert_eq!(callers_of_func3.len(), 2); // Called by func1 and func2
+    }
+
+    #[test]
+    fn test_call_hierarchy_search() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let file = PathBuf::from("test.py");
+
+        let code = r#"
+def level1():
+    level2()
+
+def level2():
+    level3()
+
+def level3():
+    pass
+"#;
+
+        // Build call graph
+        engine.build_call_graph(file.clone(), code, Language::Python).unwrap();
+
+        // Search for callers of level3
+        let query = SearchQuery {
+            kind: SearchKind::CallHierarchy {
+                symbol: "level3".to_string(),
+                file: file.clone(),
+                direction: CallDirection::Callers,
+            },
+            scope: SearchScope::Project,
+            max_results: 100,
+        };
+
+        let result = engine.search(&query);
+        assert!(!result.is_empty());
+
+        // Call hierarchy is recursive, so we find level2 (direct caller) and level1 (indirect)
+        let caller_names: Vec<String> = result.matches.iter()
+            .filter_map(|m| m.symbol.clone())
+            .collect();
+        assert!(caller_names.contains(&"level2".to_string())); // Direct caller
+        assert!(caller_names.contains(&"level1".to_string())); // Indirect caller
+    }
+
+    #[test]
+    fn test_call_hierarchy_multi_level() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let file = PathBuf::from("test.py");
+
+        let code = r#"
+def top():
+    middle1()
+    middle2()
+
+def middle1():
+    bottom()
+
+def middle2():
+    bottom()
+
+def bottom():
+    pass
+"#;
+
+        // Build call graph
+        engine.build_call_graph(file.clone(), code, Language::Python).unwrap();
+
+        // Search for callers of bottom (should find middle1 and middle2)
+        let query = SearchQuery {
+            kind: SearchKind::CallHierarchy {
+                symbol: "bottom".to_string(),
+                file: file.clone(),
+                direction: CallDirection::Callers,
+            },
+            scope: SearchScope::Project,
+            max_results: 100,
+        };
+
+        let result = engine.search(&query);
+        assert!(!result.is_empty());
+
+        // Call hierarchy is recursive, finds middle1, middle2 (direct callers) and top (indirect)
+        let caller_names: Vec<String> = result.matches.iter()
+            .filter_map(|m| m.symbol.clone())
+            .collect();
+        assert!(caller_names.contains(&"middle1".to_string())); // Direct caller
+        assert!(caller_names.contains(&"middle2".to_string())); // Direct caller
+        assert!(caller_names.contains(&"top".to_string())); // Indirect caller
+    }
+
+    #[test]
+    fn test_call_hierarchy_callees() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let file = PathBuf::from("test.py");
+
+        let code = r#"
+def caller():
+    callee1()
+    callee2()
+    callee3()
+
+def callee1():
+    pass
+
+def callee2():
+    pass
+
+def callee3():
+    pass
+"#;
+
+        // Build call graph
+        engine.build_call_graph(file.clone(), code, Language::Python).unwrap();
+
+        // Search for callees of caller
+        let query = SearchQuery {
+            kind: SearchKind::CallHierarchy {
+                symbol: "caller".to_string(),
+                file: file.clone(),
+                direction: CallDirection::Callees,
+            },
+            scope: SearchScope::Project,
+            max_results: 100,
+        };
+
+        let result = engine.search(&query);
+        assert_eq!(result.len(), 3);
+
+        let callee_names: Vec<String> = result.matches.iter()
+            .filter_map(|m| m.symbol.clone())
+            .collect();
+        assert!(callee_names.contains(&"callee1".to_string()));
+        assert!(callee_names.contains(&"callee2".to_string()));
+        assert!(callee_names.contains(&"callee3".to_string()));
+    }
+
+    #[test]
+    fn test_documentation_search_python() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let _file = PathBuf::from("test.py");
+
+        let code = r#"
+def calculate_sum(a, b):
+    """
+    Calculate the sum of two numbers.
+
+    Args:
+        a: First number
+        b: Second number
+
+    Returns:
+        The sum of a and b
+    """
+    return a + b
+
+def calculate_product(a, b):
+    """
+    Calculate the product of two numbers.
+
+    Args:
+        a: First number
+        b: Second number
+
+    Returns:
+        The product of a and b
+    """
+    return a * b
+
+def unrelated_function():
+    """Do something unrelated."""
+    pass
+"#;
+
+        // First, build symbol table
+        let mut symbol_table = SymbolTable::new();
+        symbol_table.add_symbol(
+            "calculate_sum".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 1, character: 4 },
+                end: crate::diagnostic::Position { line: 1, character: 17 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("int".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "calculate_product".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 15, character: 4 },
+                end: crate::diagnostic::Position { line: 15, character: 21 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("int".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "unrelated_function".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 29, character: 4 },
+                end: crate::diagnostic::Position { line: 29, character: 22 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("None".to_string())),
+            }),
+            None,
+            0,
+        );
+
+        // Index the symbol table
+        engine.index_symbol_table(PathBuf::from("test.py"), &symbol_table);
+
+        // Extract docstrings
+        let docstrings = engine.extract_docstrings(code, Language::Python).unwrap();
+        assert_eq!(docstrings.len(), 3);
+        assert!(docstrings.contains_key("calculate_sum"));
+        assert!(docstrings.contains_key("calculate_product"));
+
+        // Update search engine with docstrings
+        engine.update_docstrings(docstrings);
+
+        // Search for "sum" in documentation
+        let query = SearchQuery {
+            kind: SearchKind::ByDocumentation {
+                query: "sum".to_string(),
+            },
+            scope: SearchScope::Project,
+            max_results: 10,
+        };
+
+        let result = engine.search(&query);
+        assert!(!result.is_empty());
+
+        let symbols: Vec<String> = result.matches.iter()
+            .filter_map(|m| m.symbol.clone())
+            .collect();
+        assert!(symbols.contains(&"calculate_sum".to_string()));
+        assert!(!symbols.contains(&"unrelated_function".to_string()));
+
+        // Verify context is included
+        assert!(result.matches[0].context.is_some());
+        if let Some(context) = &result.matches[0].context {
+            assert!(!context.matched.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_documentation_search_typescript() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let _file = PathBuf::from("test.ts");
+
+        let code = r#"
+/**
+ * Validates user input data.
+ * @param input - The input string to validate
+ * @returns true if valid, false otherwise
+ */
+function validateInput(input: string): boolean {
+    return input.length > 0;
+}
+
+/**
+ * Processes user data and returns result.
+ * @param data - The data to process
+ */
+function processData(data: any): void {
+    console.log(data);
+}
+
+function noDocFunction() {
+    return 42;
+}
+"#;
+
+        // First, build symbol table
+        let mut symbol_table = SymbolTable::new();
+        symbol_table.add_symbol(
+            "validateInput".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 6, character: 9 },
+                end: crate::diagnostic::Position { line: 6, character: 22 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("boolean".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "processData".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 14, character: 9 },
+                end: crate::diagnostic::Position { line: 14, character: 20 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("void".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "noDocFunction".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 21, character: 9 },
+                end: crate::diagnostic::Position { line: 21, character: 22 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("number".to_string())),
+            }),
+            None,
+            0,
+        );
+
+        // Index the symbol table
+        engine.index_symbol_table(PathBuf::from("test.ts"), &symbol_table);
+
+        // Extract docstrings
+        let docstrings = engine.extract_docstrings(code, Language::TypeScript).unwrap();
+        assert_eq!(docstrings.len(), 2);
+        assert!(docstrings.contains_key("validateInput"));
+        assert!(docstrings.contains_key("processData"));
+        assert!(!docstrings.contains_key("noDocFunction"));
+
+        // Update search engine with docstrings
+        engine.update_docstrings(docstrings);
+
+        // Search for "validate" in documentation
+        let query = SearchQuery {
+            kind: SearchKind::ByDocumentation {
+                query: "validate".to_string(),
+            },
+            scope: SearchScope::Project,
+            max_results: 10,
+        };
+
+        let result = engine.search(&query);
+        assert!(!result.is_empty());
+
+        let symbols: Vec<String> = result.matches.iter()
+            .filter_map(|m| m.symbol.clone())
+            .collect();
+        assert!(symbols.contains(&"validateInput".to_string()));
+        assert!(!symbols.contains(&"processData".to_string()));
+        assert!(!symbols.contains(&"noDocFunction".to_string()));
+    }
+
+    #[test]
+    fn test_documentation_search_scoring() {
+        use crate::syntax::Language;
+
+        let mut engine = SemanticSearchEngine::new();
+        let _file = PathBuf::from("test.py");
+
+        let code = r#"
+def exact_match():
+    """search this exact phrase"""
+    pass
+
+def contains_in_middle():
+    """Some text before search and more after"""
+    pass
+
+def contains_at_end():
+    """This has the term at the end: search"""
+    pass
+"#;
+
+        // First, build symbol table
+        let mut symbol_table = SymbolTable::new();
+        symbol_table.add_symbol(
+            "exact_match".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 1, character: 4 },
+                end: crate::diagnostic::Position { line: 1, character: 15 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("None".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "contains_in_middle".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 5, character: 4 },
+                end: crate::diagnostic::Position { line: 5, character: 22 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("None".to_string())),
+            }),
+            None,
+            0,
+        );
+        symbol_table.add_symbol(
+            "contains_at_end".to_string(),
+            SymbolKind::Function,
+            Range {
+                start: crate::diagnostic::Position { line: 9, character: 4 },
+                end: crate::diagnostic::Position { line: 9, character: 19 },
+            },
+            Some(TypeInfo::Callable {
+                params: vec![],
+                ret: Box::new(TypeInfo::Primitive("None".to_string())),
+            }),
+            None,
+            0,
+        );
+
+        // Index the symbol table
+        engine.index_symbol_table(PathBuf::from("test.py"), &symbol_table);
+
+        // Extract and update docstrings
+        let docstrings = engine.extract_docstrings(code, Language::Python).unwrap();
+        engine.update_docstrings(docstrings);
+
+        // Search for "search"
+        let query = SearchQuery {
+            kind: SearchKind::ByDocumentation {
+                query: "search".to_string(),
+            },
+            scope: SearchScope::Project,
+            max_results: 10,
+        };
+
+        let result = engine.search(&query);
+        assert_eq!(result.len(), 3);
+
+        // Verify that all results have scores
+        for match_result in &result.matches {
+            assert!(match_result.score > 0.0);
+            assert!(match_result.score <= 1.0);
+        }
+
+        // The exact match at the start should have the highest score
+        let exact_match = result.matches.iter()
+            .find(|m| m.symbol.as_ref().map(|s| s.as_str()) == Some("exact_match"))
+            .unwrap();
+
+        let contains_in_middle = result.matches.iter()
+            .find(|m| m.symbol.as_ref().map(|s| s.as_str()) == Some("contains_in_middle"))
+            .unwrap();
+
+        assert!(exact_match.score > contains_in_middle.score);
     }
 }

@@ -10,8 +10,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use std::sync::Arc;
+use std::fs;
 
 use super::cache::ContentHash;
+use crate::syntax::{MultiParser, Language};
 
 // ============================================================================
 // Change Tracking
@@ -371,14 +373,112 @@ impl IncrementalAnalyzer {
     }
 
     /// Analyze a single file.
-    fn analyze_file(&self, _file: &PathBuf) -> Result<CachedAnalysis, String> {
-        // Placeholder implementation
+    ///
+    /// Performs incremental analysis by:
+    /// 1. Reading file content
+    /// 2. Computing content hash
+    /// 3. Parsing AST
+    /// 4. Extracting imports (dependencies)
+    /// 5. Caching results
+    fn analyze_file(&self, file: &PathBuf) -> Result<CachedAnalysis, String> {
+        // 1. Read file content
+        let content = fs::read_to_string(file)
+            .map_err(|e| format!("Failed to read file: {}", e))?;
+
+        // 2. Compute content hash
+        let hash = ContentHash::from_content(&content);
+
+        // 3. Detect language
+        let language = MultiParser::detect_language(file)
+            .ok_or_else(|| format!("Failed to detect language for file: {}", file.display()))?;
+
+        // 4. Parse file to extract imports
+        let dependencies = self.extract_dependencies(&content, language)?;
+
+        // 5. Return cached analysis
         Ok(CachedAnalysis {
-            hash: ContentHash::from_content(""),
+            hash,
             timestamp: Instant::now(),
-            dependencies: Vec::new(),
+            dependencies,
             success: true,
         })
+    }
+
+    /// Extract dependencies (imports) from file content.
+    fn extract_dependencies(&self, content: &str, language: Language) -> Result<Vec<PathBuf>, String> {
+        let mut parser = MultiParser::new()
+            .map_err(|e| format!("Failed to create parser: {}", e))?;
+
+        let parsed = parser.parse(content, language)
+            .ok_or_else(|| "Failed to parse file".to_string())?;
+
+        let mut dependencies = Vec::new();
+
+        // Walk AST to find import statements
+        let _cursor = parsed.tree.walk();
+
+        fn visit_node(
+            node: &tree_sitter::Node,
+            source: &str,
+            language: Language,
+            dependencies: &mut Vec<PathBuf>,
+        ) {
+            match language {
+                Language::Python => {
+                    // Look for import and from..import statements
+                    match node.kind() {
+                        "import_statement" | "import_from_statement" => {
+                            // Extract module name from import
+                            if let Some(module_node) = node.child_by_field_name("module_name")
+                                .or_else(|| node.child_by_field_name("name"))
+                            {
+                                let module_name = &source[module_node.start_byte()..module_node.end_byte()];
+                                // Convert module name to file path (simple heuristic)
+                                let path = PathBuf::from(format!("{}.py", module_name.replace(".", "/")));
+                                dependencies.push(path);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Language::TypeScript => {
+                    // Look for import statements
+                    match node.kind() {
+                        "import_statement" => {
+                            if let Some(source_node) = node.child_by_field_name("source") {
+                                let import_path = &source[source_node.start_byte()..source_node.end_byte()];
+                                // Remove quotes
+                                let path_str = import_path.trim_matches(|c| c == '"' || c == '\'');
+                                let path = PathBuf::from(path_str);
+                                dependencies.push(path);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                Language::Rust => {
+                    // Look for use statements
+                    if node.kind() == "use_declaration" {
+                        if let Some(path_node) = node.child_by_field_name("argument") {
+                            let use_path = &source[path_node.start_byte()..path_node.end_byte()];
+                            // Convert Rust module path to file path
+                            let path = PathBuf::from(format!("{}.rs", use_path.replace("::", "/")));
+                            dependencies.push(path);
+                        }
+                    }
+                }
+            }
+
+            // Recursively visit children
+            let mut child_cursor = node.walk();
+            for child in node.children(&mut child_cursor) {
+                visit_node(&child, source, language, dependencies);
+            }
+        }
+
+        visit_node(&parsed.tree.root_node(), content, language, &mut dependencies);
+
+        Ok(dependencies)
     }
 
     /// Invalidate cache for a file.

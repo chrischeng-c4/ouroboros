@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use crate::types::ty::Type;
 use crate::types::frameworks::FrameworkRegistry;
+use crate::types::class_info::ClassInfo;
 
 /// Unique identifier for types in cross-file tracking.
 pub type TypeId = usize;
@@ -33,6 +34,8 @@ pub struct TypeContext {
     generic_cache: HashMap<GenericKey, Type>,
     /// Recursive type detection
     recursive_guard: HashSet<TypeId>,
+    /// Class information (for protocol conformance checking)
+    class_info: HashMap<String, ClassInfo>,
 }
 
 /// A type binding with source information.
@@ -148,6 +151,7 @@ impl TypeContext {
             protocols: HashMap::new(),
             generic_cache: HashMap::new(),
             recursive_guard: HashSet::new(),
+            class_info: HashMap::new(),
         }
     }
 
@@ -210,10 +214,153 @@ impl TypeContext {
         self.check_protocol_conformance(ty, protocol)
     }
 
-    fn check_protocol_conformance(&self, _ty: &Type, _protocol: &ProtocolDef) -> bool {
-        // Placeholder for protocol conformance checking
-        // Would need to inspect type's methods and attributes
+    fn check_protocol_conformance(&self, ty: &Type, protocol: &ProtocolDef) -> bool {
+        // Extract class name from Type
+        let class_name = match ty {
+            Type::Instance { name, .. } => name,
+            Type::ClassType { name, .. } => name,
+            _ => return false, // Non-class types can't implement protocols
+        };
+
+        // Get class information
+        let class_info = match self.class_info.get(class_name) {
+            Some(info) => info,
+            None => return false, // Unknown class, can't check
+        };
+
+        // Check all required methods in the protocol
+        for (method_name, required_sig) in &protocol.methods {
+            match class_info.methods.get(method_name) {
+                Some(class_method_ty) => {
+                    // Check if method signature is compatible
+                    if !self.is_signature_compatible(class_method_ty, &required_sig.return_type, &required_sig.params) {
+                        return false;
+                    }
+                }
+                None => return false, // Required method not found
+            }
+        }
+
+        // Check all required attributes in the protocol
+        for (attr_name, required_ty) in &protocol.attributes {
+            match class_info.attributes.get(attr_name) {
+                Some(class_attr_ty) => {
+                    // Check if attribute type is compatible
+                    if !self.is_type_compatible(class_attr_ty, required_ty) {
+                        return false;
+                    }
+                }
+                None => return false, // Required attribute not found
+            }
+        }
+
+        // Check parent protocols recursively
+        for parent_name in &protocol.parents {
+            if let Some(parent_protocol) = self.protocols.get(parent_name) {
+                if !self.check_protocol_conformance(ty, parent_protocol) {
+                    return false;
+                }
+            }
+        }
+
         true
+    }
+
+    /// Check if a method signature is compatible with requirements.
+    fn is_signature_compatible(&self, method_ty: &Type, required_ret: &Type, required_params: &[(String, Type)]) -> bool {
+        // Extract callable signature from method type
+        let (actual_params, actual_ret) = match method_ty {
+            Type::Callable { params, ret } => (params, ret.as_ref()),
+            _ => return false,
+        };
+
+        // Check return type compatibility (covariant)
+        if !self.is_type_compatible(actual_ret, required_ret) {
+            return false;
+        }
+
+        // Check parameter count
+        if actual_params.len() < required_params.len() {
+            return false;
+        }
+
+        // Check parameter types (contravariant)
+        for (i, (_, required_param_ty)) in required_params.iter().enumerate() {
+            if let Some(actual_param) = actual_params.get(i) {
+                // Parameters are contravariant: required type must be subtype of actual
+                if !self.is_type_compatible(required_param_ty, &actual_param.ty) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Check if two types are compatible (basic structural equality).
+    fn is_type_compatible(&self, actual: &Type, required: &Type) -> bool {
+        use Type::*;
+
+        match (actual, required) {
+            // Exact matches
+            (Never, Never) | (None, None) | (Bool, Bool) |
+            (Int, Int) | (Float, Float) | (Str, Str) | (Bytes, Bytes) => true,
+
+            // Any accepts everything
+            (_, Any) | (Any, _) => true,
+
+            // Unknown can match anything (inference incomplete)
+            (Unknown, _) | (_, Unknown) => true,
+
+            // Lists - check element type
+            (List(a), List(b)) => self.is_type_compatible(a, b),
+
+            // Dicts - check key and value types
+            (Dict(k1, v1), Dict(k2, v2)) => {
+                self.is_type_compatible(k1, k2) && self.is_type_compatible(v1, v2)
+            }
+
+            // Sets - check element type
+            (Set(a), Set(b)) => self.is_type_compatible(a, b),
+
+            // Tuples - check all element types
+            (Tuple(a), Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| self.is_type_compatible(x, y))
+            }
+
+            // Optional types
+            (Optional(a), Optional(b)) => self.is_type_compatible(a, b),
+            (Optional(a), b) => self.is_type_compatible(a, b),
+            (a, Optional(b)) => self.is_type_compatible(a, b),
+
+            // Unions - actual must be subset of required
+            (Union(actuals), Union(requireds)) => {
+                actuals.iter().all(|a| requireds.iter().any(|r| self.is_type_compatible(a, r)))
+            }
+            (actual, Union(requireds)) => {
+                requireds.iter().any(|r| self.is_type_compatible(actual, r))
+            }
+
+            // Instances - check name compatibility
+            (Instance { name: n1, .. }, Instance { name: n2, .. }) => n1 == n2,
+
+            // Class types
+            (ClassType { name: n1, .. }, ClassType { name: n2, .. }) => n1 == n2,
+
+            // Callables - check signature compatibility
+            (Callable { params: p1, ret: r1 }, Callable { params: p2, ret: r2 }) => {
+                // Return types are covariant
+                self.is_type_compatible(r1, r2) &&
+                // Parameters are contravariant (and must match count)
+                p1.len() == p2.len() &&
+                p1.iter().zip(p2.iter()).all(|(a, b)| self.is_type_compatible(&b.ty, &a.ty))
+            }
+
+            // Default: not compatible
+            _ => false,
+        }
     }
 
     /// Cache a generic instantiation.
@@ -239,6 +386,31 @@ impl TypeContext {
     /// Check if currently checking a recursive type.
     pub fn is_recursive(&self, type_id: TypeId) -> bool {
         self.recursive_guard.contains(&type_id)
+    }
+
+    /// Add class information.
+    pub fn add_class_info(&mut self, name: String, info: ClassInfo) {
+        self.class_info.insert(name, info);
+    }
+
+    /// Get class information.
+    pub fn get_class_info(&self, name: &str) -> Option<&ClassInfo> {
+        self.class_info.get(name)
+    }
+
+    /// Get mutable class information.
+    pub fn get_class_info_mut(&mut self, name: &str) -> Option<&mut ClassInfo> {
+        self.class_info.get_mut(name)
+    }
+
+    /// Add a protocol definition.
+    pub fn add_protocol(&mut self, name: String, protocol: ProtocolDef) {
+        self.protocols.insert(name, protocol);
+    }
+
+    /// Get a protocol definition.
+    pub fn get_protocol(&self, name: &str) -> Option<&ProtocolDef> {
+        self.protocols.get(name)
     }
 }
 
@@ -476,6 +648,164 @@ impl DeepTypeInferencer {
     /// Get package manager detection result
     pub fn package_detection(&self) -> Option<&super::package_managers::PackageManagerDetection> {
         self.pkg_detection.as_ref()
+    }
+
+    /// Propagate types from imported files to importing files.
+    ///
+    /// When a symbol is imported from another file, this method resolves the type
+    /// from the source file and makes it available in the importing file.
+    ///
+    /// # Arguments
+    /// * `from_file` - The file being imported from
+    /// * `to_file` - The file doing the importing
+    /// * `symbols` - The symbols being imported (None = import all exported)
+    pub fn propagate_types(&mut self, from_file: &PathBuf, to_file: &PathBuf, symbols: Option<&[String]>) {
+        // Get symbols from source file
+        let source_symbols = match self.files.get(from_file) {
+            Some(analysis) => analysis.symbols.clone(),
+            None => return, // Source file not analyzed yet
+        };
+
+        // Determine which symbols to propagate
+        let symbols_to_propagate: Vec<String> = match symbols {
+            Some(names) => names.to_vec(),
+            None => {
+                // Import all exported symbols
+                source_symbols
+                    .values()
+                    .filter(|b| b.is_exported)
+                    .map(|b| b.symbol.clone())
+                    .collect()
+            }
+        };
+
+        // Add type bindings to importing file
+        for symbol_name in symbols_to_propagate {
+            if let Some(binding) = source_symbols.get(&symbol_name) {
+                // Create new binding in target file
+                let imported_binding = TypeBinding {
+                    ty: binding.ty.clone(),
+                    source_file: to_file.clone(),
+                    symbol: symbol_name.clone(),
+                    line: 0, // Import statement line (could be tracked)
+                    is_exported: false, // Imported symbols are not re-exported by default
+                    dependencies: binding.dependencies.clone(),
+                };
+
+                // Add to target file's symbols
+                if let Some(target_analysis) = self.files.get_mut(to_file) {
+                    target_analysis.symbols.insert(symbol_name.clone(), imported_binding.clone());
+                }
+
+                // Add to global type context
+                self.context.add_binding(to_file.clone(), imported_binding);
+            }
+        }
+
+        // Track import relationship
+        self.import_graph.add_import(to_file.clone(), from_file.clone());
+    }
+
+    /// Update a symbol's type and propagate changes to dependent files.
+    ///
+    /// When a symbol's type changes, this method updates all files that import
+    /// this symbol, ensuring type consistency across the codebase.
+    ///
+    /// # Arguments
+    /// * `file` - The file containing the symbol
+    /// * `symbol` - The symbol whose type changed
+    /// * `new_type` - The new type for the symbol
+    pub fn update_symbol_type(&mut self, file: &PathBuf, symbol: &str, new_type: Type) {
+        // Update in source file
+        if let Some(analysis) = self.files.get_mut(file) {
+            if let Some(binding) = analysis.symbols.get_mut(symbol) {
+                binding.ty = new_type.clone();
+            }
+        }
+
+        // Update in type context
+        if let Some(binding) = self.context.get_binding(file, symbol) {
+            let mut updated_binding = binding.clone();
+            updated_binding.ty = new_type.clone();
+            self.context.add_binding(file.clone(), updated_binding);
+        }
+
+        // Propagate to importing files
+        if let Some(importers) = self.import_graph.imported_by(file) {
+            for importing_file in importers.clone() {
+                // Check if this file imports the changed symbol
+                if let Some(analysis) = self.files.get(&importing_file) {
+                    if analysis.symbols.contains_key(symbol) {
+                        // Update the imported symbol's type
+                        self.update_imported_symbol(&importing_file, symbol, new_type.clone());
+
+                        // Recursively propagate to files importing from this file
+                        self.update_symbol_type(&importing_file, symbol, new_type.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    /// Update an imported symbol's type in a file.
+    fn update_imported_symbol(&mut self, file: &PathBuf, symbol: &str, new_type: Type) {
+        if let Some(analysis) = self.files.get_mut(file) {
+            if let Some(binding) = analysis.symbols.get_mut(symbol) {
+                binding.ty = new_type.clone();
+            }
+        }
+
+        // Update in type context
+        if let Some(binding) = self.context.get_binding(file, symbol) {
+            let mut updated_binding = binding.clone();
+            updated_binding.ty = new_type;
+            self.context.add_binding(file.clone(), updated_binding);
+        }
+    }
+
+    /// Add import information to a file.
+    ///
+    /// This records that a file imports specific symbols from another file,
+    /// which is used for cross-file type propagation.
+    pub fn add_import(&mut self, file: &PathBuf, import: ImportInfo) {
+        if let Some(analysis) = self.files.get_mut(file) {
+            analysis.imports.push(import);
+        }
+    }
+
+    /// Get all symbols from a file (including imported ones).
+    pub fn get_file_symbols(&self, file: &PathBuf) -> HashMap<String, Type> {
+        match self.files.get(file) {
+            Some(analysis) => analysis
+                .symbols
+                .iter()
+                .map(|(name, binding)| (name.clone(), binding.ty.clone()))
+                .collect(),
+            None => HashMap::new(),
+        }
+    }
+
+    /// Add a symbol binding to a file's analysis.
+    ///
+    /// This is useful for testing and for manually populating file symbols.
+    pub fn add_file_symbol(&mut self, file: &PathBuf, symbol: String, binding: TypeBinding) {
+        if let Some(analysis) = self.files.get_mut(file) {
+            analysis.symbols.insert(symbol, binding);
+        }
+    }
+
+    /// Get file analysis for a specific file (for testing).
+    pub fn get_file_analysis(&self, file: &PathBuf) -> Option<&FileAnalysis> {
+        self.files.get(file)
+    }
+
+    /// Set a symbol's export status in a file.
+    pub fn set_symbol_exported(&mut self, file: &PathBuf, symbol: &str, exported: bool) {
+        if let Some(analysis) = self.files.get_mut(file) {
+            if let Some(binding) = analysis.symbols.get_mut(symbol) {
+                binding.is_exported = exported;
+            }
+        }
     }
 
     /// Infer types across all files.
