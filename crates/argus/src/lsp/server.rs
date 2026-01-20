@@ -13,7 +13,7 @@ use crate::diagnostic::{Diagnostic as ArgusDiagnostic, DiagnosticSeverity as Arg
 use crate::lint::CheckerRegistry;
 use crate::semantic::{SymbolTable, SymbolTableBuilder};
 use crate::syntax::{MultiParser, ParsedFile};
-use crate::types::StubLoader;
+use crate::types::{StubLoader, SemanticSearchEngine};
 use crate::{LintConfig, Language};
 
 /// Document state tracked by the server
@@ -39,6 +39,7 @@ pub struct ArgusServer {
     registry: Arc<CheckerRegistry>,
     config: Arc<LintConfig>,
     stubs: Arc<RwLock<StubLoader>>,
+    search_engine: Arc<RwLock<SemanticSearchEngine>>,
 }
 
 impl ArgusServer {
@@ -54,6 +55,7 @@ impl ArgusServer {
             registry: Arc::new(CheckerRegistry::new()),
             config: Arc::new(LintConfig::default()),
             stubs: Arc::new(RwLock::new(stubs)),
+            search_engine: Arc::new(RwLock::new(SemanticSearchEngine::new())),
         }
     }
 
@@ -88,6 +90,13 @@ impl ArgusServer {
         } else {
             SymbolTable::default()
         };
+
+        // Index symbols for semantic search
+        if language == Language::Python {
+            let file_path = PathBuf::from(uri.path());
+            let mut search_engine = self.search_engine.write().await;
+            search_engine.index_symbol_table(file_path, &symbol_table);
+        }
 
         // Store analysis with diagnostics for code actions
         {
