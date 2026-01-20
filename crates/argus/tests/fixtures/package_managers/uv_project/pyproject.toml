@@ -1,0 +1,20 @@
+[project]
+name = "test-uv-project"
+version = "0.1.0"
+description = "Test project using uv"
+requires-python = ">=3.10"
+dependencies = [
+    "django>=4.2",
+    "fastapi[all]>=0.100",
+    "pydantic>=2.0",
+    "requests>=2.31",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0",
+    "ruff>=0.1",
+]
+
+[tool.uv.sources]
+# uv-specific configuration

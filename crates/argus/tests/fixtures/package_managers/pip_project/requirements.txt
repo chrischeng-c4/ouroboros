@@ -1,0 +1,19 @@
+# Core dependencies
+django>=4.2
+flask>=3.0
+
+# Optional with extras
+requests[security]>=2.31
+
+# Specific versions
+sqlalchemy==2.0.23
+
+# Development dependencies (would be in requirements-dev.txt typically)
+# pytest>=7.0
+# black>=23.0
+
+# VCS dependency
+# -e git+https://github.com/example/package.git@v1.0#egg=example-package
+
+# Comment lines are ignored
+# This is for testing purposes

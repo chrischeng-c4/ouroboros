@@ -262,6 +262,10 @@ pub struct DeepTypeInferencer {
     import_graph: ImportGraph,
     /// Framework type providers
     framework_registry: FrameworkRegistry,
+    /// Virtual environment path (from package manager detection)
+    venv_path: Option<PathBuf>,
+    /// Package manager detection result
+    pkg_detection: Option<super::package_managers::PackageManagerDetection>,
 }
 
 /// Analysis state for a single file.
@@ -370,7 +374,20 @@ impl DeepTypeInferencer {
             files: HashMap::new(),
             import_graph: ImportGraph::new(),
             framework_registry: FrameworkRegistry::new(),
+            venv_path: None,
+            pkg_detection: None,
         }
+    }
+
+    /// Initialize with package manager detection
+    ///
+    /// This enables:
+    /// - Virtual environment-aware import resolution
+    /// - Dependency checking for external modules
+    pub fn with_package_detection(mut self, detection: super::package_managers::PackageManagerDetection) -> Self {
+        self.venv_path = detection.venv_path.clone();
+        self.pkg_detection = Some(detection);
+        self
     }
 
     /// Get a reference to the framework registry for configuration.
@@ -404,6 +421,61 @@ impl DeepTypeInferencer {
     /// Get mutable type context.
     pub fn context_mut(&mut self) -> &mut TypeContext {
         &mut self.context
+    }
+
+    /// Resolve import path using virtual environment
+    ///
+    /// Checks if a module exists in the virtual environment's site-packages.
+    /// This is useful for resolving imports to third-party packages.
+    pub fn resolve_import_path(&self, module: &str) -> Option<PathBuf> {
+        if let Some(venv_path) = &self.venv_path {
+            // Try lib/pythonX.Y/site-packages (Unix)
+            let site_packages_patterns = vec![
+                venv_path.join("lib/python3.12/site-packages"),
+                venv_path.join("lib/python3.11/site-packages"),
+                venv_path.join("lib/python3.10/site-packages"),
+                venv_path.join("lib/python3.9/site-packages"),
+                // Windows
+                venv_path.join("Lib/site-packages"),
+            ];
+
+            for site_packages in site_packages_patterns {
+                if site_packages.exists() {
+                    // Try as module file: module.py
+                    let module_file = site_packages.join(format!("{}.py", module.replace(".", "/")));
+                    if module_file.exists() {
+                        return Some(module_file);
+                    }
+
+                    // Try as package: module/__init__.py
+                    let package_dir = site_packages.join(module.replace(".", "/"));
+                    let init_file = package_dir.join("__init__.py");
+                    if init_file.exists() {
+                        return Some(init_file);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Check if a module is available in dependencies
+    ///
+    /// Returns true if the module is listed in the package manager dependencies.
+    pub fn has_module(&self, module_name: &str) -> bool {
+        if let Some(detection) = &self.pkg_detection {
+            // Extract package name (first part before dot)
+            let package_name = module_name.split('.').next().unwrap_or(module_name);
+            detection.has_dependency(package_name)
+        } else {
+            false
+        }
+    }
+
+    /// Get package manager detection result
+    pub fn package_detection(&self) -> Option<&super::package_managers::PackageManagerDetection> {
+        self.pkg_detection.as_ref()
     }
 
     /// Infer types across all files.

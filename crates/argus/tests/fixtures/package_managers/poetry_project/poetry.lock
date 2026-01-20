@@ -1,0 +1,14 @@
+# This is a simplified poetry.lock for testing
+# In reality, this would be a TOML file with package metadata
+
+[[package]]
+name = "django"
+version = "4.2.8"
+
+[[package]]
+name = "flask"
+version = "3.0.0"
+
+[[package]]
+name = "sqlalchemy"
+version = "2.0.23"
