@@ -587,17 +587,20 @@ impl HistoryVisualizer {
     pub async fn ascii(&self, migrations: &[Migration]) -> Result<String> {
         let runner = MigrationRunner::new(self.conn.clone(), Some(self.migrations_table.clone()));
 
-        // Get applied status for each migration
-        let applied_versions: HashSet<String> =
-            runner.applied_migrations().await?.into_iter().collect();
+        // Get applied migrations with actual timestamps from database
+        let applied_migrations = runner.applied_migrations_with_details().await?;
+        let applied_timestamps: HashMap<String, DateTime<Utc>> = applied_migrations
+            .into_iter()
+            .filter_map(|m| m.applied_at.map(|ts| (m.version, ts)))
+            .collect();
 
-        // Update migrations with applied status
+        // Update migrations with applied status and actual timestamps
         let migrations_with_status: Vec<Migration> = migrations
             .iter()
             .map(|m| {
                 let mut m = m.clone();
-                if applied_versions.contains(&m.version) {
-                    m.applied_at = Some(Utc::now()); // Placeholder, actual time from DB
+                if let Some(ts) = applied_timestamps.get(&m.version) {
+                    m.applied_at = Some(*ts);
                 }
                 m
             })
@@ -613,15 +616,20 @@ impl HistoryVisualizer {
     pub async fn export(&self, migrations: &[Migration], format: ExportFormat) -> Result<String> {
         let runner = MigrationRunner::new(self.conn.clone(), Some(self.migrations_table.clone()));
 
-        let applied_versions: HashSet<String> =
-            runner.applied_migrations().await?.into_iter().collect();
+        // Get applied migrations with actual timestamps from database
+        let applied_migrations = runner.applied_migrations_with_details().await?;
+        let applied_timestamps: HashMap<String, DateTime<Utc>> = applied_migrations
+            .into_iter()
+            .filter_map(|m| m.applied_at.map(|ts| (m.version, ts)))
+            .collect();
 
+        // Update migrations with applied status and actual timestamps
         let migrations_with_status: Vec<Migration> = migrations
             .iter()
             .map(|m| {
                 let mut m = m.clone();
-                if applied_versions.contains(&m.version) {
-                    m.applied_at = Some(Utc::now());
+                if let Some(ts) = applied_timestamps.get(&m.version) {
+                    m.applied_at = Some(*ts);
                 }
                 m
             })
