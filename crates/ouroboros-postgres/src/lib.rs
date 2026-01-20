@@ -245,6 +245,12 @@ pub mod bulk;
 /// for monitoring PostgreSQL connection pool performance.
 pub mod metrics;
 
+/// Back-reference loading for relationships.
+///
+/// Enables loading related records from the "many" side of a relationship
+/// when you have a record from the "one" side (e.g., User -> Posts).
+pub mod backref;
+
 pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
@@ -288,5 +294,8 @@ pub use bulk::{BulkConfig, BulkResult, BulkExecutor};
 
 // Pool metrics re-exports
 pub use metrics::{PoolMetrics, HealthStatus, HealthCheck, LatencyStats, MetricsCollector};
+
+// Back-reference re-exports
+pub use backref::{BackRefConfig, BackRefLoader, EagerLoader, EagerRelation};
 
 pub use ouroboros_common::{DataBridgeError, Result};
