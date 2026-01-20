@@ -9,10 +9,10 @@ const EXCEL_LEAP_YEAR_BUG_DAY: i64 = 60; // Feb 29, 1900 (phantom day)
 /// Excel has a bug where it treats 1900 as a leap year, so we account for that
 fn date_to_serial(year: i32, month: u32, day: u32) -> Result<f64, CellError> {
     // Validate inputs
-    if year < 1900 || year > 9999 {
+    if !(1900..=9999).contains(&year) {
         return Err(CellError::NumError);
     }
-    if month < 1 || month > 12 {
+    if !(1..=12).contains(&month) {
         return Err(CellError::NumError);
     }
     if day < 1 || day > days_in_month(year, month) {
@@ -46,7 +46,7 @@ fn date_to_serial(year: i32, month: u32, day: u32) -> Result<f64, CellError> {
 
 /// Convert Excel serial number to (year, month, day)
 fn serial_to_date(serial: f64) -> Result<(i32, u32, u32), CellError> {
-    if serial < 1.0 || serial >= 2958466.0 {
+    if !(1.0..2958466.0).contains(&serial) {
         // Valid range: 1900-01-01 to 9999-12-31
         return Err(CellError::NumError);
     }

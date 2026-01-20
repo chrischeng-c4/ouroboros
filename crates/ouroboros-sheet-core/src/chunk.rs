@@ -134,7 +134,7 @@ impl<T> Chunk<T> {
             self.count += 1;
         }
 
-        std::mem::replace(&mut self.cells[idx], Some(value))
+        self.cells[idx].replace(value)
     }
 
     /// Remove a cell at the given local coordinates.
@@ -259,7 +259,7 @@ impl<T: Clone> ChunkedGrid<T> {
     pub fn insert(&mut self, row: usize, col: usize, value: T) -> Option<T> {
         let chunk_coord = ChunkCoord::from_cell(row, col);
         let (local_row, local_col) = to_local_coords(row, col);
-        let chunk = self.chunks.entry(chunk_coord).or_insert_with(Chunk::new);
+        let chunk = self.chunks.entry(chunk_coord).or_default();
         chunk.insert(local_row, local_col, value)
     }
 
@@ -329,7 +329,7 @@ impl<T: Clone> ChunkedGrid<T> {
     /// * `col` - Global column coordinate
     pub fn get_or_create_chunk(&mut self, row: usize, col: usize) -> &mut Chunk<T> {
         let chunk_coord = ChunkCoord::from_cell(row, col);
-        self.chunks.entry(chunk_coord).or_insert_with(Chunk::new)
+        self.chunks.entry(chunk_coord).or_default()
     }
 
     /// Iterate over all cells in the grid.

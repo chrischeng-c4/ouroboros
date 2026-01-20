@@ -293,10 +293,10 @@ impl Criteria {
                 (CellValue::Boolean(a), CellValue::Boolean(b)) => a != b,
                 _ => true,
             },
-            Criteria::GreaterThan(n) => value.as_number().map_or(false, |v| v > *n),
-            Criteria::GreaterThanOrEqual(n) => value.as_number().map_or(false, |v| v >= *n),
-            Criteria::LessThan(n) => value.as_number().map_or(false, |v| v < *n),
-            Criteria::LessThanOrEqual(n) => value.as_number().map_or(false, |v| v <= *n),
+            Criteria::GreaterThan(n) => value.as_number().is_some_and(|v| v > *n),
+            Criteria::GreaterThanOrEqual(n) => value.as_number().is_some_and(|v| v >= *n),
+            Criteria::LessThan(n) => value.as_number().is_some_and(|v| v < *n),
+            Criteria::LessThanOrEqual(n) => value.as_number().is_some_and(|v| v <= *n),
         }
     }
 }

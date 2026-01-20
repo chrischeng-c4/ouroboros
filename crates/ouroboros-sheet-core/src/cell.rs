@@ -4,20 +4,15 @@ use crate::error::CellError;
 use crate::format::CellFormat;
 
 /// Represents the raw value stored in a cell
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
 pub enum CellValue {
+    #[default]
     Empty,
     Number(f64),
     Text(String),
     Boolean(bool),
     Error(CellError),
-}
-
-impl Default for CellValue {
-    fn default() -> Self {
-        CellValue::Empty
-    }
 }
 
 impl CellValue {
@@ -151,20 +146,11 @@ impl CellContent {
 }
 
 /// Complete cell data structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Cell {
     pub content: CellContent,
     #[serde(default)]
     pub format: CellFormat,
-}
-
-impl Default for Cell {
-    fn default() -> Self {
-        Cell {
-            content: CellContent::default(),
-            format: CellFormat::default(),
-        }
-    }
 }
 
 impl Cell {

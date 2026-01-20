@@ -37,7 +37,7 @@ impl DependencyGraph {
         for dep in &deps {
             self.dependents
                 .entry(*dep)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(cell);
         }
 

@@ -3,9 +3,10 @@ use serde::{Deserialize, Serialize};
 use super::selection::CellPosition;
 
 /// Edit mode determines what the user is currently editing
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum EditMode {
     /// Not editing, just viewing the spreadsheet
+    #[default]
     Viewing,
     /// Editing a cell directly in the grid
     CellEditing {
@@ -17,12 +18,6 @@ pub enum EditMode {
         position: CellPosition,
         content: String,
     },
-}
-
-impl Default for EditMode {
-    fn default() -> Self {
-        Self::Viewing
-    }
 }
 
 impl EditMode {
