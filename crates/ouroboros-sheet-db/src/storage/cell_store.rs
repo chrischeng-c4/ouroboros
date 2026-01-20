@@ -2,14 +2,13 @@
 //!
 //! Provides efficient storage and retrieval of spreadsheet cells using Morton encoding.
 
-use crate::{Result, SheetDbError};
+use crate::Result;
 use ouroboros_kv::KvEngine;
 use ouroboros_sheet_core::CellValue;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
 
-use super::morton::MortonKey;
 use super::wal::WriteAheadLog;
 
 /// Cell store for spreadsheet data
