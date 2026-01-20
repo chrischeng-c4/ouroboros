@@ -221,6 +221,53 @@ impl MutableNode {
         }
         None
     }
+
+    /// Find a node at a specific span.
+    pub fn find_at_span(&self, span: &Span) -> Option<&MutableNode> {
+        if self.span.start == span.start && self.span.end == span.end {
+            return Some(self);
+        }
+        for child in self.children.iter() {
+            if let Some(found) = child.find_at_span(span) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    /// Collect all nodes of a specific kind.
+    pub fn collect_by_kind<'a>(&'a self, kind: &str, results: &mut Vec<&'a MutableNode>) {
+        if self.kind == kind {
+            results.push(self);
+        }
+        for child in self.children.iter() {
+            child.collect_by_kind(kind, results);
+        }
+    }
+
+    /// Find the innermost node containing a position.
+    pub fn find_at_position(&self, line: usize, col: usize) -> Option<&MutableNode> {
+        // Check if position is within this node's span
+        if line < self.span.start_line || line > self.span.end_line {
+            return None;
+        }
+        if line == self.span.start_line && col < self.span.start_col {
+            return None;
+        }
+        if line == self.span.end_line && col > self.span.end_col {
+            return None;
+        }
+
+        // Check children for a more specific match
+        for child in self.children.iter() {
+            if let Some(found) = child.find_at_position(line, col) {
+                return Some(found);
+            }
+        }
+
+        // This is the innermost node containing the position
+        Some(self)
+    }
 }
 
 // ============================================================================
@@ -427,6 +474,23 @@ impl MutableAst {
             }
         }
         None
+    }
+
+    /// Find a node at a specific span.
+    pub fn find_at_span(&self, span: &Span) -> Option<&MutableNode> {
+        self.root.find_at_span(span)
+    }
+
+    /// Find all nodes of a specific kind.
+    pub fn find_by_kind(&self, kind: &str) -> Vec<&MutableNode> {
+        let mut results = Vec::new();
+        self.root.collect_by_kind(kind, &mut results);
+        results
+    }
+
+    /// Find the innermost node containing a position.
+    pub fn find_at_position(&self, line: usize, col: usize) -> Option<&MutableNode> {
+        self.root.find_at_position(line, col)
     }
 }
 
