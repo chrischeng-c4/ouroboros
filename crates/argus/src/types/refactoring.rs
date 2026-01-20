@@ -195,6 +195,14 @@ impl RefactorResult {
 // Refactoring Engine
 // ============================================================================
 
+/// Data flow analysis result.
+struct DataFlow {
+    /// Variables used but not defined in the selection
+    external_vars: Vec<String>,
+    /// Variables defined in the selection
+    defined_vars: Vec<String>,
+}
+
 /// Engine for performing refactoring operations.
 pub struct RefactoringEngine {
     /// Type inferencer for type information
@@ -296,50 +304,197 @@ impl RefactoringEngine {
         Ok(self.ast_cache.get_mut(file).unwrap())
     }
 
+    // ========================================================================
+    // Helper Methods
+    // ========================================================================
+
+    /// Analyze data flow for a code selection.
+    fn analyze_data_flow(&self, _target: &MutableNode, _root: &MutableNode, _source: &str) -> DataFlow {
+        // Simplified implementation - in reality would do full data flow analysis
+        DataFlow {
+            external_vars: Vec::new(),
+            defined_vars: Vec::new(),
+        }
+    }
+
+    /// Get indentation at a specific byte position.
+    fn get_indent_at_position_static(source: &str, byte_pos: usize) -> String {
+        // Find the line number containing this byte position
+        let mut current_pos = 0;
+        for line in source.lines() {
+            let line_end = current_pos + line.len();
+
+            // Check if byte_pos is in this line
+            if byte_pos >= current_pos && byte_pos <= line_end {
+                let indent_len = line.len() - line.trim_start().len();
+                return " ".repeat(indent_len);
+            }
+
+            // +1 for newline character
+            current_pos = line_end + 1;
+        }
+
+        String::new()
+    }
+
+    /// Find the statement containing an expression.
+    fn find_containing_statement<'a>(
+        &self,
+        target: &'a MutableNode,
+        root: &'a MutableNode,
+    ) -> Option<&'a MutableNode> {
+        // Walk up from target to find a statement node
+        self.find_ancestor_of_kind(target, root, &[
+            "expression_statement",
+            "assignment",
+            "return_statement",
+            "if_statement",
+            "for_statement",
+            "while_statement",
+        ])
+    }
+
+    /// Find ancestor node of specific kinds.
+    fn find_ancestor_of_kind<'a>(
+        &self,
+        target: &'a MutableNode,
+        root: &'a MutableNode,
+        kinds: &[&str],
+    ) -> Option<&'a MutableNode> {
+        // Check if current node is one of the target kinds
+        if kinds.contains(&target.kind.as_str()) {
+            return Some(target);
+        }
+
+        // Recursively search parent nodes
+        self.find_ancestor_helper(target, root, root, kinds)
+    }
+
+    /// Helper for finding ancestors.
+    fn find_ancestor_helper<'a>(
+        &self,
+        target: &'a MutableNode,
+        current: &'a MutableNode,
+        root: &'a MutableNode,
+        kinds: &[&str],
+    ) -> Option<&'a MutableNode> {
+        for child in current.children.iter() {
+            if child.id == target.id {
+                // Found the target, check if current is the right kind
+                if kinds.contains(&current.kind.as_str()) {
+                    return Some(current);
+                }
+                // Continue searching up
+                return None;
+            }
+
+            // Recursively search in child
+            if let Some(found) = self.find_ancestor_helper(target, child, root, kinds) {
+                return Some(found);
+            }
+        }
+
+        None
+    }
+
+    /// Find insertion point for a new function definition.
+    fn find_function_insertion_point(&self, _root: &MutableNode, current_line: usize) -> usize {
+        // Simplified: insert at beginning of file
+        // In reality, would find the end of the current function or class
+        _ = current_line;
+        0
+    }
+
+    // ========================================================================
+    // Public Methods
+    // ========================================================================
+
     /// Execute a refactoring operation.
-    pub fn execute(&mut self, request: &RefactorRequest) -> RefactorResult {
+    pub fn execute(&mut self, request: &RefactorRequest, source: &str) -> RefactorResult {
         match &request.kind {
             RefactorKind::ExtractFunction { name } => {
-                self.extract_function(request, name)
+                self.extract_function(request, name, source)
             }
             RefactorKind::ExtractMethod { name } => {
-                self.extract_method(request, name)
+                self.extract_method(request, name, source)
             }
             RefactorKind::ExtractVariable { name } => {
-                self.extract_variable(request, name)
+                self.extract_variable(request, name, source)
             }
             RefactorKind::Rename { new_name } => {
-                self.rename_symbol(request, new_name)
+                self.rename_symbol(request, new_name, source)
             }
             RefactorKind::MoveDefinition { target_file } => {
-                self.move_definition(request, target_file)
+                self.move_definition(request, target_file, source)
             }
             RefactorKind::Inline => {
-                self.inline_symbol(request)
+                self.inline_symbol(request, source)
             }
             RefactorKind::ChangeSignature { changes } => {
-                self.change_signature(request, changes)
+                self.change_signature(request, changes, source)
             }
         }
     }
 
     /// Extract selection into a new function.
-    fn extract_function(&self, request: &RefactorRequest, name: &str) -> RefactorResult {
+    fn extract_function(&mut self, request: &RefactorRequest, name: &str, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
-        // Placeholder implementation
-        result.add_diagnostic(
-            DiagnosticLevel::Info,
-            format!("Extract function '{}' at {:?}", name, request.span),
-            Some(request.file.clone()),
-            Some(request.span),
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Extract the selected code
+        let selected_code = &source[request.span.start..request.span.end];
+
+        // Simplified: no parameters for now
+        let params_str = String::new();
+
+        let func_def = format!(
+            "def {}({}):\n{}\n\n",
+            name,
+            params_str,
+            selected_code.lines()
+                .map(|line| format!("    {}", line))
+                .collect::<Vec<_>>()
+                .join("\n    ")
+        );
+
+        // Generate function call
+        let call_str = format!("{}()", name);
+
+        // Insert at beginning of file
+        let insert_pos = 0;
+
+        // Create edits
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: Span::new(insert_pos, insert_pos),
+                new_text: func_def,
+            },
+        );
+
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: request.span,
+                new_text: call_str,
+            },
         );
 
         result
     }
 
     /// Extract selection into a new method.
-    fn extract_method(&self, request: &RefactorRequest, name: &str) -> RefactorResult {
+    fn extract_method(&mut self, request: &RefactorRequest, name: &str, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
         result.add_diagnostic(
@@ -353,21 +508,69 @@ impl RefactoringEngine {
     }
 
     /// Extract expression into a variable.
-    fn extract_variable(&self, request: &RefactorRequest, name: &str) -> RefactorResult {
+    fn extract_variable(&mut self, request: &RefactorRequest, name: &str, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
-        result.add_diagnostic(
-            DiagnosticLevel::Info,
-            format!("Extract variable '{}' at {:?}", name, request.span),
-            Some(request.file.clone()),
-            Some(request.span),
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Extract the expression text
+        let expr_text = &source[request.span.start..request.span.end];
+
+        // Get indentation at the current position
+        let indent = Self::get_indent_at_position_static(source, request.span.start);
+
+        // Generate variable assignment
+        let assignment = format!("{}{} = {}\n", indent, name, expr_text);
+
+        // Find line start position
+        let line_start = Self::find_line_start(source, request.span.start);
+
+        // Insert the assignment before the current line
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: Span::new(line_start, line_start),
+                new_text: assignment,
+            },
+        );
+
+        // Replace the expression with the variable name
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: request.span,
+                new_text: name.to_string(),
+            },
         );
 
         result
     }
 
+    /// Find the start of a line containing a byte position.
+    fn find_line_start(source: &str, pos: usize) -> usize {
+        let mut line_start = 0;
+        for (i, ch) in source.char_indices() {
+            if i >= pos {
+                break;
+            }
+            if ch == '\n' {
+                line_start = i + 1;
+            }
+        }
+        line_start
+    }
+
     /// Rename a symbol across files.
-    fn rename_symbol(&self, request: &RefactorRequest, new_name: &str) -> RefactorResult {
+    fn rename_symbol(&mut self, request: &RefactorRequest, new_name: &str, _source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
         // Find all references to the symbol
@@ -382,7 +585,7 @@ impl RefactoringEngine {
     }
 
     /// Move a definition to another file.
-    fn move_definition(&self, request: &RefactorRequest, target_file: &PathBuf) -> RefactorResult {
+    fn move_definition(&mut self, request: &RefactorRequest, target_file: &PathBuf, _source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
         result.add_diagnostic(
@@ -396,7 +599,7 @@ impl RefactoringEngine {
     }
 
     /// Inline a symbol's definition.
-    fn inline_symbol(&self, request: &RefactorRequest) -> RefactorResult {
+    fn inline_symbol(&mut self, request: &RefactorRequest, _source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
         result.add_diagnostic(
@@ -410,7 +613,7 @@ impl RefactoringEngine {
     }
 
     /// Change function signature.
-    fn change_signature(&self, request: &RefactorRequest, _changes: &SignatureChanges) -> RefactorResult {
+    fn change_signature(&mut self, request: &RefactorRequest, _changes: &SignatureChanges, _source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
         result.add_diagnostic(
@@ -461,17 +664,18 @@ mod tests {
 
     #[test]
     fn test_refactor_request() {
+        let source = "old_name = 42";
         let request = RefactorRequest {
             kind: RefactorKind::Rename {
                 new_name: "new_name".to_string(),
             },
             file: PathBuf::from("test.py"),
-            span: Span::new(0, 10),
+            span: Span::new(0, 8),
             options: RefactorOptions::default(),
         };
 
         let mut engine = RefactoringEngine::new();
-        let result = engine.execute(&request);
+        let result = engine.execute(&request, source);
 
         assert!(!result.has_errors());
     }
