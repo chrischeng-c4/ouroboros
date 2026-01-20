@@ -233,6 +233,12 @@ pub mod pydantic_validation;
 /// (Mermaid, JSON, Markdown) for migration history.
 pub mod history_vis;
 
+/// Parallel bulk operations using Rayon.
+///
+/// High-performance bulk insert, update, and delete operations that
+/// leverage Rayon for parallel execution across batches.
+pub mod bulk;
+
 pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
@@ -270,5 +276,8 @@ pub use history_vis::{
     MigrationTree, MigrationNode, AsciiRenderer, AsciiConfig,
     HistoryExporter, ExportFormat, HistoryVisualizer,
 };
+
+// Bulk operations re-exports
+pub use bulk::{BulkConfig, BulkResult, BulkExecutor};
 
 pub use ouroboros_common::{DataBridgeError, Result};
