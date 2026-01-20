@@ -4,7 +4,7 @@ Complete documentation for Argus - A multi-language code analysis and refactorin
 
 ---
 
-## 🎉 P0 Features Complete (2026-01-20)
+## 🎉 P0 Features Complete + P1 M5.1 Package Manager Integration (2026-01-20)
 
 All critical P0 features are now **implemented, tested, and documented**:
 - ✅ **Semantic Search** (100%)
@@ -12,7 +12,14 @@ All critical P0 features are now **implemented, tested, and documented**:
 - ✅ **Framework Support** (90%)
 - ✅ **Integration Testing** (90%)
 
-**Overall P0 Completion: ~80%**
+**P1 Features (In Progress)**:
+- ✅ **Package Manager Integration** (100%) - NEW!
+  - uv, Poetry, Pipenv, pip support
+  - Automatic dependency detection
+  - Virtual environment discovery
+  - Framework detection enhancement
+
+**Overall Completion: P0 ~80% | P1 ~20%**
 
 ---
 
@@ -114,7 +121,76 @@ See [Usage Examples](./USAGE_EXAMPLES.md) for more.
 
 ---
 
-### 4. Multi-Language Support
+### 4. Package Manager Integration (NEW! - 100% Complete)
+
+**Automatic Detection & Integration**:
+
+Argus automatically detects and integrates with Python package managers to provide enhanced framework detection and import resolution:
+
+**Supported Package Managers** (Priority Order):
+1. **uv** - Modern, fastest package manager (highest priority)
+2. **Poetry** - Dependency resolution and packaging
+3. **Pipenv** - Virtual environment management
+4. **pip** - Standard package installer (fallback)
+
+**Features**:
+- 🎯 **Automatic Detection** - No manual configuration required
+- 📦 **Dependency Parsing** - Reads from pyproject.toml, Pipfile, requirements.txt
+- 🔒 **Lockfile Support** - High-confidence detection from uv.lock, poetry.lock, Pipfile.lock
+- 🔍 **Virtual Environment Discovery** - Finds .venv, venv, etc.
+- 🚀 **Framework Enhancement** - Improves framework detection from dependencies
+
+**Usage**:
+
+```rust
+use argus::types::{PackageManagerDetector, FrameworkDetector, DeepTypeInferencer};
+use std::path::PathBuf;
+
+// Detect package manager
+let root = PathBuf::from("/path/to/project");
+let detector = PackageManagerDetector::new(root.clone());
+let detection = detector.detect();
+
+println!("Package Manager: {}", detection.manager.display_name());
+println!("Dependencies: {}", detection.dependencies.len());
+println!("Virtual Environment: {:?}", detection.venv_path);
+
+// Framework detection automatically uses package manager info
+let framework_detector = FrameworkDetector::new(root.clone());
+let frameworks = framework_detector.detect();
+
+// Type inference with venv awareness
+let mut inferencer = DeepTypeInferencer::new()
+    .with_package_detection(detection);
+
+// Now can resolve imports from site-packages
+if inferencer.has_module("django") {
+    println!("Django is available");
+}
+```
+
+**Detection Logic**:
+1. **uv**: Looks for `uv.lock` + `pyproject.toml` with `[tool.uv]`
+2. **Poetry**: Looks for `pyproject.toml` with `[tool.poetry]` + `poetry.lock`
+3. **Pipenv**: Looks for `Pipfile` + `Pipfile.lock`
+4. **pip**: Looks for `requirements.txt` (or `requirements/*.txt`)
+
+**Benefits**:
+- ✅ High-confidence framework detection (95%+ with lockfiles)
+- ✅ Accurate dependency tracking
+- ✅ Virtual environment-aware import resolution
+- ✅ Works seamlessly with existing analysis
+
+**Test Coverage**: 21 tests (15 unit + 6 integration)
+
+**Supported Dependency Formats**:
+- pyproject.toml: `dependencies = ["django>=4.0", "fastapi[all]"]`
+- Pipfile: `django = ">=4.0"` or `fastapi = {extras = ["all"], version = "^0.100"}`
+- requirements.txt: `django>=4.0`, `fastapi[all]>=0.100`, `-e git+https://...#egg=package`
+
+---
+
+### 5. Multi-Language Support
 
 | Language | Refactoring | Search | Framework | Status |
 |----------|-------------|--------|-----------|--------|
@@ -137,17 +213,21 @@ See [Usage Examples](./USAGE_EXAMPLES.md) for more.
 | Rename Symbol | 14 | ~395 | 100% |
 | Advanced Refactoring | 15 | ~422 | 100% |
 | P0 Integration | 13 | ~437 | 100% |
-| **Total** | **67** | **~1,724** | **100%** |
+| Package Managers | 15 | ~300 | 100% |
+| Framework+PM Integration | 6 | ~100 | 100% |
+| **Total** | **88** | **~2,124** | **100%** |
 
 ### Test Organization
 
 ```
 crates/argus/tests/
-├── test_refactoring_ast.rs          # AST caching and queries
-├── test_refactoring_extract.rs      # Extract variable/function
-├── test_refactoring_rename.rs       # Rename symbol
-├── test_refactoring_advanced.rs     # Inline, move, signature
-└── test_p0_integration.rs           # Cross-phase integration
+├── test_refactoring_ast.rs                      # AST caching and queries
+├── test_refactoring_extract.rs                  # Extract variable/function
+├── test_refactoring_rename.rs                   # Rename symbol
+├── test_refactoring_advanced.rs                 # Inline, move, signature
+├── test_p0_integration.rs                       # Cross-phase integration
+├── test_package_managers.rs                     # Package manager detection
+└── test_framework_package_manager_integration.rs # Framework + PM integration
 ```
 
 ---

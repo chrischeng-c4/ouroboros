@@ -26,6 +26,7 @@ mod codegen;
 mod semantic_search;
 mod incremental;
 mod frameworks;
+mod package_managers;
 
 pub use ty::{LiteralValue, Param, ParamKind, Type, TypeVarId, Variance};
 pub use class_info::{ClassInfo, GenericParam};
@@ -83,4 +84,7 @@ pub use frameworks::{
     FastAPITypeProvider, FastAPIEndpoint,
     PydanticTypeProvider, PydanticModel, PydanticField, PydanticConfig, PydanticExtra,
     FrameworkRegistry,
+};
+pub use package_managers::{
+    PackageManager, Dependency, PackageManagerDetection, PackageManagerDetector,
 };

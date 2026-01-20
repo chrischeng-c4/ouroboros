@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use crate::types::ty::Type;
 use super::deep_inference::TypeContext;
+use super::package_managers::{PackageManagerDetector, PackageManagerDetection};
 
 // ============================================================================
 // Framework Detection
@@ -61,11 +62,17 @@ impl FrameworkDetection {
     }
 
     /// Add a detected framework with confidence.
+    ///
+    /// If the framework was already detected, takes the maximum confidence.
     pub fn add_framework(&mut self, framework: Framework, confidence: f64) {
         if !self.frameworks.contains(&framework) {
             self.frameworks.push(framework.clone());
         }
-        self.confidence.insert(framework, confidence);
+
+        // Take maximum of existing and new confidence
+        let current_confidence = self.confidence.get(&framework).copied().unwrap_or(0.0);
+        let max_confidence = current_confidence.max(confidence);
+        self.confidence.insert(framework, max_confidence);
     }
 }
 
@@ -82,15 +89,68 @@ impl FrameworkDetector {
     }
 
     /// Detect frameworks in the project.
+    ///
+    /// Uses multiple detection strategies:
+    /// 1. Package manager dependencies (HIGH CONFIDENCE - from lockfiles)
+    /// 2. File-based detection (project structure, config files)
     pub fn detect(&self) -> FrameworkDetection {
         let mut result = FrameworkDetection::empty();
 
-        // Detect each framework
+        // NEW: Detect via package manager (highest confidence when lockfile exists)
+        let pkg_detector = PackageManagerDetector::new(self.root.clone());
+        let pkg_detection = pkg_detector.detect();
+
+        // Add frameworks detected from dependencies
+        self.detect_from_dependencies(&pkg_detection, &mut result);
+
+        // Continue with file-based detection (may increase confidence)
         self.detect_django(&mut result);
         self.detect_flask(&mut result);
         self.detect_fastapi(&mut result);
 
         result
+    }
+
+    /// Detect frameworks from package manager dependencies
+    ///
+    /// This provides high-confidence detection when a lockfile is present.
+    fn detect_from_dependencies(&self, pkg_detection: &PackageManagerDetection, result: &mut FrameworkDetection) {
+        // Base confidence: higher with lockfile, lower without
+        let base_confidence = if pkg_detection.lock_file.is_some() {
+            0.95  // Very high confidence with lockfile
+        } else {
+            0.85  // Still high confidence from explicit dependencies
+        };
+
+        // Check each framework dependency
+        for dep in &pkg_detection.dependencies {
+            match dep.name.as_str() {
+                "django" => {
+                    result.add_framework(Framework::Django, base_confidence);
+                }
+                "fastapi" => {
+                    result.add_framework(Framework::FastAPI, base_confidence);
+                }
+                "flask" => {
+                    result.add_framework(Framework::Flask, base_confidence);
+                }
+                "pydantic" => {
+                    // Pydantic alone doesn't mean the project uses it as a framework
+                    // Only add if no other framework detected
+                    if !result.has_framework(&Framework::Django) &&
+                       !result.has_framework(&Framework::FastAPI) {
+                        result.add_framework(Framework::Pydantic, base_confidence * 0.7);
+                    }
+                }
+                "sqlalchemy" => {
+                    result.add_framework(Framework::SQLAlchemy, base_confidence);
+                }
+                "celery" => {
+                    result.add_framework(Framework::Celery, base_confidence);
+                }
+                _ => {}
+            }
+        }
     }
 
     /// Check for Django.

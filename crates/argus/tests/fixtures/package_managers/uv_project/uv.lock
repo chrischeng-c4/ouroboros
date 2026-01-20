@@ -1,0 +1,30 @@
+version = 1
+requires-python = ">=3.10"
+
+[[distribution]]
+name = "django"
+version = "4.2.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "asgiref" },
+    { name = "sqlparse" },
+]
+
+[[distribution]]
+name = "fastapi"
+version = "0.104.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "starlette" },
+]
+
+[[distribution]]
+name = "pydantic"
+version = "2.5.2"
+source = { registry = "https://pypi.org/simple" }
+
+[[distribution]]
+name = "requests"
+version = "2.31.0"
+source = { registry = "https://pypi.org/simple" }
