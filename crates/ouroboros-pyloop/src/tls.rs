@@ -313,9 +313,20 @@ impl CertificateInfo {
         }
         self.san.iter().any(|name| {
             if name.starts_with("*.") {
-                // Wildcard match
+                // Wildcard match - *.example.com matches www.example.com but not foo.www.example.com
                 let suffix = &name[2..];
-                hostname.ends_with(suffix) && !hostname[..hostname.len() - suffix.len()].contains('.')
+                if hostname.ends_with(suffix) {
+                    let prefix_len = hostname.len() - suffix.len();
+                    if prefix_len > 1 {
+                        let prefix_with_dot = &hostname[..prefix_len];
+                        // prefix should end with '.' and not contain any other dots
+                        prefix_with_dot.ends_with('.') && !prefix_with_dot[..prefix_len-1].contains('.')
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
             } else {
                 name == hostname
             }

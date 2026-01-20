@@ -476,7 +476,7 @@ impl AcceptLanguage {
             for lang in available {
                 if let Some(tag) = LanguageTag::parse(lang) {
                     if pref.matches(&tag) {
-                        return Some(lang);
+                        return Some(*lang);
                     }
                 }
             }
@@ -574,7 +574,7 @@ mod tests {
 
         let available = &["zh-CN", "en-GB", "fr"];
         let selected = accept.select(available);
-        assert_eq!(selected, Some(&"en-GB"));
+        assert_eq!(selected, Some("en-GB"));
     }
 
     #[test]

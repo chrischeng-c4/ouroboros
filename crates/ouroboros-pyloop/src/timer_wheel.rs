@@ -334,6 +334,15 @@ impl TimerWheel {
 mod tests {
     use super::*;
     use pyo3::Python;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn init_python() {
+        INIT.call_once(|| {
+            pyo3::prepare_freethreaded_python();
+        });
+    }
 
     #[test]
     fn test_timer_wheel_creation() {
@@ -345,6 +354,7 @@ mod tests {
 
     #[test]
     fn test_timer_registration() {
+        init_python();
         Python::with_gil(|py| {
             let (sender, _receiver) = unbounded_channel();
             let wheel = TimerWheel::new(sender);
@@ -373,6 +383,7 @@ mod tests {
 
     #[test]
     fn test_timer_expiration() {
+        init_python();
         Python::with_gil(|py| {
             let (sender, mut receiver) = unbounded_channel();
             let wheel = TimerWheel::new(sender);
@@ -405,6 +416,7 @@ mod tests {
 
     #[test]
     fn test_timer_cancellation() {
+        init_python();
         Python::with_gil(|py| {
             let (sender, mut receiver) = unbounded_channel();
             let wheel = TimerWheel::new(sender);
