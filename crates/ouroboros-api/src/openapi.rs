@@ -568,6 +568,8 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
                 ..Default::default()
             }
         }
+        // BSON types (always handle them, even if bson feature not enabled in ouroboros-api)
+        // These may be present if ouroboros-validation is built with bson feature
         #[cfg(feature = "bson")]
         TypeDescriptor::ObjectId => Schema::string()
             .format("objectid")
@@ -585,6 +587,9 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
             .format("binary")
             .description("BSON Binary data with subtype"),
         TypeDescriptor::Any => Schema::default(),
+        // Catch-all for any other variants (e.g., BSON types when bson feature not enabled here)
+        #[allow(unreachable_patterns)]
+        _ => Schema::default(),
     }
 }
 

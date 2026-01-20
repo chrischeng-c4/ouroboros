@@ -33,7 +33,8 @@ repository = "https://github.com/chrischeng-c4/ouroboros"
 
 [workspace.dependencies]
 # Python bindings (upgraded to 0.24 for RUSTSEC-2025-0020 fix)
-pyo3 = { version = "0.24", features = ["extension-module", "abi3-py312"] }
+# NOTE: Do NOT add "extension-module" here - it should only be in the final Python extension crate
+pyo3 = { version = "0.24", features = ["abi3-py312"] }
 pyo3-async-runtimes = { version = "0.24", features = ["tokio-runtime"] }
 
 # Async runtime
