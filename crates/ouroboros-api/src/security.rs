@@ -362,7 +362,7 @@ impl JwtHandler {
         let exp = extract_number_field(json, "exp")
             .ok_or(ApiError::Unauthorized)?;
 
-        let mut claims = JwtClaims {
+        let claims = JwtClaims {
             sub,
             iat,
             exp,

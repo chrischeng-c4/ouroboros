@@ -440,7 +440,7 @@ fn format_http_date(time: SystemTime) -> String {
     let seconds = time_of_day % 60;
 
     // Days since epoch to date (simplified algorithm)
-    let mut z = days as i64 + 719468;
+    let z = days as i64 + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
     let doe = (z - era * 146097) as u32;
     let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;

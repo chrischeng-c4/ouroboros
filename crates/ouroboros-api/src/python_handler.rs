@@ -121,7 +121,7 @@ fn convert_request_to_py(
     py: Python<'_>,
     req: crate::request::SerializableRequest,
 ) -> PyResult<PyObject> {
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
 
     // Basic request info
     dict.set_item("method", req.method.as_str())?;
@@ -129,21 +129,21 @@ fn convert_request_to_py(
     dict.set_item("url", req.url)?;
 
     // Headers
-    let headers_dict = PyDict::new_bound(py);
+    let headers_dict = PyDict::new(py);
     for (key, value) in req.headers.iter() {
         headers_dict.set_item(key, value)?;
     }
     dict.set_item("headers", headers_dict)?;
 
     // Query parameters
-    let query_dict = PyDict::new_bound(py);
+    let query_dict = PyDict::new(py);
     for (key, value) in req.query_params.iter() {
         query_dict.set_item(key, serializable_value_to_py(py, value)?)?;
     }
     dict.set_item("query_params", query_dict)?;
 
     // Path parameters
-    let path_dict = PyDict::new_bound(py);
+    let path_dict = PyDict::new(py);
     for (key, value) in req.path_params.iter() {
         path_dict.set_item(key, value)?;
     }
@@ -158,23 +158,23 @@ fn convert_request_to_py(
 
     // Form data (if present)
     if let Some(form_data) = req.form_data {
-        let form_dict = PyDict::new_bound(py);
+        let form_dict = PyDict::new(py);
 
         // Fields
-        let fields_dict = PyDict::new_bound(py);
+        let fields_dict = PyDict::new(py);
         for (key, value) in form_data.fields.iter() {
             fields_dict.set_item(key, value)?;
         }
         form_dict.set_item("fields", fields_dict)?;
 
         // Files (if any)
-        let files_list = pyo3::types::PyList::empty_bound(py);
+        let files_list = pyo3::types::PyList::empty(py);
         for file in form_data.files.iter() {
-            let file_dict = PyDict::new_bound(py);
+            let file_dict = PyDict::new(py);
             file_dict.set_item("field_name", &file.field_name)?;
             file_dict.set_item("filename", &file.filename)?;
             file_dict.set_item("content_type", &file.content_type)?;
-            file_dict.set_item("data", pyo3::types::PyBytes::new_bound(py, &file.data))?;
+            file_dict.set_item("data", pyo3::types::PyBytes::new(py, &file.data))?;
             files_list.append(file_dict)?;
         }
         form_dict.set_item("files", files_list)?;
@@ -189,6 +189,7 @@ fn convert_request_to_py(
 }
 
 /// Convert SerializableValue to Python object
+#[allow(deprecated)] // PyO3 API transition - to_object will be replaced by IntoPyObject
 fn serializable_value_to_py(py: Python<'_>, value: &SerializableValue) -> PyResult<PyObject> {
     match value {
         SerializableValue::Null => Ok(py.None()),
@@ -196,16 +197,16 @@ fn serializable_value_to_py(py: Python<'_>, value: &SerializableValue) -> PyResu
         SerializableValue::Int(i) => Ok(i.to_object(py)),
         SerializableValue::Float(f) => Ok(f.to_object(py)),
         SerializableValue::String(s) => Ok(s.to_object(py)),
-        SerializableValue::Bytes(b) => Ok(pyo3::types::PyBytes::new_bound(py, b).to_object(py)),
+        SerializableValue::Bytes(b) => Ok(pyo3::types::PyBytes::new(py, b).to_object(py)),
         SerializableValue::List(arr) => {
-            let py_list = pyo3::types::PyList::empty_bound(py);
+            let py_list = pyo3::types::PyList::empty(py);
             for item in arr {
                 py_list.append(serializable_value_to_py(py, item)?)?;
             }
             Ok(py_list.to_object(py))
         }
         SerializableValue::Object(obj) => {
-            let py_dict = PyDict::new_bound(py);
+            let py_dict = PyDict::new(py);
             for (key, val) in obj {
                 py_dict.set_item(key, serializable_value_to_py(py, val)?)?;
             }
@@ -415,9 +416,9 @@ mod tests {
     #[test]
     fn test_convert_py_to_response_dict() {
         Python::with_gil(|py| {
-            let dict = PyDict::new_bound(py);
+            let dict = PyDict::new(py);
             dict.set_item("status", 201).unwrap();
-            dict.set_item("body", PyDict::new_bound(py)).unwrap();
+            dict.set_item("body", PyDict::new(py)).unwrap();
 
             #[allow(deprecated)]
             let response = convert_py_to_response(py, dict.to_object(py)).unwrap();
@@ -430,6 +431,7 @@ mod tests {
     #[test]
     fn test_convert_py_to_response_tuple() {
         Python::with_gil(|py| {
+            #[allow(deprecated)]
             let tuple = PyTuple::new_bound(py, &[404.to_object(py), "Not found".to_object(py)]);
 
             #[allow(deprecated)]

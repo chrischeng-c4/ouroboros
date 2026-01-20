@@ -328,7 +328,7 @@ impl UnixStreamReader {
     /// Check if at EOF
     pub async fn at_eof(&self) -> bool {
         // Try to peek; if 0 bytes, we're at EOF
-        let transport = self.transport.lock().await;
+        let _transport = self.transport.lock().await;
         // Can't easily implement without peek, return false
         false
     }
