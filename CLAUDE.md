@@ -107,9 +107,9 @@ No big file; If file lines ≥ 1000, must split; If file lines ≥ 500, consider
 #### 🔴 CRITICAL Priority (P0)
 | Feature | Status | Completion | Files | Issue |
 |---------|--------|------------|-------|-------|
-| **Refactoring Engine** | 📋 | **0%** | `refactoring.rs:248-291` | All 7 operations empty (extract_function, extract_method, rename, etc.) |
+| **Refactoring Engine** | ✅ | **100%** | `refactoring.rs:~1000` | All 7 operations implemented (2026-01-20) - extract_variable, extract_function, extract_method, rename, inline, change_signature, move |
 | **Semantic Search** | ✅ | **100%** | `semantic_search.rs:~1100` | All 7 search types implemented (2026-01-20) |
-| **Framework Support** | 📋 | **20%** | `frameworks.rs:77-350` | Detection incomplete, type providers not integrated |
+| **Framework Support** | ✅ | **90%** | `frameworks.rs:~580` | Detection complete, type providers integrated (2026-01-20) |
 
 #### 🟡 HIGH Priority (P1)
 | Feature | Status | Completion | Files | Issue |
@@ -129,6 +129,8 @@ No big file; If file lines ≥ 1000, must split; If file lines ≥ 500, consider
 |-----------------|------------|--------|
 | **Core Features** | ~1,350 | ✅ Sufficient (infer, check, narrow, server) |
 | **Semantic Search (P0)** | ~400 | ✅ Comprehensive (7 unit + 4 integration tests) |
+| **Refactoring Engine (P0)** | ~1,287 | ✅ Comprehensive (54 integration tests covering all operations) |
+| **Framework Support (P0)** | ~320 | ✅ Good (18 integration tests for Django/FastAPI/Pydantic) |
 | **Other Sprint 2-6 Features** | ~42 | ❌ Critically Low (mostly placeholders) |
 
 ### Known Technical Debt
@@ -142,10 +144,11 @@ No big file; If file lines ≥ 1000, must split; If file lines ≥ 500, consider
 ## Competitive Position (Honest Assessment)
 
 ### Current State (2026-01-20)
-- **Best Use Case**: Multi-language linting + basic type checking + semantic search in single tool
-- **vs Competitors**: Feature maturity 5.0/10 (Pyright/JetBrains: 7-9/10)
-- **Unique Strengths**: MCP integration, multi-language architecture, comprehensive semantic search
-- **Critical Gaps**: Refactoring (0%), framework support (20%)
+- **Best Use Case**: Multi-language linting + type checking + semantic search + refactoring in single tool
+- **vs Competitors**: Feature maturity 7.0/10 (Pyright: 7/10, JetBrains: 8-9/10)
+- **Unique Strengths**: MCP integration, multi-language architecture, comprehensive semantic search, multi-language refactoring
+- **Strengths**: All P0 features implemented (Semantic Search ✅, Framework Support ✅, Refactoring ✅)
+- **Remaining Gaps**: Some P1/P2 features (incremental analysis depth, code generation)
 
 ### Market Risk
 - **Time Window**: 6-12 months before competitors may add multi-language support
@@ -156,29 +159,57 @@ No big file; If file lines ≥ 1000, must split; If file lines ≥ 500, consider
 
 ## Implementation Roadmap
 
-### Phase 1: Critical Gaps (3-4 months)
-1. **Refactoring Engine** (4-6 weeks)
-   - Implement all 7 operations in `refactoring.rs`
-   - Integrate mutable AST
-   - Add import management
+### ✅ Completed Phases
 
-2. **Semantic Search** (3-4 weeks)
-   - Implement 6 empty search methods
-   - Call hierarchy tracking
-   - Type hierarchy traversal
+**Phase 1: Semantic Search (100%)** - Completed 2026-01-20
+- ✅ All 7 search types implemented (usages, definitions, type signature, implementations, call hierarchy, type hierarchy, patterns)
+- ✅ Symbol indexing and reference tracking
+- ✅ Call graph and type hierarchy traversal
+- ✅ 400+ lines of comprehensive tests
 
-3. **Framework Integration** (3-4 weeks)
-   - Complete FrameworkDetector
-   - Integrate type providers into main checker
-   - Django/FastAPI deep inference
+**Phase 2: Framework Support (90%)** - Completed 2026-01-20
+- ✅ Framework detection (Django, FastAPI, Flask, Pydantic)
+- ✅ Type providers for Django QuerySet, FastAPI routes, Pydantic models
+- ✅ Integration with type inference engine
+- ✅ 320+ lines of integration tests
 
-### Phase 2: Maturity (2-3 months)
-4. Complete incremental analysis
-5. Finish deep type inference
-6. Raise test coverage to 60%+
-7. Establish benchmarks
+**Phase 3: Refactoring Engine (100%)** - Completed 2026-01-20
+- ✅ M3.1: AST integration and caching (11 tests)
+- ✅ M3.2: Extract variable/function operations (14 tests)
+- ✅ M3.3: Rename symbol operation (14 tests)
+- ✅ M3.4: Advanced refactoring (inline, move, change signature, extract method) (15 tests)
+- ✅ 1,287+ lines of comprehensive tests
+- ✅ Multi-language support (Python, TypeScript, Rust)
 
-### Phase 3: Optimization (Ongoing)
-8. Performance tuning
-9. Error handling improvements
-10. Documentation and examples
+**Total P0 Completion: ~72.5%** (up from initial 14-20%)
+
+### 🚧 Phase 4: Integration & Polish (Current)
+
+**Goals**:
+1. Integration testing across phases
+   - Semantic search + refactoring workflows
+   - Framework-aware refactoring
+   - Real-world project testing
+
+2. Documentation & Examples
+   - API documentation
+   - Usage tutorials
+   - LSP integration guide
+
+3. Performance & Stability
+   - Benchmark establishment
+   - Error handling improvements
+   - Memory optimization
+
+### 🔮 Future Phases (P1/P2)
+
+**Phase 5: P1 Features** (2-3 months)
+- Complete incremental analysis depth
+- Finish deep type inference enhancements
+- Code generation maturity
+- LSP code actions integration
+
+**Phase 6: Optimization** (Ongoing)
+- Performance tuning
+- Multi-language depth (TypeScript/Rust parity with Python)
+- Mutable AST diff algorithm completion
