@@ -21,6 +21,9 @@ members = [
     "crates/ouroboros-sheet-history",
     "crates/ouroboros-sheet-server",
     "crates/ouroboros-sheet-wasm",
+    "crates/ouroboros-agent-core",
+    "crates/ouroboros-agent-llm",
+    "crates/ouroboros-agent-tools",
 ]
 resolver = "2"
 
@@ -101,6 +104,9 @@ async-nats = "0.38"
 deadpool-redis = "0.18"
 cron = "0.12"
 tokio-util = { version = "0.7", features = ["rt"] }
+
+# LLM providers (for ouroboros-agent-llm crate)
+async-openai = "0.27"
 
 [profile.release]
 opt-level = 3
