@@ -468,7 +468,171 @@ impl FrameworkTypeProvider for DjangoTypeProvider {
         None
     }
 
-    fn get_method_signature(&self, _base_type: &Type, _method: &str) -> Option<MethodType> {
+    fn get_method_signature(&self, base_type: &Type, method: &str) -> Option<MethodType> {
+        if let Type::Instance { name, .. } = base_type {
+            // Check if it's a model instance or QuerySet
+            let is_queryset = name.ends_with("QuerySet");
+            let model_name = if is_queryset {
+                // Extract model name from "UserQuerySet" -> "User"
+                name.strip_suffix("QuerySet").unwrap_or(name)
+            } else {
+                name.as_str()
+            };
+
+            // Check if this is a known model
+            if self.models.contains_key(model_name) || is_queryset {
+                return match method {
+                    // QuerySet methods that return QuerySet
+                    "filter" | "exclude" | "select_related" | "prefetch_related"
+                    | "annotate" | "order_by" | "distinct" | "defer" | "only"
+                    | "using" | "select_for_update" => Some(MethodType {
+                        params: vec![], // **kwargs not modeled yet
+                        return_type: Type::Instance {
+                            name: format!("{}QuerySet", model_name),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // get() returns model instance
+                    "get" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: model_name.to_string(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // all() returns QuerySet
+                    "all" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: format!("{}QuerySet", model_name),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // first() / last() return Optional[Model]
+                    "first" | "last" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Optional(Box::new(Type::Instance {
+                            name: model_name.to_string(),
+                            module: None,
+                            type_args: Vec::new(),
+                        })),
+                        is_async: false,
+                    }),
+
+                    // create() returns model instance
+                    "create" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: model_name.to_string(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // get_or_create() returns tuple (Model, bool)
+                    "get_or_create" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Tuple(vec![
+                            Type::Instance {
+                                name: model_name.to_string(),
+                                module: None,
+                                type_args: Vec::new(),
+                            },
+                            Type::Bool,
+                        ]),
+                        is_async: false,
+                    }),
+
+                    // update_or_create() returns tuple (Model, bool)
+                    "update_or_create" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Tuple(vec![
+                            Type::Instance {
+                                name: model_name.to_string(),
+                                module: None,
+                                type_args: Vec::new(),
+                            },
+                            Type::Bool,
+                        ]),
+                        is_async: false,
+                    }),
+
+                    // count() returns int
+                    "count" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Int,
+                        is_async: false,
+                    }),
+
+                    // exists() returns bool
+                    "exists" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Bool,
+                        is_async: false,
+                    }),
+
+                    // delete() returns tuple (int, dict)
+                    "delete" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Tuple(vec![
+                            Type::Int,
+                            Type::Dict(Box::new(Type::Str), Box::new(Type::Int)),
+                        ]),
+                        is_async: false,
+                    }),
+
+                    // update() returns int
+                    "update" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Int,
+                        is_async: false,
+                    }),
+
+                    // values() / values_list() return QuerySet (simplified)
+                    "values" | "values_list" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: format!("{}QuerySet", model_name),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // aggregate() returns dict
+                    "aggregate" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Dict(Box::new(Type::Str), Box::new(Type::Any)),
+                        is_async: false,
+                    }),
+
+                    // Model instance methods
+                    "save" if !is_queryset => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::None,
+                        is_async: false,
+                    }),
+
+                    "refresh_from_db" if !is_queryset => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::None,
+                        is_async: false,
+                    }),
+
+                    _ => None,
+                };
+            }
+        }
         None
     }
 
@@ -506,6 +670,176 @@ impl DjangoTypeProvider {
                 type_args: Vec::new(),
             },
         }
+    }
+
+    /// Parse Django models from Python source code.
+    /// This is a simplified parser that looks for models.Model subclasses and field definitions.
+    pub fn parse_models_from_source(&mut self, source: &str, module_path: &str) {
+        let lines: Vec<&str> = source.lines().collect();
+        let mut i = 0;
+
+        while i < lines.len() {
+            let line = lines[i].trim();
+
+            // Look for class definitions that inherit from models.Model
+            if line.starts_with("class ") && line.contains("(") {
+                if let Some(model_name) = self.extract_model_name(line) {
+                    // Check if it inherits from models.Model
+                    if line.contains("models.Model") || line.contains("Model") {
+                        // Parse the model body
+                        let model = self.parse_model_body(&lines, i + 1, &model_name, module_path);
+                        self.register_model(model);
+                    }
+                }
+            }
+
+            i += 1;
+        }
+    }
+
+    fn extract_model_name(&self, line: &str) -> Option<String> {
+        // Extract "User" from "class User(models.Model):"
+        if let Some(start) = line.find("class ") {
+            let rest = &line[start + 6..];
+            if let Some(paren) = rest.find('(') {
+                return Some(rest[..paren].trim().to_string());
+            }
+        }
+        None
+    }
+
+    fn parse_model_body(&self, lines: &[&str], start_idx: usize, model_name: &str, _module_path: &str) -> DjangoModel {
+        let mut fields = HashMap::new();
+        let mut relations = Vec::new();
+        let mut i = start_idx;
+
+        // Determine indentation level of the class body
+        let base_indent = lines.get(start_idx)
+            .and_then(|line| {
+                let trimmed = line.trim_start();
+                if !trimmed.is_empty() {
+                    Some(line.len() - trimmed.len())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(4);
+
+        while i < lines.len() {
+            let line = lines[i];
+            let trimmed = line.trim_start();
+
+            // Stop if we've left the class body (de-dented to class level or less)
+            if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                let current_indent = line.len() - trimmed.len();
+                if current_indent < base_indent {
+                    break;
+                }
+            }
+
+            // Look for field definitions (e.g., "name = models.CharField(...)")
+            if trimmed.contains(" = models.") {
+                if let Some(field) = self.parse_field_definition(trimmed) {
+                    if let DjangoFieldType::ForeignKey(ref related_model) = field.field_type {
+                        relations.push(DjangoRelation {
+                            name: field.name.clone(),
+                            related_model: related_model.clone(),
+                            relation_type: DjangoRelationType::ForeignKey,
+                        });
+                    } else if let DjangoFieldType::OneToOneField(ref related_model) = field.field_type {
+                        relations.push(DjangoRelation {
+                            name: field.name.clone(),
+                            related_model: related_model.clone(),
+                            relation_type: DjangoRelationType::OneToOne,
+                        });
+                    } else if let DjangoFieldType::ManyToManyField(ref related_model) = field.field_type {
+                        relations.push(DjangoRelation {
+                            name: field.name.clone(),
+                            related_model: related_model.clone(),
+                            relation_type: DjangoRelationType::ManyToMany,
+                        });
+                    }
+                    fields.insert(field.name.clone(), field);
+                }
+            }
+
+            i += 1;
+        }
+
+        DjangoModel {
+            name: model_name.to_string(),
+            fields,
+            relations,
+        }
+    }
+
+    fn parse_field_definition(&self, line: &str) -> Option<DjangoField> {
+        // Extract field name from "name = models.CharField(...)"
+        if let Some(eq_pos) = line.find('=') {
+            let field_name = line[..eq_pos].trim().to_string();
+            let rest = line[eq_pos + 1..].trim();
+
+            // Determine field type
+            let field_type = if rest.contains("CharField") {
+                DjangoFieldType::CharField
+            } else if rest.contains("TextField") {
+                DjangoFieldType::TextField
+            } else if rest.contains("IntegerField") || rest.contains("AutoField") || rest.contains("BigAutoField") {
+                DjangoFieldType::IntegerField
+            } else if rest.contains("FloatField") || rest.contains("DecimalField") {
+                DjangoFieldType::FloatField
+            } else if rest.contains("BooleanField") {
+                DjangoFieldType::BooleanField
+            } else if rest.contains("DateTimeField") {
+                DjangoFieldType::DateTimeField
+            } else if rest.contains("DateField") {
+                DjangoFieldType::DateField
+            } else if rest.contains("ForeignKey") {
+                let related_model = self.extract_related_model(rest).unwrap_or_else(|| "Unknown".to_string());
+                DjangoFieldType::ForeignKey(related_model)
+            } else if rest.contains("OneToOneField") {
+                let related_model = self.extract_related_model(rest).unwrap_or_else(|| "Unknown".to_string());
+                DjangoFieldType::OneToOneField(related_model)
+            } else if rest.contains("ManyToManyField") {
+                let related_model = self.extract_related_model(rest).unwrap_or_else(|| "Unknown".to_string());
+                DjangoFieldType::ManyToManyField(related_model)
+            } else {
+                DjangoFieldType::Custom("Unknown".to_string())
+            };
+
+            // Check for null=True
+            let null = rest.contains("null=True") || rest.contains("null = True");
+
+            // Check for default value
+            let has_default = rest.contains("default=") || rest.contains("default =");
+
+            return Some(DjangoField {
+                name: field_name,
+                field_type,
+                null,
+                has_default,
+            });
+        }
+
+        None
+    }
+
+    fn extract_related_model(&self, field_definition: &str) -> Option<String> {
+        // Extract "User" from "ForeignKey(User, ...)" or "ForeignKey('User', ...)"
+        if let Some(start) = field_definition.find('(') {
+            let rest = &field_definition[start + 1..];
+            if let Some(end) = rest.find(',').or_else(|| rest.find(')')) {
+                let model_ref = rest[..end].trim();
+                // Remove quotes if present
+                let model_name = model_ref.trim_matches(|c| c == '\'' || c == '"');
+                // Handle "self" reference
+                if model_name == "self" || model_name == "'self'" {
+                    return Some("self".to_string());
+                }
+                return Some(model_name.to_string());
+            }
+        }
+        None
     }
 }
 
