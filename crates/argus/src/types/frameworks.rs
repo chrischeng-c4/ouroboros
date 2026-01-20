@@ -1071,6 +1071,16 @@ impl FrameworkRegistry {
         }
         None
     }
+
+    /// Get method signature from any provider.
+    pub fn get_method_signature(&self, base_type: &Type, method: &str) -> Option<MethodType> {
+        for provider in &self.providers {
+            if let Some(sig) = provider.get_method_signature(base_type, method) {
+                return Some(sig);
+            }
+        }
+        None
+    }
 }
 
 impl Default for FrameworkRegistry {
