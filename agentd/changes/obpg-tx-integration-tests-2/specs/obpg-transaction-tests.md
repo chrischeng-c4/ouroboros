@@ -4,6 +4,7 @@ change_id: obpg-tx-integration-tests-2
 type: spec
 ---
 
+<spec>
 # Specification: Ouroboros Postgres Transaction Integration Tests
 
 <meta>
@@ -156,3 +157,4 @@ FUNCTION Transaction::rollback_to(name: String) -> Result<()>
 ### Scenario: Deferrable Serializable Transaction Initiation
 - **WHEN** a transaction is started with `IsolationLevel::Serializable`, `AccessMode::ReadOnly`, and `deferrable(true)`.
 - **THEN** the transaction must successfully begin and remain valid for read operations.
+</spec>
