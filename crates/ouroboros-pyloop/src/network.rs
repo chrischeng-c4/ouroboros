@@ -310,7 +310,9 @@ pub async fn create_server(host: &str, port: u16) -> io::Result<TcpServer> {
 /// Provides a stream-like interface for reading data.
 pub struct StreamReader {
     transport: Arc<TcpTransport>,
+    #[allow(dead_code)]
     buffer: Vec<u8>,
+    #[allow(dead_code)]
     position: usize,
 }
 

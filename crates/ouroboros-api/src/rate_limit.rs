@@ -74,7 +74,7 @@ impl RateLimitConfig {
     }
 
     /// Parse from string like "10/minute" or "100/hour"
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         let parts: Vec<&str> = s.split('/').collect();
         if parts.len() != 2 {
             return None;
@@ -569,16 +569,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_rate_limit_config_from_str() {
-        let config = RateLimitConfig::from_str("10/minute").unwrap();
+    fn test_rate_limit_config_parse() {
+        let config = RateLimitConfig::parse("10/minute").unwrap();
         assert_eq!(config.max_requests, 10);
         assert_eq!(config.window, Duration::from_secs(60));
 
-        let config = RateLimitConfig::from_str("100/hour").unwrap();
+        let config = RateLimitConfig::parse("100/hour").unwrap();
         assert_eq!(config.max_requests, 100);
         assert_eq!(config.window, Duration::from_secs(3600));
 
-        assert!(RateLimitConfig::from_str("invalid").is_none());
+        assert!(RateLimitConfig::parse("invalid").is_none());
     }
 
     #[test]

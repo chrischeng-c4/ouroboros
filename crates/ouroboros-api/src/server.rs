@@ -125,7 +125,7 @@ impl Server {
         }
     }
 
-    /// Create a new server with an Arc<Router>
+    /// Create a new server with an `Arc<Router>`
     pub fn with_shared_router(router: Arc<Router>, config: ServerConfig) -> Self {
         Self {
             router,

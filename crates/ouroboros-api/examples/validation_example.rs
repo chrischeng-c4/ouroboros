@@ -123,38 +123,27 @@ fn example_body_validation() {
     // Define user schema
     validator.body_validator = Some(TypeDescriptor::Object {
         fields: vec![
-            FieldDescriptor {
-                name: "name".to_string(),
-                type_desc: TypeDescriptor::String(StringConstraints {
+            FieldDescriptor::new(
+                "name",
+                TypeDescriptor::String(StringConstraints {
                     min_length: Some(2),
                     max_length: Some(100),
                     pattern: None,
                     format: None,
                 }),
-                required: true,
-                default: None,
-                description: Some("User's full name".to_string()),
-            },
-            FieldDescriptor {
-                name: "email".to_string(),
-                type_desc: TypeDescriptor::Email,
-                required: true,
-                default: None,
-                description: Some("User's email address".to_string()),
-            },
-            FieldDescriptor {
-                name: "age".to_string(),
-                type_desc: TypeDescriptor::Int64(NumericConstraints {
+            ).description("User's full name"),
+            FieldDescriptor::new("email", TypeDescriptor::Email)
+                .description("User's email address"),
+            FieldDescriptor::new(
+                "age",
+                TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
                     exclusive_maximum: None,
                     multiple_of: None,
                 }),
-                required: false,
-                default: None,
-                description: Some("User's age".to_string()),
-            },
+            ).optional().description("User's age"),
         ],
         additional: None,
     });

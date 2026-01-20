@@ -277,26 +277,22 @@ impl Process {
         // Read stdout and stderr concurrently
         let stdout_handle = {
             let mut stdout_guard = self.stdout.lock().await;
-            if let Some(mut stdout) = stdout_guard.take() {
-                Some(tokio::spawn(async move {
+            stdout_guard.take().map(|mut stdout| {
+                tokio::spawn(async move {
                     let mut buf = Vec::new();
                     stdout.read_to_end(&mut buf).await.map(|_| buf)
-                }))
-            } else {
-                None
-            }
+                })
+            })
         };
 
         let stderr_handle = {
             let mut stderr_guard = self.stderr.lock().await;
-            if let Some(mut stderr) = stderr_guard.take() {
-                Some(tokio::spawn(async move {
+            stderr_guard.take().map(|mut stderr| {
+                tokio::spawn(async move {
                     let mut buf = Vec::new();
                     stderr.read_to_end(&mut buf).await.map(|_| buf)
-                }))
-            } else {
-                None
-            }
+                })
+            })
         };
 
         // Wait for process completion
@@ -304,13 +300,13 @@ impl Process {
 
         // Collect outputs
         let stdout = if let Some(handle) = stdout_handle {
-            handle.await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))??
+            handle.await.map_err(io::Error::other)??
         } else {
             Vec::new()
         };
 
         let stderr = if let Some(handle) = stderr_handle {
-            handle.await.map_err(|e| io::Error::new(io::ErrorKind::Other, e))??
+            handle.await.map_err(io::Error::other)??
         } else {
             Vec::new()
         };
@@ -340,7 +336,7 @@ impl Process {
 
         let pid = Pid::from_raw(self.pid as i32);
         kill(pid, Signal::SIGTERM)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
         Ok(())
     }
 
@@ -359,7 +355,7 @@ impl Process {
         let pid = Pid::from_raw(self.pid as i32);
         let sig = Signal::try_from(signal)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
-        kill(pid, sig).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        kill(pid, sig).map_err(|e| io::Error::other(e.to_string()))?;
         Ok(())
     }
 

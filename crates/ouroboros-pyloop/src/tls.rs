@@ -312,9 +312,8 @@ impl CertificateInfo {
             }
         }
         self.san.iter().any(|name| {
-            if name.starts_with("*.") {
+            if let Some(suffix) = name.strip_prefix("*.") {
                 // Wildcard match - *.example.com matches www.example.com but not foo.www.example.com
-                let suffix = &name[2..];
                 if hostname.ends_with(suffix) {
                     let prefix_len = hostname.len() - suffix.len();
                     if prefix_len > 1 {

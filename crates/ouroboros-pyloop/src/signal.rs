@@ -87,7 +87,7 @@ impl SignalType {
     }
 
     #[cfg(unix)]
-    fn to_signal_kind(&self) -> SignalKind {
+    fn to_signal_kind(self) -> SignalKind {
         match self {
             SignalType::Int => SignalKind::interrupt(),
             SignalType::Term => SignalKind::terminate(),

@@ -5,6 +5,75 @@
 //! - Rust handles validation, routing, serialization
 //! - Python defines contracts via type hints
 //! - Two-phase GIL pattern for maximum concurrency
+//!
+//! # Architecture
+//!
+//! The framework uses a two-phase approach to maximize concurrency:
+//!
+//! ```text
+//! Request → [Rust: Parse/Validate] → [Python: Handler] → [Rust: Serialize] → Response
+//!               No GIL needed           GIL acquired        No GIL needed
+//! ```
+//!
+//! # Quick Start
+//!
+//! ```rust,no_run
+//! use ouroboros_api::{Router, Server, ServerConfig, Response};
+//! use ouroboros_api::request::SerializableValue;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let mut router = Router::new();
+//!     router.get("/", |_req| async {
+//!         Response::json(SerializableValue::String("Hello!".to_string()))
+//!     });
+//!
+//!     let config = ServerConfig::default();
+//!     Server::new(config).serve(router).await.unwrap();
+//! }
+//! ```
+//!
+//! # Modules
+//!
+//! ## Core
+//! - [`router`]: Radix tree routing with path parameter extraction
+//! - [`handler`]: Handler traits and metadata for route handlers
+//! - [`request`]: Request abstraction with type-safe parameter access
+//! - [`response`]: Response builder supporting JSON, HTML, and more
+//! - [`middleware`]: Composable middleware chain with Tower integration
+//!
+//! ## Validation & Extraction
+//! - [`validation`]: Request validation powered by ouroboros-validation
+//! - [`extractors`]: Type-safe extractors for Path, Query, Body, Headers
+//! - [`error`]: Error types with automatic HTTP status code mapping
+//!
+//! ## Security
+//! - [`security`]: JWT, OAuth2, and API key authentication
+//! - [`rate_limit`]: Token bucket and sliding window rate limiting
+//! - [`cookies`]: Secure cookie handling with HMAC signing
+//!
+//! ## Real-time
+//! - [`websocket`]: WebSocket connection handling
+//! - [`sse`]: Server-Sent Events for push notifications
+//!
+//! ## Content
+//! - [`compression`]: Automatic response compression (gzip, deflate)
+//! - [`content_negotiation`]: Accept header parsing and media type matching
+//! - [`static_files`]: Static file serving with caching
+//! - [`templates`]: Template rendering support
+//! - [`upload`]: File upload handling with streaming support
+//!
+//! ## Lifecycle
+//! - [`lifecycle`]: Startup and shutdown hooks
+//! - [`background_tasks`]: Background task execution
+//!
+//! ## Documentation
+//! - [`openapi`]: OpenAPI schema generation via utoipa
+//!
+//! # Feature Flags
+//!
+//! - **observability**: Enable OpenTelemetry distributed tracing
+//! - **bson**: Enable MongoDB BSON type support in validation
 
 pub mod background_tasks;
 pub mod router;
@@ -34,6 +103,10 @@ pub mod upload;
 // OpenTelemetry tracing - only available with "observability" feature
 #[cfg(feature = "observability")]
 pub mod telemetry;
+
+// Development server with hot reload - only available with "dev" feature
+#[cfg(feature = "dev")]
+pub mod dev_server;
 
 // Re-exports
 pub use background_tasks::{BackgroundTasks, SharedBackgroundTasks, TaskBuilder};

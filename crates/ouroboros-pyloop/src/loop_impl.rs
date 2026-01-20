@@ -72,13 +72,18 @@ pub struct PyLoop {
     wakeup_condvar: Arc<(Mutex<bool>, Condvar)>,
 }
 
-#[pymethods]
+// Rust-only constructor (not exposed to Python via pymethods)
 impl PyLoop {
-    /// Create a new PyLoop instance
+    /// Create a new PyLoop instance from Rust
     ///
     /// This creates a new event loop backed by the shared Tokio runtime.
-    #[new]
-    fn new() -> PyResult<Self> {
+    /// Use this when creating PyLoop from Rust code (e.g., CLI, tests).
+    pub fn new() -> PyResult<Self> {
+        Self::create_internal()
+    }
+
+    /// Internal constructor shared by Rust and Python constructors
+    fn create_internal() -> PyResult<Self> {
         let runtime = get_runtime()
             .map_err(PyErr::from)?;
 
@@ -104,6 +109,17 @@ impl PyLoop {
             timer_wheel,
             wakeup_condvar: Arc::new((Mutex::new(false), Condvar::new())),
         })
+    }
+}
+
+#[pymethods]
+impl PyLoop {
+    /// Create a new PyLoop instance (Python constructor)
+    ///
+    /// This creates a new event loop backed by the shared Tokio runtime.
+    #[new]
+    fn py_new() -> PyResult<Self> {
+        Self::create_internal()
     }
 
     /// Check if the event loop is running
@@ -943,7 +959,7 @@ impl PyLoop {
                     } else {
                         // Wrap single argument in a tuple
                         #[allow(deprecated)] // PyO3 API transition - to_object will be replaced by IntoPyObject
-                        PyTuple::new_bound(py, &[args.bind(py)]).to_object(py)
+                        PyTuple::new_bound(py, [args.bind(py)]).to_object(py)
                     };
 
                     // Call the Python function
@@ -982,7 +998,7 @@ impl PyLoop {
                                 }
                                 Err(e) => {
                                     // Coroutine raised an exception
-                                    return Err(e.into());
+                                    return Err(e);
                                 }
                             }
                         }

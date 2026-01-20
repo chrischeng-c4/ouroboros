@@ -222,7 +222,7 @@ impl Middleware for CorsMiddleware {
         if req.method_str() == "OPTIONS" {
             res.set_header(
                 "Access-Control-Allow-Methods",
-                &self.config.allowed_methods.join(", "),
+                self.config.allowed_methods.join(", "),
             );
 
             let headers = if self.config.allowed_headers.contains(&"*".to_string()) {
@@ -236,7 +236,7 @@ impl Middleware for CorsMiddleware {
             res.set_header("Access-Control-Allow-Headers", &headers);
 
             if let Some(max_age) = self.config.max_age {
-                res.set_header("Access-Control-Max-Age", &max_age.to_string());
+                res.set_header("Access-Control-Max-Age", max_age.to_string());
             }
         }
 
@@ -244,7 +244,7 @@ impl Middleware for CorsMiddleware {
         if !self.config.exposed_headers.is_empty() {
             res.set_header(
                 "Access-Control-Expose-Headers",
-                &self.config.exposed_headers.join(", "),
+                self.config.exposed_headers.join(", "),
             );
         }
 

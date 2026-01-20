@@ -234,14 +234,10 @@ fn convert_py_to_response(py: Python<'_>, result: PyObject) -> ApiResult<Respons
         if is_response_dict {
             // It's a response dict with explicit status/body/headers
             // Extract status code (default: 200)
-            let status_code = if let Ok(status) = dict.get_item("status") {
-                if let Some(status_val) = status {
-                    status_val
-                        .extract::<u16>()
-                        .unwrap_or(200)
-                } else {
-                    200
-                }
+            let status_code = if let Ok(Some(status_val)) = dict.get_item("status") {
+                status_val
+                    .extract::<u16>()
+                    .unwrap_or(200)
             } else {
                 200
             };

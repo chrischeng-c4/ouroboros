@@ -202,7 +202,7 @@ impl StaticFiles {
 
         // Calculate ETag
         let etag = if self.config.etag {
-            Some(self.calculate_etag(path, &metadata))
+            Some(self.calculate_etag(path, metadata))
         } else {
             None
         };
@@ -242,13 +242,13 @@ impl StaticFiles {
         response.set_header("Content-Type", &mime_type);
 
         // Set Content-Length
-        response.set_header("Content-Length", &(end - start + 1).to_string());
+        response.set_header("Content-Length", (end - start + 1).to_string());
 
         // Set Content-Range for partial content
         if range.is_some() {
             response.set_header(
                 "Content-Range",
-                &format!("bytes {}-{}/{}", start, end, file_size),
+                format!("bytes {}-{}/{}", start, end, file_size),
             );
         }
 
@@ -262,7 +262,7 @@ impl StaticFiles {
 
         // Set Cache-Control
         if let Some(max_age) = self.config.max_age {
-            response.set_header("Cache-Control", &format!("max-age={}", max_age));
+            response.set_header("Cache-Control", format!("max-age={}", max_age));
         }
 
         Ok(response)
@@ -322,18 +322,19 @@ impl StaticFiles {
             return None;
         }
 
-        let start: u64 = if parts[0].is_empty() {
+        let (start, end): (u64, u64) = if parts[0].is_empty() {
             // Suffix range: -500 means last 500 bytes
             let suffix: u64 = parts[1].parse().ok()?;
-            file_size.saturating_sub(suffix)
+            let start = file_size.saturating_sub(suffix);
+            (start, file_size - 1)
         } else {
-            parts[0].parse().ok()?
-        };
-
-        let end: u64 = if parts[1].is_empty() {
-            file_size - 1
-        } else {
-            parts[1].parse().ok()?
+            let start: u64 = parts[0].parse().ok()?;
+            let end: u64 = if parts[1].is_empty() {
+                file_size - 1
+            } else {
+                parts[1].parse().ok()?
+            };
+            (start, end)
         };
 
         if start > end || start >= file_size {

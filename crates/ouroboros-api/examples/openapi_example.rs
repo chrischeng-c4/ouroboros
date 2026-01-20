@@ -86,52 +86,31 @@ fn main() {
     // Define schema for User object using TypeDescriptor
     let user_type = TypeDescriptor::Object {
         fields: vec![
-            FieldDescriptor {
-                name: "id".to_string(),
-                type_desc: TypeDescriptor::Uuid,
-                required: true,
-                default: None,
-                description: Some("User unique identifier".to_string()),
-            },
-            FieldDescriptor {
-                name: "email".to_string(),
-                type_desc: TypeDescriptor::Email,
-                required: true,
-                default: None,
-                description: Some("User email address".to_string()),
-            },
-            FieldDescriptor {
-                name: "name".to_string(),
-                type_desc: TypeDescriptor::String(StringConstraints {
+            FieldDescriptor::new("id", TypeDescriptor::Uuid)
+                .description("User unique identifier"),
+            FieldDescriptor::new("email", TypeDescriptor::Email)
+                .description("User email address"),
+            FieldDescriptor::new(
+                "name",
+                TypeDescriptor::String(StringConstraints {
                     min_length: Some(1),
                     max_length: Some(100),
                     pattern: None,
                     format: None,
                 }),
-                required: true,
-                default: None,
-                description: Some("User full name".to_string()),
-            },
-            FieldDescriptor {
-                name: "age".to_string(),
-                type_desc: TypeDescriptor::Int64(NumericConstraints {
+            ).description("User full name"),
+            FieldDescriptor::new(
+                "age",
+                TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
                     exclusive_maximum: None,
                     multiple_of: None,
                 }),
-                required: false,
-                default: None,
-                description: Some("User age".to_string()),
-            },
-            FieldDescriptor {
-                name: "created_at".to_string(),
-                type_desc: TypeDescriptor::DateTime,
-                required: true,
-                default: None,
-                description: Some("Account creation timestamp".to_string()),
-            },
+            ).optional().description("User age"),
+            FieldDescriptor::new("created_at", TypeDescriptor::DateTime)
+                .description("Account creation timestamp"),
         ],
         additional: None,
     };
@@ -143,38 +122,27 @@ fn main() {
     // Define schema for CreateUserRequest
     let create_user_type = TypeDescriptor::Object {
         fields: vec![
-            FieldDescriptor {
-                name: "email".to_string(),
-                type_desc: TypeDescriptor::Email,
-                required: true,
-                default: None,
-                description: Some("User email address".to_string()),
-            },
-            FieldDescriptor {
-                name: "name".to_string(),
-                type_desc: TypeDescriptor::String(StringConstraints {
+            FieldDescriptor::new("email", TypeDescriptor::Email)
+                .description("User email address"),
+            FieldDescriptor::new(
+                "name",
+                TypeDescriptor::String(StringConstraints {
                     min_length: Some(1),
                     max_length: Some(100),
                     pattern: None,
                     format: None,
                 }),
-                required: true,
-                default: None,
-                description: Some("User full name".to_string()),
-            },
-            FieldDescriptor {
-                name: "age".to_string(),
-                type_desc: TypeDescriptor::Optional(Box::new(TypeDescriptor::Int64(NumericConstraints {
+            ).description("User full name"),
+            FieldDescriptor::new(
+                "age",
+                TypeDescriptor::Optional(Box::new(TypeDescriptor::Int64(NumericConstraints {
                     minimum: Some(0),
                     maximum: Some(150),
                     exclusive_minimum: None,
                     exclusive_maximum: None,
                     multiple_of: None,
                 }))),
-                required: false,
-                default: None,
-                description: Some("User age".to_string()),
-            },
+            ).optional().description("User age"),
         ],
         additional: None,
     };

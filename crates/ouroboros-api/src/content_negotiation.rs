@@ -142,19 +142,21 @@ impl MediaType {
         }
     }
 
-    /// Convert to string
-    pub fn to_string(&self) -> String {
-        let mut result = format!("{}/{}", self.r#type, self.subtype);
+}
+
+impl std::fmt::Display for MediaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.r#type, self.subtype)?;
 
         for (key, value) in &self.params {
-            result.push_str(&format!("; {}={}", key, value));
+            write!(f, "; {}={}", key, value)?;
         }
 
         if self.quality < 1.0 {
-            result.push_str(&format!("; q={:.1}", self.quality));
+            write!(f, "; q={:.1}", self.quality)?;
         }
 
-        result
+        Ok(())
     }
 }
 
@@ -194,7 +196,7 @@ impl AcceptHeader {
     pub fn parse(header: &str) -> Self {
         let mut media_types: Vec<MediaType> = header
             .split(',')
-            .filter_map(|s| MediaType::parse(s))
+            .filter_map(MediaType::parse)
             .collect();
 
         // Sort by preference (quality and specificity)
@@ -455,7 +457,7 @@ impl AcceptLanguage {
     pub fn parse(header: &str) -> Self {
         let mut languages: Vec<LanguageTag> = header
             .split(',')
-            .filter_map(|s| LanguageTag::parse(s))
+            .filter_map(LanguageTag::parse)
             .collect();
 
         languages.sort_by(|a, b| {
