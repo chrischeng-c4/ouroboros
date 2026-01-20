@@ -3372,8 +3372,10 @@ dependencies = [
  "ouroboros-pyloop",
  "ouroboros-qc",
  "pyo3",
+ "serde",
  "serde_json",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]

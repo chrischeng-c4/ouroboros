@@ -29,6 +29,8 @@ use std::path::PathBuf;
 use ouroboros_qc::{DiscoveryConfig, FileType, walk_files, CoverageInfo, FileCoverage, Reporter, ReportFormat, TestReport, TestSummary};
 use ouroboros_postgres::{MigrationCli, MigrationCliConfig};
 
+mod api;
+
 #[derive(Parser)]
 #[command(name = "ob")]
 #[command(about = "Ouroboros unified CLI", long_about = None)]
@@ -61,10 +63,10 @@ enum Commands {
         #[command(subcommand)]
         action: PgAction,
     },
-    /// API server commands
+    /// API server and project commands
     Api {
         #[command(subcommand)]
-        action: ApiAction,
+        action: api::ApiAction,
     },
 }
 
@@ -216,136 +218,7 @@ enum PgAction {
     Validate,
 }
 
-#[derive(Subcommand)]
-enum ApiAction {
-    /// Initialize a new API project
-    ///
-    /// Examples:
-    ///   ob api init                    # Interactive mode
-    ///   ob api init --minimal          # Minimal single-file app
-    ///   ob api init --name my-api      # Specify project name
-    Init {
-        /// Project name (defaults to current directory name)
-        #[arg(short, long)]
-        name: Option<String>,
-
-        /// Create minimal single-file app (non-interactive)
-        #[arg(long)]
-        minimal: bool,
-
-        /// Create full project structure (non-interactive)
-        #[arg(long)]
-        full: bool,
-
-        /// Target directory (defaults to current directory)
-        #[arg(default_value = ".")]
-        directory: String,
-    },
-
-    /// Generate code (app, feature, route)
-    ///
-    /// Examples:
-    ///   ob api g app admin             # Generate new app entry point
-    ///   ob api g feature users         # Generate new feature module
-    ///   ob api g route users --app admin  # Generate route in feature for app
-    #[command(alias = "g")]
-    Generate {
-        #[command(subcommand)]
-        action: GenerateAction,
-    },
-
-    /// Start API server (supports both dev and production modes)
-    ///
-    /// Examples:
-    ///   ob api serve                           # Production mode on :8000
-    ///   ob api serve --reload                  # Dev mode with hot reload
-    ///   ob api serve --reload --reload-dir ./src
-    ///   ob api serve python.app:create_app    # Specify app factory
-    Serve {
-        /// Application import path (e.g., "python.app:create_app")
-        #[arg(default_value = "")]
-        app: String,
-
-        /// Host to bind to
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-
-        /// Port to listen on
-        #[arg(long, default_value = "8000")]
-        port: u16,
-
-        /// Enable auto-reload (dev mode)
-        #[arg(long)]
-        reload: bool,
-
-        /// Directories to watch for reload (implies --reload)
-        #[arg(long, value_name = "PATH")]
-        reload_dir: Vec<String>,
-
-        /// Glob patterns to include for reload (e.g., "*.py")
-        #[arg(long, value_name = "PATTERN", default_value = "*.py,*.rs")]
-        reload_include: String,
-
-        /// Glob patterns to exclude from reload
-        #[arg(long, value_name = "PATTERN", default_value = "__pycache__,target,.git,node_modules")]
-        reload_exclude: String,
-
-        /// Delay between reload checks in seconds
-        #[arg(long, value_name = "FLOAT", default_value = "0.5")]
-        reload_delay: f64,
-
-        /// Log level (trace, debug, info, warn, error)
-        #[arg(long, default_value = "info")]
-        log_level: String,
-
-        /// Access log on/off
-        #[arg(long)]
-        access_log: bool,
-    },
-}
-
-#[derive(Subcommand)]
-enum GenerateAction {
-    /// Generate a new app entry point (e.g., admin, public, partner)
-    ///
-    /// Creates apps/<name>.py that imports and mounts feature routers
-    App {
-        /// App name (e.g., admin, public, partner)
-        name: String,
-
-        /// Description for the app
-        #[arg(short, long)]
-        description: Option<String>,
-    },
-
-    /// Generate a new feature module
-    ///
-    /// Creates features/<name>/ with model.py, service.py, and __init__.py
-    Feature {
-        /// Feature name (e.g., users, products, orders)
-        name: String,
-
-        /// Include routes scaffold
-        #[arg(long)]
-        with_routes: bool,
-
-        /// App to generate routes for (if --with-routes)
-        #[arg(long)]
-        app: Option<String>,
-    },
-
-    /// Generate a route module for a feature
-    ///
-    /// Creates features/<feature>/<app>/ with routes.py, schema.py, and test.py
-    Route {
-        /// Feature name (must exist)
-        feature: String,
-
-        /// App name (must exist in apps/)
-        #[arg(long, required = true)]
-        app: String,
-    },
-}
+// ApiAction and GenerateAction are now defined in the api module
 
 #[derive(Subcommand)]
 enum ArgusAction {
@@ -473,43 +346,11 @@ fn main() -> Result<()> {
         Commands::Pg { action } => {
             run_pg_command(action)?;
         },
-        Commands::Api { action } => match action {
-            ApiAction::Init {
-                name,
-                minimal,
-                full,
-                directory,
-            } => {
-                run_api_init(name, minimal, full, &directory)?;
-            }
-            ApiAction::Generate { action } => {
-                run_api_generate(action)?;
-            }
-            ApiAction::Serve {
-                app,
-                host,
-                port,
-                reload,
-                reload_dir,
-                reload_include,
-                reload_exclude,
-                reload_delay,
-                log_level,
-                access_log,
-            } => {
-                run_api_server(
-                    app,
-                    host,
-                    port,
-                    reload,
-                    reload_dir,
-                    reload_include,
-                    reload_exclude,
-                    reload_delay,
-                    log_level,
-                    access_log,
-                )?;
-            }
+        Commands::Api { action } => {
+            // Use tokio runtime to run async api commands
+            let rt = tokio::runtime::Runtime::new()
+                .context("Failed to create tokio runtime")?;
+            rt.block_on(api::execute(action))?;
         },
     }
 
@@ -2764,28 +2605,13 @@ LOG_LEVEL=info
 }
 
 // =============================================================================
-// API Generate Commands
+// API Generate Commands (Legacy - now handled by api module)
 // =============================================================================
 
-/// Run API generate commands
-fn run_api_generate(action: GenerateAction) -> Result<()> {
-    let cwd = std::env::current_dir().context("Failed to get current directory")?;
+// Legacy generate functions below are kept for reference but no longer called
+// New implementation is in src/api/generate.rs
 
-    match action {
-        GenerateAction::App { name, description } => {
-            generate_app(&cwd, &name, description.as_deref())?;
-        }
-        GenerateAction::Feature { name, with_routes, app } => {
-            generate_feature(&cwd, &name, with_routes, app.as_deref())?;
-        }
-        GenerateAction::Route { feature, app } => {
-            generate_route(&cwd, &feature, &app)?;
-        }
-    }
-
-    Ok(())
-}
-
+#[allow(dead_code)]
 /// Generate a new app entry point
 fn generate_app(base_dir: &std::path::Path, name: &str, description: Option<&str>) -> Result<()> {
     use std::fs;
@@ -3445,7 +3271,7 @@ fn extract_routes_from_app(_py: Python<'_>, app: &pyo3::Bound<'_, pyo3::PyAny>) 
 
 /// Run API server (supports both dev and production modes)
 #[allow(clippy::too_many_arguments)]
-fn run_api_server(
+pub fn run_api_server(
     app_path: String,
     host: String,
     port: u16,
