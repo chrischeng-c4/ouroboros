@@ -502,11 +502,51 @@ impl RefactoringEngine {
     fn extract_method(&mut self, request: &RefactorRequest, name: &str, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
-        result.add_diagnostic(
-            DiagnosticLevel::Info,
-            format!("Extract method '{}' at {:?}", name, request.span),
-            Some(request.file.clone()),
-            Some(request.span),
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Extract the selected code
+        let selected_code = &source[request.span.start..request.span.end];
+
+        // Generate method definition with self parameter
+        let method_def = format!(
+            "    def {}(self):\n{}\n\n",
+            name,
+            selected_code.lines()
+                .map(|line| format!("        {}", line))
+                .collect::<Vec<_>>()
+                .join("\n        ")
+        );
+
+        // Generate method call
+        let call_str = format!("self.{}()", name);
+
+        // Simplified: insert at beginning of file
+        let insert_pos = 0;
+
+        // Create edits
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: Span::new(insert_pos, insert_pos),
+                new_text: method_def,
+            },
+        );
+
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: request.span,
+                new_text: call_str,
+            },
         );
 
         result
@@ -677,12 +717,41 @@ impl RefactoringEngine {
     }
 
     /// Move a definition to another file.
-    fn move_definition(&mut self, request: &RefactorRequest, target_file: &PathBuf, _source: &str) -> RefactorResult {
+    fn move_definition(&mut self, request: &RefactorRequest, target_file: &PathBuf, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
+
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Extract the definition code
+        let definition_code = &source[request.span.start..request.span.end];
+
+        // Remove from current file
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: request.span,
+                new_text: String::new(),
+            },
+        );
+
+        // Add to target file (at beginning for simplicity)
+        result.new_files.insert(
+            target_file.clone(),
+            format!("{}\n\n", definition_code),
+        );
 
         result.add_diagnostic(
             DiagnosticLevel::Info,
-            format!("Move definition to {:?}", target_file),
+            format!("Moved definition to {:?}", target_file),
             Some(request.file.clone()),
             Some(request.span),
         );
@@ -691,12 +760,120 @@ impl RefactoringEngine {
     }
 
     /// Inline a symbol's definition.
-    fn inline_symbol(&mut self, request: &RefactorRequest, _source: &str) -> RefactorResult {
+    fn inline_symbol(&mut self, request: &RefactorRequest, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
+
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Extract the symbol name to inline
+        let symbol_name = &source[request.span.start..request.span.end];
+
+        // Simplified implementation: Find the definition and replace all usages
+        // Look for pattern: "symbol_name = expression"
+        let mut definition_value = None;
+        let mut definition_span = None;
+
+        // Simple pattern matching for variable assignment
+        if let Some(def_pos) = source.find(&format!("{} = ", symbol_name)) {
+            let start = def_pos;
+            // Find the end of the line (or end of file if no newline)
+            let rest = &source[start..];
+            let newline_pos = rest.find('\n').unwrap_or(rest.len());
+            let end = start + newline_pos;
+            let line = &source[start..end];
+
+            // Extract the value part (after "symbol_name = ")
+            if let Some(eq_pos) = line.find(" = ") {
+                let value_start = start + eq_pos + 3;
+                definition_value = Some(source[value_start..end].trim().to_string());
+                // Include newline only if it exists
+                let span_end = if newline_pos < rest.len() { end + 1 } else { end };
+                definition_span = Some(Span::new(start, span_end));
+            }
+        }
+
+        if definition_value.is_none() {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Could not find definition for '{}'", symbol_name),
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+            return result;
+        }
+
+        let def_value = definition_value.unwrap();
+        let def_span = definition_span.unwrap();
+
+        // Find all usages of the symbol (excluding the definition)
+        let mut usages = Vec::new();
+        let mut pos = 0;
+        while let Some(found_pos) = source[pos..].find(symbol_name) {
+            let absolute_pos = pos + found_pos;
+
+            // Skip if this is the definition itself
+            if absolute_pos >= def_span.start && absolute_pos < def_span.end {
+                pos = absolute_pos + symbol_name.len();
+                continue;
+            }
+
+            // Check if it's a complete identifier (not part of another word)
+            let before_ok = absolute_pos == 0 || !source.chars().nth(absolute_pos - 1).unwrap_or(' ').is_alphanumeric();
+            let after_pos = absolute_pos + symbol_name.len();
+            let after_ok = after_pos >= source.len() || !source.chars().nth(after_pos).unwrap_or(' ').is_alphanumeric();
+
+            if before_ok && after_ok {
+                usages.push(Span::new(absolute_pos, absolute_pos + symbol_name.len()));
+            }
+
+            pos = absolute_pos + symbol_name.len();
+        }
+
+        if usages.is_empty() {
+            result.add_diagnostic(
+                DiagnosticLevel::Warning,
+                format!("No usages of '{}' found to inline", symbol_name),
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+            return result;
+        }
+
+        // Store count before iterating
+        let usage_count = usages.len();
+
+        // Replace all usages with the definition value
+        for usage_span in usages {
+            result.add_edit(
+                request.file.clone(),
+                TextEdit {
+                    span: usage_span,
+                    new_text: def_value.clone(),
+                },
+            );
+        }
+
+        // Remove the definition line
+        result.add_edit(
+            request.file.clone(),
+            TextEdit {
+                span: def_span,
+                new_text: String::new(),
+            },
+        );
 
         result.add_diagnostic(
             DiagnosticLevel::Info,
-            format!("Inline symbol at {:?}", request.span),
+            format!("Inlined '{}' ({} usages)", symbol_name, usage_count),
             Some(request.file.clone()),
             Some(request.span),
         );
@@ -705,15 +882,84 @@ impl RefactoringEngine {
     }
 
     /// Change function signature.
-    fn change_signature(&mut self, request: &RefactorRequest, _changes: &SignatureChanges, _source: &str) -> RefactorResult {
+    fn change_signature(&mut self, request: &RefactorRequest, changes: &SignatureChanges, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
-        result.add_diagnostic(
-            DiagnosticLevel::Info,
-            format!("Change signature at {:?}", request.span),
-            Some(request.file.clone()),
-            Some(request.span),
-        );
+        // Get or populate AST
+        if let Err(e) = self.populate_ast_cache(&request.file, source) {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                format!("Failed to parse file: {}", e),
+                Some(request.file.clone()),
+                None,
+            );
+            return result;
+        }
+
+        // Simplified implementation: Find function definition and update parameters
+        let function_code = &source[request.span.start..request.span.end];
+
+        // Find the opening parenthesis
+        if let Some(open_paren) = function_code.find('(') {
+            if let Some(close_paren) = function_code.find(')') {
+                let func_name_part = &function_code[..open_paren];
+                let after_params = &function_code[close_paren + 1..];
+
+                // Build new parameters list
+                let mut new_params = Vec::new();
+
+                // Add new parameters
+                for (param_name, type_ann, default) in &changes.new_params {
+                    let param_str = if let Some(type_str) = type_ann {
+                        if let Some(default_val) = default {
+                            format!("{}: {} = {}", param_name, type_str, default_val)
+                        } else {
+                            format!("{}: {}", param_name, type_str)
+                        }
+                    } else if let Some(default_val) = default {
+                        format!("{}={}", param_name, default_val)
+                    } else {
+                        param_name.clone()
+                    };
+                    new_params.push(param_str);
+                }
+
+                let new_params_str = new_params.join(", ");
+
+                // Construct new function signature
+                let new_signature = format!("{}({}){}", func_name_part, new_params_str, after_params);
+
+                // Replace the function signature
+                result.add_edit(
+                    request.file.clone(),
+                    TextEdit {
+                        span: request.span,
+                        new_text: new_signature,
+                    },
+                );
+
+                result.add_diagnostic(
+                    DiagnosticLevel::Info,
+                    format!("Changed function signature ({} parameters)", new_params.len()),
+                    Some(request.file.clone()),
+                    Some(request.span),
+                );
+            } else {
+                result.add_diagnostic(
+                    DiagnosticLevel::Error,
+                    "Could not find closing parenthesis",
+                    Some(request.file.clone()),
+                    Some(request.span),
+                );
+            }
+        } else {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                "Could not find function parameters",
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+        }
 
         result
     }
