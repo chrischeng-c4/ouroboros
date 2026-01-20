@@ -16,6 +16,8 @@ observability = [
     "dep:opentelemetry_sdk",
     "dep:opentelemetry-otlp"
 ]
+# BSON support for MongoDB types (ObjectId, BsonDateTime, etc.)
+bson = ["ouroboros-validation/bson"]
 
 [dependencies]
 # Core
