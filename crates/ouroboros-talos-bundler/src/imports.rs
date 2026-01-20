@@ -106,11 +106,19 @@ fn extract_from_node(source: &str, node: &Node, imports: &mut ModuleImports) {
             }
         }
 
-        // Dynamic imports: import('./foo')
+        // Dynamic imports: import('./foo') and require('./foo')
         "call_expression" => {
             if is_dynamic_import(node) {
                 if let Some(specifier) = extract_dynamic_import(source, node) {
                     imports.dynamic_imports.push(specifier);
+                }
+            } else if is_require_call(source, node) {
+                // Handle CommonJS require()
+                if let Some(specifier) = extract_require_specifier(source, node) {
+                    imports.static_imports.push(ImportDeclaration {
+                        source: specifier,
+                        kind: ImportKind::Default,
+                    });
                 }
             }
         }
@@ -185,6 +193,50 @@ fn extract_dynamic_import(source: &str, node: &Node) -> Option<String> {
     let string_node = find_child_by_kind(&args, "string")?;
     let source_text = node_text(source, &string_node);
     Some(strip_quotes(&source_text))
+}
+
+/// Check if call expression is require()
+fn is_require_call(source: &str, node: &Node) -> bool {
+    // Get the function being called
+    let mut cursor = node.walk();
+    let children: Vec<_> = node.children(&mut cursor).collect();
+
+    // First child should be the function identifier
+    if let Some(function) = children.first() {
+        if function.kind() == "identifier" {
+            let function_name = node_text(source, function);
+            return function_name == "require";
+        }
+    }
+    false
+}
+
+/// Extract require() specifier
+fn extract_require_specifier(source: &str, node: &Node) -> Option<String> {
+    // Find arguments node
+    let args = find_child_by_kind(node, "arguments")?;
+
+    // Get the first argument (should be a string)
+    let mut cursor = args.walk();
+    let children: Vec<_> = args.children(&mut cursor).collect();
+
+    for child in children {
+        if child.kind() == "string" {
+            let source_text = node_text(source, &child);
+            let specifier = strip_quotes(&source_text);
+
+            // Filter out development builds
+            // Only bundle production versions to avoid bloat
+            if specifier.contains(".development.") || specifier.contains("-development.") {
+                tracing::debug!("Skipping development build: {}", specifier);
+                return None;
+            }
+
+            return Some(specifier);
+        }
+    }
+
+    None
 }
 
 /// Parse export statement

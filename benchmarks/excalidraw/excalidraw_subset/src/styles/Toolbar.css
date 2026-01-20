@@ -1,0 +1,42 @@
+.toolbar {
+  height: 50px;
+  background-color: #2c2c2c;
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  gap: 15px;
+  border-bottom: 1px solid #444;
+}
+
+.toolbar-tools {
+  display: flex;
+  gap: 5px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 30px;
+  background-color: #555;
+}
+
+.toolbar-options {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.toolbar-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-options input[type="range"] {
+  width: 100px;
+}
+
+.toolbar-options span {
+  min-width: 40px;
+}

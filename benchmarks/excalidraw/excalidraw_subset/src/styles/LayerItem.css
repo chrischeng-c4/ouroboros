@@ -1,0 +1,42 @@
+.layer-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.layer-item:hover {
+  background-color: #4c4c4c;
+}
+
+.layer-item.hidden {
+  opacity: 0.5;
+}
+
+.layer-name {
+  color: #ccc;
+  font-size: 13px;
+}
+
+.layer-controls {
+  display: flex;
+  gap: 5px;
+}
+
+.layer-controls button {
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.layer-controls button:hover {
+  opacity: 1;
+}

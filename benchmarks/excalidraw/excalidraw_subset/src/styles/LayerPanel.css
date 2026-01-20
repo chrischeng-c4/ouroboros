@@ -1,0 +1,9 @@
+.layer-panel {
+  padding: 10px 0;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}

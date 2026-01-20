@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talos Bundle Test - Excalidraw Subset</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        }
+        #root {
+            width: 100vw;
+            height: 100vh;
+        }
+        .status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            z-index: 9999;
+        }
+        .status.error {
+            background: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div id="status" class="status">Loading Talos Bundle...</div>
+    <div id="root"></div>
+
+    <script>
+        // Error monitoring
+        window.addEventListener('error', function(e) {
+            document.getElementById('status').textContent = 'Error: ' + e.message;
+            document.getElementById('status').className = 'status error';
+            console.error('Runtime Error:', e);
+        });
+
+        // Success detection
+        setTimeout(function() {
+            const root = document.getElementById('root');
+            if (root.children.length > 0) {
+                document.getElementById('status').textContent = '✅ Talos Bundle Loaded Successfully!';
+                console.log('✅ App rendered successfully');
+            } else {
+                document.getElementById('status').textContent = '⚠️ No content rendered';
+                document.getElementById('status').className = 'status error';
+                console.warn('⚠️ Root element is empty');
+            }
+        }, 1000);
+    </script>
+
+    <!-- Load Talos Bundle -->
+    <script src="dist_talos/bundle.js"></script>
+
+    <script>
+        // Start the app
+        if (window.__talos__) {
+            console.log('✅ Talos runtime detected');
+            console.log('📦 Modules loaded:', Object.keys(window.__talos__.modules).length);
+
+            // Execute entry point (module 0)
+            try {
+                window.__talos__.require(0);
+                console.log('✅ Entry point executed');
+            } catch (error) {
+                console.error('❌ Failed to execute entry point:', error);
+                document.getElementById('status').textContent = '❌ Execution Error: ' + error.message;
+                document.getElementById('status').className = 'status error';
+            }
+        } else {
+            console.error('❌ Talos runtime not found');
+            document.getElementById('status').textContent = '❌ Talos runtime missing';
+            document.getElementById('status').className = 'status error';
+        }
+    </script>
+</body>
+</html>

@@ -54,3 +54,8 @@ frontend/.vite/
 frontend/pkg/
 crates/data-bridge-sheet-wasm/pkg/
 tests/fixtures/python-project/.venv/
+
+# Benchmark dependencies
+benchmarks/**/node_modules/
+benchmarks/**/dist/
+benchmarks/**/dist_talos/
