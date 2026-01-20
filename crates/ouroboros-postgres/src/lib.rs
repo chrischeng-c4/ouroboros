@@ -239,6 +239,12 @@ pub mod history_vis;
 /// leverage Rayon for parallel execution across batches.
 pub mod bulk;
 
+/// Connection pool metrics and monitoring.
+///
+/// Provides metrics collection, health checks, and export functionality
+/// for monitoring PostgreSQL connection pool performance.
+pub mod metrics;
+
 pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
@@ -279,5 +285,8 @@ pub use history_vis::{
 
 // Bulk operations re-exports
 pub use bulk::{BulkConfig, BulkResult, BulkExecutor};
+
+// Pool metrics re-exports
+pub use metrics::{PoolMetrics, HealthStatus, HealthCheck, LatencyStats, MetricsCollector};
 
 pub use ouroboros_common::{DataBridgeError, Result};
