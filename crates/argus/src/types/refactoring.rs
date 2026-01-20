@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use super::mutable_ast::{MutableAst, MutableNode, NodeId, NodeMetadata, Span};
 use super::deep_inference::{TypeContext, DeepTypeInferencer};
+use super::semantic_search::{SemanticSearchEngine, SearchQuery, SearchKind, SearchScope};
 use crate::syntax::{Language, MultiParser};
 use tree_sitter::Node;
 
@@ -209,6 +210,8 @@ pub struct RefactoringEngine {
     inferencer: DeepTypeInferencer,
     /// AST cache per file
     ast_cache: HashMap<PathBuf, MutableAst>,
+    /// Semantic search engine for finding references
+    search_engine: SemanticSearchEngine,
 }
 
 impl RefactoringEngine {
@@ -217,6 +220,7 @@ impl RefactoringEngine {
         Self {
             inferencer: DeepTypeInferencer::new(),
             ast_cache: HashMap::new(),
+            search_engine: SemanticSearchEngine::new(),
         }
     }
 
@@ -225,6 +229,7 @@ impl RefactoringEngine {
         Self {
             inferencer,
             ast_cache: HashMap::new(),
+            search_engine: SemanticSearchEngine::new(),
         }
     }
 
@@ -570,16 +575,103 @@ impl RefactoringEngine {
     }
 
     /// Rename a symbol across files.
-    fn rename_symbol(&mut self, request: &RefactorRequest, new_name: &str, _source: &str) -> RefactorResult {
+    fn rename_symbol(&mut self, request: &RefactorRequest, new_name: &str, source: &str) -> RefactorResult {
         let mut result = RefactorResult::empty();
 
-        // Find all references to the symbol
-        result.add_diagnostic(
-            DiagnosticLevel::Info,
-            format!("Rename to '{}' at {:?}", new_name, request.span),
-            Some(request.file.clone()),
-            Some(request.span),
-        );
+        // Extract the old symbol name from the source
+        let old_name = &source[request.span.start..request.span.end];
+
+        // Validate new name
+        if old_name == new_name {
+            result.add_diagnostic(
+                DiagnosticLevel::Info,
+                "New name is the same as the old name",
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+            return result;
+        }
+
+        if new_name.is_empty() {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                "New name cannot be empty",
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+            return result;
+        }
+
+        // Basic name validation (simplified - just check it's a valid identifier)
+        if !new_name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            result.add_diagnostic(
+                DiagnosticLevel::Error,
+                "New name must be a valid identifier",
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+            return result;
+        }
+
+        // For simplified implementation: just rename in current file
+        // In a full implementation, would use semantic search to find all references
+        let query = SearchQuery {
+            kind: SearchKind::Usages {
+                symbol: old_name.to_string(),
+                file: request.file.clone(),
+            },
+            scope: SearchScope::Project,
+            max_results: 1000,
+        };
+
+        let search_result = self.search_engine.search(&query);
+
+        // If no matches found in index, do simple text-based search in current file
+        if search_result.matches.is_empty() {
+            // Simple approach: find all occurrences of the old name in the current file
+            let mut pos = 0;
+            while let Some(found_pos) = source[pos..].find(old_name) {
+                let absolute_pos = pos + found_pos;
+
+                // Create a text edit for this occurrence
+                result.add_edit(
+                    request.file.clone(),
+                    TextEdit {
+                        span: Span::new(absolute_pos, absolute_pos + old_name.len()),
+                        new_text: new_name.to_string(),
+                    },
+                );
+
+                pos = absolute_pos + old_name.len();
+            }
+        } else {
+            // Use search results
+            for search_match in &search_result.matches {
+                result.add_edit(
+                    search_match.file.clone(),
+                    TextEdit {
+                        span: search_match.span,
+                        new_text: new_name.to_string(),
+                    },
+                );
+            }
+        }
+
+        if !result.has_changes() {
+            result.add_diagnostic(
+                DiagnosticLevel::Warning,
+                format!("No occurrences of '{}' found", old_name),
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+        } else {
+            result.add_diagnostic(
+                DiagnosticLevel::Info,
+                format!("Renamed '{}' to '{}' ({} occurrences)", old_name, new_name, result.file_edits.values().map(|v| v.len()).sum::<usize>()),
+                Some(request.file.clone()),
+                Some(request.span),
+            );
+        }
 
         result
     }
