@@ -59,6 +59,14 @@ impl FrameworkDetection {
     pub fn confidence_for(&self, framework: &Framework) -> f64 {
         self.confidence.get(framework).copied().unwrap_or(0.0)
     }
+
+    /// Add a detected framework with confidence.
+    pub fn add_framework(&mut self, framework: Framework, confidence: f64) {
+        if !self.frameworks.contains(&framework) {
+            self.frameworks.push(framework.clone());
+        }
+        self.confidence.insert(framework, confidence);
+    }
 }
 
 /// Detect frameworks in a project.
@@ -75,27 +83,239 @@ impl FrameworkDetector {
 
     /// Detect frameworks in the project.
     pub fn detect(&self) -> FrameworkDetection {
-        let result = FrameworkDetection::empty();
+        let mut result = FrameworkDetection::empty();
 
-        // Check imports in files for framework detection
-        // This is a placeholder - real implementation would scan files
+        // Detect each framework
+        self.detect_django(&mut result);
+        self.detect_flask(&mut result);
+        self.detect_fastapi(&mut result);
 
         result
     }
 
     /// Check for Django.
-    fn detect_django(&self, _result: &mut FrameworkDetection) {
-        // Look for settings.py, manage.py, etc.
+    fn detect_django(&self, result: &mut FrameworkDetection) {
+        let mut confidence: f64 = 0.0;
+        let mut indicators = 0;
+
+        // 1. Check for manage.py (strong indicator)
+        let manage_py = self.root.join("manage.py");
+        if manage_py.exists() {
+            confidence += 0.4;
+            indicators += 1;
+        }
+
+        // 2. Check for settings.py or settings module
+        if self.find_files_recursive("settings.py", 2) {
+            confidence += 0.3;
+            indicators += 1;
+        }
+
+        // 3. Check for models.py files
+        if self.find_files_recursive("models.py", 2) {
+            confidence += 0.15;
+            indicators += 1;
+        }
+
+        // 4. Check requirements files for Django (no version check needed)
+        if self.check_requirements_for("django", 0.0) {
+            confidence += 0.25;
+            indicators += 1;
+        }
+
+        // 5. Check pyproject.toml for Django
+        if self.check_pyproject_for("django") {
+            confidence += 0.2;
+            indicators += 1;
+        }
+
+        if indicators > 0 {
+            result.add_framework(Framework::Django, confidence.min(1.0));
+        }
     }
 
     /// Check for Flask.
-    fn detect_flask(&self, _result: &mut FrameworkDetection) {
-        // Look for Flask app instantiation
+    fn detect_flask(&self, result: &mut FrameworkDetection) {
+        let mut confidence: f64 = 0.0;
+        let mut indicators = 0;
+
+        // 1. Check requirements for Flask (no version check needed)
+        if self.check_requirements_for("flask", 0.0) {
+            confidence += 0.4;
+            indicators += 1;
+        }
+
+        // 2. Check pyproject.toml
+        if self.check_pyproject_for("flask") {
+            confidence += 0.3;
+            indicators += 1;
+        }
+
+        // 3. Check for app.py or similar Flask app files with Flask code
+        let app_files = ["app.py", "application.py", "wsgi.py"];
+        for app_file in &app_files {
+            let path = self.root.join(app_file);
+            if path.exists() {
+                // Check if file contains Flask code
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if content.contains("from flask") || content.contains("import flask")
+                        || content.contains("Flask(__name__)") {
+                        confidence += 0.2;
+                        indicators += 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 4. Look for blueprints directory
+        if self.root.join("blueprints").is_dir() || self.find_files_recursive("blueprints.py", 2) {
+            confidence += 0.1;
+            indicators += 1;
+        }
+
+        if indicators > 0 {
+            result.add_framework(Framework::Flask, confidence.min(1.0));
+        }
     }
 
     /// Check for FastAPI.
-    fn detect_fastapi(&self, _result: &mut FrameworkDetection) {
-        // Look for FastAPI app instantiation
+    fn detect_fastapi(&self, result: &mut FrameworkDetection) {
+        let mut confidence: f64 = 0.0;
+        let mut indicators = 0;
+
+        // 1. Check requirements for FastAPI (no version check needed)
+        if self.check_requirements_for("fastapi", 0.0) {
+            confidence += 0.5;
+            indicators += 1;
+        }
+
+        // 2. Check pyproject.toml
+        if self.check_pyproject_for("fastapi") {
+            confidence += 0.3;
+            indicators += 1;
+        }
+
+        // 3. Check for main.py or app.py with FastAPI code
+        let app_files = ["main.py", "app.py", "api.py"];
+        for app_file in &app_files {
+            let path = self.root.join(app_file);
+            if path.exists() {
+                // Check if file contains FastAPI code
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    if content.contains("from fastapi") || content.contains("import fastapi")
+                        || content.contains("FastAPI()") {
+                        confidence += 0.15;
+                        indicators += 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 4. Check for routers directory
+        if self.root.join("routers").is_dir() || self.root.join("api").is_dir() {
+            confidence += 0.05;
+            indicators += 1;
+        }
+
+        if indicators > 0 {
+            result.add_framework(Framework::FastAPI, confidence.min(1.0));
+        }
+    }
+
+    // Helper methods
+
+    /// Find files recursively with given name.
+    fn find_files_recursive(&self, filename: &str, max_depth: usize) -> bool {
+        self.find_files_recursive_impl(&self.root, filename, max_depth, 0)
+    }
+
+    fn find_files_recursive_impl(
+        &self,
+        dir: &PathBuf,
+        filename: &str,
+        max_depth: usize,
+        current_depth: usize,
+    ) -> bool {
+        if current_depth > max_depth {
+            return false;
+        }
+
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+
+                // Check if this is the file we're looking for
+                if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                    if file_name == filename {
+                        return true;
+                    }
+                }
+
+                // If it's a directory (not hidden), recurse into it
+                if path.is_dir() {
+                    if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+                        if !dir_name.starts_with('.') {
+                            if self.find_files_recursive_impl(&path, filename, max_depth, current_depth + 1) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Check requirements files for a package.
+    fn check_requirements_for(&self, package: &str, min_version: f64) -> bool {
+        let req_files = [
+            "requirements.txt",
+            "requirements/base.txt",
+            "requirements/production.txt",
+            "dev-requirements.txt",
+        ];
+
+        for req_file in &req_files {
+            let path = self.root.join(req_file);
+            if path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    for line in content.lines() {
+                        let line = line.trim();
+                        if line.to_lowercase().starts_with(package) {
+                            // Found the package, check version if needed
+                            if min_version > 0.0 {
+                                // Simple version check (could be enhanced)
+                                if let Some(version_part) = line.split(">=").nth(1) {
+                                    if let Some(version_str) = version_part.split(&['<', '=', ','][..]).next() {
+                                        if let Ok(version) = version_str.trim().parse::<f64>() {
+                                            return version >= min_version;
+                                        }
+                                    }
+                                }
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Check pyproject.toml for a dependency.
+    fn check_pyproject_for(&self, package: &str) -> bool {
+        let pyproject = self.root.join("pyproject.toml");
+        if pyproject.exists() {
+            if let Ok(content) = std::fs::read_to_string(&pyproject) {
+                // Simple check - could be enhanced with proper TOML parsing
+                return content.to_lowercase().contains(&format!("\"{}\"", package))
+                    || content.to_lowercase().contains(&format!("'{}'", package))
+                    || content.to_lowercase().contains(&format!("{} = ", package));
+            }
+        }
+        false
     }
 }
 
