@@ -142,21 +142,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```bash
 # Check compilation
-cargo check -p data-bridge-postgres
+cargo check -p ouroboros-postgres
 
 # Run unit tests (no database required)
-cargo test -p data-bridge-postgres
+cargo test -p ouroboros-postgres
 
 # Run integration tests (requires PostgreSQL)
-# Set POSTGRES_URL or DATABASE_URL environment variable
-export POSTGRES_URL="postgresql://localhost/test_db"
-cargo test -p data-bridge-postgres -- --ignored
+cargo test -p ouroboros-postgres --test test_transaction
 
-# Run specific test suite
-cargo test -p data-bridge-postgres --test test_migration -- --ignored
+# Run all tests including ignored ones
+cargo test -p ouroboros-postgres -- --ignored
 
 # Lint
-cargo clippy -p data-bridge-postgres
+cargo clippy -p ouroboros-postgres
+```
+
+### PostgreSQL Setup (macOS)
+
+Using Homebrew:
+
+```bash
+# Install PostgreSQL
+brew install postgresql@15
+
+# Start PostgreSQL service
+brew services start postgresql@15
+
+# Create test database
+createdb test_db
+
+# Verify connection
+psql -d test_db -c "SELECT version();"
+```
+
+Set the database URL environment variable:
+
+```bash
+# Default connection (local socket)
+export DATABASE_URL="postgresql://localhost/test_db"
+
+# Or with explicit credentials
+export DATABASE_URL="postgresql://username:password@localhost:5432/test_db"
+```
+
+### PostgreSQL Setup (Docker)
+
+```bash
+# Start PostgreSQL container
+docker run -d --name postgres-test \
+  -p 5432:5432 \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=test_db \
+  postgres:15
+
+# Set connection URL
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/test_db"
+
+# Run tests
+cargo test -p ouroboros-postgres --test test_transaction
+
+# Cleanup
+docker stop postgres-test && docker rm postgres-test
 ```
 
 ### Running Migration Tests

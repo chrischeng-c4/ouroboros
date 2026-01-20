@@ -3,6 +3,7 @@ change_id: obpg-tx-integration-tests-2
 type: proposal
 ---
 
+<proposal>
 # Change: obpg-tx-integration-tests-2
 
 ## Summary
@@ -29,3 +30,4 @@ Transaction management is a critical component of the database adapter. While so
   - `crates/ouroboros-postgres/README.md`
   - `crates/ouroboros-postgres/tests/test_transaction.rs`
 - Breaking changes: No
+</proposal>
