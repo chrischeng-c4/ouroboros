@@ -6,6 +6,7 @@ use tree_sitter::Node;
 use super::annotation::parse_type_annotation;
 use super::builtins::add_builtins;
 use super::class_info::ClassInfo;
+use super::frameworks::FrameworkRegistry;
 use super::imports::{parse_import, ImportResolver};
 use super::stubs::StubLoader;
 use super::ty::{Param, ParamKind, Type, TypeVarId, Variance};
@@ -34,6 +35,8 @@ pub struct TypeInferencer<'a> {
     overload_signatures: HashMap<String, Vec<Type>>,
     /// Current class name (for Self type resolution)
     current_class: Option<String>,
+    /// Framework type providers
+    framework_registry: FrameworkRegistry,
 }
 
 impl<'a> TypeInferencer<'a> {
@@ -62,7 +65,18 @@ impl<'a> TypeInferencer<'a> {
             resolver,
             overload_signatures: HashMap::new(),
             current_class: None,
+            framework_registry: FrameworkRegistry::new(),
         }
+    }
+
+    /// Get a mutable reference to the framework registry for configuration.
+    pub fn framework_registry_mut(&mut self) -> &mut FrameworkRegistry {
+        &mut self.framework_registry
+    }
+
+    /// Add a type binding to the environment (useful for testing).
+    pub fn bind_type(&mut self, name: String, ty: Type) {
+        self.env.bind(name, ty);
     }
 
     /// Set type overrides from narrowing (used for control flow analysis)
@@ -488,6 +502,22 @@ impl<'a> TypeInferencer<'a> {
             None => return Type::Unknown,
         };
 
+        // Check if this is a method call on an instance (e.g., user.save())
+        if func.kind() == "attribute" {
+            let object = func.child_by_field_name("object");
+            let attribute = func.child_by_field_name("attribute");
+
+            if let (Some(obj), Some(attr)) = (object, attribute) {
+                let object_type = self.infer_expr(&obj);
+                let method_name = self.node_text(&attr);
+
+                // Try framework-specific method signature
+                if let Some(method_sig) = self.framework_registry.get_method_signature(&object_type, method_name) {
+                    return method_sig.return_type;
+                }
+            }
+        }
+
         let func_ty = self.infer_expr(&func);
 
         match &func_ty {
@@ -572,9 +602,17 @@ impl<'a> TypeInferencer<'a> {
 
         match &object_type {
             Type::Instance { name, .. } => {
-                // Look up attribute with inheritance support
-                self.get_attribute_recursive(name, attr_name)
-                    .unwrap_or(Type::Unknown)
+                // 1. Try standard attribute resolution with inheritance
+                if let Some(ty) = self.get_attribute_recursive(name, attr_name) {
+                    return ty;
+                }
+
+                // 2. Try framework-specific attribute resolution
+                if let Some(ty) = self.framework_registry.get_attribute_type(&object_type, attr_name) {
+                    return ty;
+                }
+
+                Type::Unknown
             }
             Type::ClassType { name, .. } => {
                 // Class attribute access (static methods, class vars) with inheritance
@@ -584,11 +622,16 @@ impl<'a> TypeInferencer<'a> {
             Type::Optional(inner) => {
                 // For Optional[T].attr, return the attribute type from T with inheritance
                 if let Type::Instance { name, .. } = inner.as_ref() {
-                    self.get_attribute_recursive(name, attr_name)
-                        .unwrap_or(Type::Unknown)
-                } else {
-                    Type::Unknown
+                    if let Some(ty) = self.get_attribute_recursive(name, attr_name) {
+                        return ty;
+                    }
+
+                    // Try framework-specific attribute resolution
+                    if let Some(ty) = self.framework_registry.get_attribute_type(inner.as_ref(), attr_name) {
+                        return ty;
+                    }
                 }
+                Type::Unknown
             }
             _ => Type::Unknown,
         }

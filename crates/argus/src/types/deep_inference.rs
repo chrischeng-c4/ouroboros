@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use crate::types::ty::Type;
+use crate::types::frameworks::FrameworkRegistry;
 
 /// Unique identifier for types in cross-file tracking.
 pub type TypeId = usize;
@@ -259,6 +260,8 @@ pub struct DeepTypeInferencer {
     files: HashMap<PathBuf, FileAnalysis>,
     /// Import graph
     import_graph: ImportGraph,
+    /// Framework type providers
+    framework_registry: FrameworkRegistry,
 }
 
 /// Analysis state for a single file.
@@ -366,7 +369,18 @@ impl DeepTypeInferencer {
             context: TypeContext::new(),
             files: HashMap::new(),
             import_graph: ImportGraph::new(),
+            framework_registry: FrameworkRegistry::new(),
         }
+    }
+
+    /// Get a reference to the framework registry for configuration.
+    pub fn framework_registry(&self) -> &FrameworkRegistry {
+        &self.framework_registry
+    }
+
+    /// Get a mutable reference to the framework registry for configuration.
+    pub fn framework_registry_mut(&mut self) -> &mut FrameworkRegistry {
+        &mut self.framework_registry
     }
 
     /// Add a file for analysis.
