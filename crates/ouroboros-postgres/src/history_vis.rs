@@ -66,6 +66,7 @@ pub struct MigrationTree {
     /// All nodes indexed by version
     nodes: HashMap<String, MigrationNode>,
     /// Root versions (migrations with no parent)
+    #[allow(dead_code)]
     roots: Vec<String>,
     /// Branch names
     branches: HashMap<String, String>,
@@ -274,14 +275,12 @@ impl AsciiRenderer {
             } else {
                 ("├", "─")
             }
+        } else if is_last {
+            ("`", "-")
+        } else if node.is_branch_point() {
+            ("+", "+")
         } else {
-            if is_last {
-                ("`", "-")
-            } else if node.is_branch_point() {
-                ("+", "+")
-            } else {
-                ("|", "-")
-            }
+            ("|", "-")
         };
 
         // Status indicator
@@ -459,12 +458,12 @@ impl HistoryExporter {
             .collect();
 
         if !applied.is_empty() {
-            lines.push(format!("    classDef applied fill:#90EE90"));
+            lines.push("    classDef applied fill:#90EE90".to_string());
             lines.push(format!("    class {} applied", applied.join(",")));
         }
 
         if !pending.is_empty() {
-            lines.push(format!("    classDef pending fill:#FFB6C1"));
+            lines.push("    classDef pending fill:#FFB6C1".to_string());
             lines.push(format!("    class {} pending", pending.join(",")));
         }
 
