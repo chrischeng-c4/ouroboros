@@ -242,6 +242,18 @@ enum ApiAction {
         directory: String,
     },
 
+    /// Generate code (app, feature, route)
+    ///
+    /// Examples:
+    ///   ob api g app admin             # Generate new app entry point
+    ///   ob api g feature users         # Generate new feature module
+    ///   ob api g route users --app admin  # Generate route in feature for app
+    #[command(alias = "g")]
+    Generate {
+        #[command(subcommand)]
+        action: GenerateAction,
+    },
+
     /// Start API server (supports both dev and production modes)
     ///
     /// Examples:
@@ -289,6 +301,49 @@ enum ApiAction {
         /// Access log on/off
         #[arg(long)]
         access_log: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenerateAction {
+    /// Generate a new app entry point (e.g., admin, public, partner)
+    ///
+    /// Creates apps/<name>.py that imports and mounts feature routers
+    App {
+        /// App name (e.g., admin, public, partner)
+        name: String,
+
+        /// Description for the app
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+
+    /// Generate a new feature module
+    ///
+    /// Creates features/<name>/ with model.py, service.py, and __init__.py
+    Feature {
+        /// Feature name (e.g., users, products, orders)
+        name: String,
+
+        /// Include routes scaffold
+        #[arg(long)]
+        with_routes: bool,
+
+        /// App to generate routes for (if --with-routes)
+        #[arg(long)]
+        app: Option<String>,
+    },
+
+    /// Generate a route module for a feature
+    ///
+    /// Creates features/<feature>/<app>/ with routes.py, schema.py, and test.py
+    Route {
+        /// Feature name (must exist)
+        feature: String,
+
+        /// App name (must exist in apps/)
+        #[arg(long, required = true)]
+        app: String,
     },
 }
 
@@ -426,6 +481,9 @@ fn main() -> Result<()> {
                 directory,
             } => {
                 run_api_init(name, minimal, full, &directory)?;
+            }
+            ApiAction::Generate { action } => {
+                run_api_generate(action)?;
             }
             ApiAction::Serve {
                 app,
@@ -2101,141 +2159,571 @@ async def metrics():
     Ok(())
 }
 
-/// Create full project with tests, models, and middleware
+/// Create full project with LLM-friendly structure
+///
+/// Structure:
+/// ```
+/// my-api/
+/// ├── apps/              # App entry points (admin, public, partner)
+/// │   └── public.py
+/// ├── core/              # Core infrastructure (widely depended, may have routes)
+/// │   └── routing.py     # RouteConfig, @route decorator, RouteTestCase
+/// ├── shared/            # Pure utilities (no routes)
+/// │   ├── decorators.py
+/// │   ├── guards.py
+/// │   └── schemas.py
+/// ├── features/          # Business features (generated via ob api g feature)
+/// ├── infra/             # Infrastructure endpoints
+/// │   ├── probes.py      # K8s probes
+/// │   └── metrics.py     # Prometheus metrics
+/// ├── config.py
+/// └── .env.example
+/// ```
 fn create_full_project(target_dir: &std::path::Path, project_name: &str) -> Result<()> {
     use std::fs;
 
-    // First create basic structure (with OpenAPI enabled)
-    create_basic_project(target_dir, project_name, true)?;
-
-    // Create additional directories
-    let dirs = ["models", "middleware", "tests", "utils"];
+    // Create directory structure
+    let dirs = ["apps", "core", "shared", "features", "infra"];
     for dir in dirs {
         fs::create_dir_all(target_dir.join(dir))
             .with_context(|| format!("Failed to create {} directory", dir))?;
         fs::write(target_dir.join(dir).join("__init__.py"), "")
             .with_context(|| format!("Failed to create {}/__init__.py", dir))?;
     }
-    println!("   Created models/, middleware/, tests/, utils/");
+    println!("   Created apps/, core/, shared/, features/, infra/");
 
-    // models/base.py
-    let models_content = r#""""
-Base model definitions
+    // ==========================================================================
+    // apps/public.py - Default app entry point
+    // ==========================================================================
+    let app_content = format!(r#""""
+{project_name} - Public API Entry Point
 """
-from dataclasses import dataclass
-from typing import Optional
-from datetime import datetime
+from ouroboros.api import App
+
+# Import feature routers here
+# from features.users.public import router as users_router
+
+app = App()
+
+# OpenAPI documentation
+app.title = "{project_name}"
+app.description = "API powered by Ouroboros"
+app.version = "0.1.0"
+
+# Mount feature routers
+# app.include_router(users_router, prefix="/users")
+
+# Include infrastructure routers (probes + metrics)
+from infra.probes import router as probes_router
+from infra.metrics import router as metrics_router
+
+app.include_router(probes_router)
+app.include_router(metrics_router)
 
 
-@dataclass
-class BaseModel:
-    """Base model with common fields."""
-    id: Optional[int] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-
-@dataclass
-class User(BaseModel):
-    """User model."""
-    name: str = ""
-    email: str = ""
-    is_active: bool = True
-"#;
-
-    fs::write(target_dir.join("models").join("base.py"), models_content)
-        .context("Failed to write models/base.py")?;
-    println!("   Created models/base.py");
-
-    // middleware/logging.py
-    let middleware_content = r#""""
-Logging middleware
-"""
-import time
-from ouroboros.api import Request, Response
-
-
-async def logging_middleware(request: Request, call_next):
-    """Log request timing and details."""
-    start_time = time.perf_counter()
-
-    response = await call_next(request)
-
-    process_time = (time.perf_counter() - start_time) * 1000
-    print(f"{request.method} {request.path} - {response.status_code} ({process_time:.2f}ms)")
-
-    return response
-"#;
-
-    fs::write(target_dir.join("middleware").join("logging.py"), middleware_content)
-        .context("Failed to write middleware/logging.py")?;
-    println!("   Created middleware/logging.py");
-
-    // tests/test_api.py
-    let test_content = format!(r#""""
-API tests for {project_name}
-"""
-from ouroboros.qc import TestSuite, test
-
-
-class TestAPI(TestSuite):
-    """Test API endpoints."""
-
-    @test
-    async def test_root_endpoint(self):
-        """Test root endpoint returns welcome message."""
-        # TODO: Add actual HTTP client test
-        assert True
-
-    @test
-    async def test_health_endpoint(self):
-        """Test health endpoint returns ok status."""
-        # TODO: Add actual HTTP client test
-        assert True
-
-    @test
-    async def test_hello_endpoint(self):
-        """Test hello endpoint."""
-        # TODO: Add actual HTTP client test
-        assert True
+@app.get("/")
+async def root():
+    return {{"message": "Welcome to {project_name}", "docs": "/docs"}}
 "#, project_name = project_name);
 
-    fs::write(target_dir.join("tests").join("test_api.py"), test_content)
-        .context("Failed to write tests/test_api.py")?;
-    println!("   Created tests/test_api.py");
+    fs::write(target_dir.join("apps").join("public.py"), app_content)
+        .context("Failed to write apps/public.py")?;
+    println!("   Created apps/public.py");
 
-    // utils/helpers.py
-    let utils_content = r#""""
-Utility functions
+    // ==========================================================================
+    // core/routing.py - RouteConfig SSOT, @route decorator, RouteTestCase
+    // ==========================================================================
+    let routing_content = r##""""
+Core routing infrastructure - Single Source of Truth (SSOT) pattern
+
+This module provides:
+- RouteConfig: Configuration class used by handler, OpenAPI, and tests
+- @route decorator: Registers handler with RouteConfig
+- RouteTestCase: Base class for testing routes
+
+Usage:
+    # In routes.py
+    from http import HTTPMethod, HTTPStatus
+
+    class Routes:
+        list_users = RouteConfig(
+            method=HTTPMethod.GET,
+            path="/users",
+            summary="List all users",
+            response_model=UserListResponse,
+        )
+
+    @route(router, Routes.list_users)
+    async def list_users():
+        return {"users": []}
+
+    # In test.py
+    class TestListUsers(RouteTestCase, TestSuite):
+        route_config = Routes.list_users
+
+        @test
+        async def test_returns_empty_list(self):
+            response = await self.request()
+            self.assert_status(HTTPStatus.OK)
 """
-from typing import Any, Dict
+from dataclasses import dataclass, field
+from http import HTTPMethod, HTTPStatus
+from typing import Any, Callable, Dict, List, Optional, Type, Union
+from functools import wraps
 
 
-def success_response(data: Any, message: str = "Success") -> Dict:
-    """Create a standardized success response."""
-    return {
-        "success": True,
-        "message": message,
-        "data": data,
-    }
+@dataclass
+class RouteConfig:
+    """Route configuration - Single Source of Truth.
+
+    Used by:
+    - Route handler registration
+    - OpenAPI documentation generation
+    - Test case configuration
+
+    Args:
+        method: HTTP method (HTTPMethod.GET, HTTPMethod.POST, etc.)
+        path: URL path pattern (e.g., "/users/{id}")
+        summary: Short description for OpenAPI
+        description: Long description for OpenAPI
+        tags: OpenAPI tags for grouping
+        request_model: Request body model class
+        response_model: Response body model class
+        status_code: Success status code (HTTPStatus.OK, HTTPStatus.CREATED, etc.)
+        deprecated: Mark as deprecated in OpenAPI
+        runtime: "python" (default) or "rust" (compile to Rust at build time)
+    """
+    method: HTTPMethod
+    path: str
+    summary: str = ""
+    description: str = ""
+    tags: List[str] = field(default_factory=list)
+    request_model: Optional[Type] = None
+    response_model: Optional[Type] = None
+    status_code: HTTPStatus = HTTPStatus.OK
+    deprecated: bool = False
+    runtime: str = "python"
+
+    @property
+    def method_str(self) -> str:
+        """Get method as lowercase string for router registration."""
+        return self.method.value.lower()
+
+    @property
+    def status_code_int(self) -> int:
+        """Get status code as integer."""
+        return self.status_code.value
 
 
-def error_response(message: str, code: str = "ERROR") -> Dict:
-    """Create a standardized error response."""
-    return {
-        "success": False,
-        "error": {
-            "code": code,
-            "message": message,
-        },
-    }
+def route(router: Any, config: RouteConfig) -> Callable:
+    """Decorator to register a route handler using RouteConfig.
+
+    Example:
+        @route(router, Routes.list_users)
+        async def list_users():
+            return {"users": []}
+    """
+    def decorator(func: Callable) -> Callable:
+        # Register route with the router
+        route_decorator = getattr(router, config.method_str)
+
+        # Apply the router's method decorator
+        decorated = route_decorator(
+            config.path,
+            summary=config.summary,
+            description=config.description,
+            tags=config.tags,
+            response_model=config.response_model,
+            status_code=config.status_code_int,
+            deprecated=config.deprecated,
+        )(func)
+
+        # Store config on the function for test access
+        decorated._route_config = config
+
+        return decorated
+
+    return decorator
+
+
+class RouteTestCase:
+    """Base class for route tests using RouteConfig SSOT pattern.
+
+    Subclass this along with TestSuite to create route tests:
+
+        class TestListUsers(RouteTestCase, TestSuite):
+            route_config = Routes.list_users
+
+            @test
+            async def test_returns_empty_list(self):
+                response = await self.request()
+                self.assert_status(HTTPStatus.OK)
+    """
+    route_config: RouteConfig = None  # Set in subclass
+    _response: Optional[Any] = None
+    _client: Optional[Any] = None
+
+    async def setup(self):
+        """Initialize test client. Override to customize."""
+        # TODO: Initialize HTTP test client
+        pass
+
+    async def request(
+        self,
+        json: Optional[Dict] = None,
+        query: Optional[Dict] = None,
+        path_params: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+    ) -> Any:
+        """Make a request to the route defined by route_config.
+
+        Args:
+            json: JSON body for POST/PUT/PATCH requests
+            query: Query parameters
+            path_params: Path parameters to substitute in URL
+            headers: Additional headers
+
+        Returns:
+            Response object
+        """
+        if not self.route_config:
+            raise ValueError("route_config must be set in subclass")
+
+        path = self.route_config.path
+        if path_params:
+            for key, value in path_params.items():
+                path = path.replace(f"{{{key}}}", str(value))
+
+        # TODO: Use actual HTTP test client
+        # self._response = await self._client.request(
+        #     method=self.route_config.method,
+        #     path=path,
+        #     json=json,
+        #     params=query,
+        #     headers=headers,
+        # )
+        return self._response
+
+    def assert_status(self, expected: Union[HTTPStatus, int]):
+        """Assert response status code.
+
+        Args:
+            expected: Expected status (HTTPStatus.OK or 200)
+        """
+        if self._response is None:
+            raise ValueError("No response. Call request() first.")
+        actual = getattr(self._response, 'status_code', None)
+        expected_int = expected.value if isinstance(expected, HTTPStatus) else expected
+        assert actual == expected_int, f"Expected status {expected}, got {actual}"
+
+    def assert_json(self, expected: Dict):
+        """Assert response JSON body."""
+        if self._response is None:
+            raise ValueError("No response. Call request() first.")
+        actual = getattr(self._response, 'json', lambda: None)()
+        assert actual == expected, f"Expected {expected}, got {actual}"
+"##;
+
+    fs::write(target_dir.join("core").join("routing.py"), routing_content)
+        .context("Failed to write core/routing.py")?;
+    println!("   Created core/routing.py (RouteConfig, @route, RouteTestCase)");
+
+    // ==========================================================================
+    // shared/decorators.py
+    // ==========================================================================
+    let decorators_content = r#""""
+Shared decorators
+"""
+from functools import wraps
+from typing import Callable
+
+
+def require_auth(func: Callable) -> Callable:
+    """Decorator to require authentication."""
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        # TODO: Implement auth check
+        return await func(*args, **kwargs)
+    return wrapper
+
+
+def cache(ttl_seconds: int = 60):
+    """Decorator to cache response."""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            # TODO: Implement caching
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
 "#;
 
-    fs::write(target_dir.join("utils").join("helpers.py"), utils_content)
-        .context("Failed to write utils/helpers.py")?;
-    println!("   Created utils/helpers.py");
+    fs::write(target_dir.join("shared").join("decorators.py"), decorators_content)
+        .context("Failed to write shared/decorators.py")?;
+    println!("   Created shared/decorators.py");
 
+    // ==========================================================================
+    // shared/guards.py
+    // ==========================================================================
+    let guards_content = r#""""
+Shared guards for authorization
+"""
+from typing import List, Optional
+
+
+class Guard:
+    """Base guard class."""
+
+    async def can_activate(self, context: dict) -> bool:
+        """Check if request can proceed."""
+        raise NotImplementedError()
+
+
+class RoleGuard(Guard):
+    """Guard that checks user roles."""
+
+    def __init__(self, allowed_roles: List[str]):
+        self.allowed_roles = allowed_roles
+
+    async def can_activate(self, context: dict) -> bool:
+        user = context.get("user")
+        if not user:
+            return False
+        user_roles = getattr(user, "roles", [])
+        return any(role in self.allowed_roles for role in user_roles)
+
+
+class PermissionGuard(Guard):
+    """Guard that checks user permissions."""
+
+    def __init__(self, required_permissions: List[str]):
+        self.required_permissions = required_permissions
+
+    async def can_activate(self, context: dict) -> bool:
+        user = context.get("user")
+        if not user:
+            return False
+        user_permissions = getattr(user, "permissions", [])
+        return all(p in user_permissions for p in self.required_permissions)
+"#;
+
+    fs::write(target_dir.join("shared").join("guards.py"), guards_content)
+        .context("Failed to write shared/guards.py")?;
+    println!("   Created shared/guards.py");
+
+    // ==========================================================================
+    // shared/schemas.py
+    // ==========================================================================
+    let schemas_content = r#""""
+Shared schemas (common response/request models)
+"""
+from dataclasses import dataclass
+from typing import Any, Generic, List, Optional, TypeVar
+
+T = TypeVar("T")
+
+
+@dataclass
+class PaginatedResponse(Generic[T]):
+    """Generic paginated response."""
+    items: List[T]
+    total: int
+    page: int = 1
+    page_size: int = 20
+
+    @property
+    def has_next(self) -> bool:
+        return self.page * self.page_size < self.total
+
+    @property
+    def has_prev(self) -> bool:
+        return self.page > 1
+
+
+@dataclass
+class ErrorResponse:
+    """Standard error response."""
+    error: str
+    code: str
+    details: Optional[dict] = None
+
+
+@dataclass
+class SuccessResponse:
+    """Standard success response."""
+    message: str
+    data: Optional[Any] = None
+"#;
+
+    fs::write(target_dir.join("shared").join("schemas.py"), schemas_content)
+        .context("Failed to write shared/schemas.py")?;
+    println!("   Created shared/schemas.py");
+
+    // ==========================================================================
+    // infra/probes.py - K8s probes (Pure Rust capable)
+    // ==========================================================================
+    let probes_content = r##""""
+Kubernetes probes (Pure Rust execution - no GIL overhead)
+
+These endpoints can be implemented as pure Rust handlers for maximum performance:
+- /health    - Basic health check
+- /ready     - Readiness probe (can check DB, cache, etc.)
+- /live      - Liveness probe (always returns ok if process is alive)
+- /startup   - Startup probe (for slow-starting containers)
+
+Usage in K8s deployment:
+  livenessProbe:
+    httpGet:
+      path: /live
+      port: 8000
+    initialDelaySeconds: 3
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  startupProbe:
+    httpGet:
+      path: /startup
+      port: 8000
+    failureThreshold: 30
+    periodSeconds: 10
+"""
+from ouroboros.api import Router
+
+router = Router()
+
+
+@router.get("/health")
+async def health():
+    """Basic health check endpoint."""
+    return {"status": "ok"}
+
+
+@router.get("/ready")
+async def readiness():
+    """Readiness probe for Kubernetes.
+
+    Add your dependency checks here:
+    - Database connection
+    - Cache connection
+    - External service availability
+    """
+    return {"status": "ready"}
+
+
+@router.get("/live")
+async def liveness():
+    """Liveness probe for Kubernetes.
+
+    Should only check if the process itself is healthy.
+    Do NOT check external dependencies here.
+    """
+    return {"status": "alive"}
+
+
+@router.get("/startup")
+async def startup():
+    """Startup probe for Kubernetes.
+
+    Used for containers that need time to start.
+    Returns ok once the application is fully initialized.
+    """
+    return {"status": "started"}
+"##;
+
+    fs::write(target_dir.join("infra").join("probes.py"), probes_content)
+        .context("Failed to write infra/probes.py")?;
+    println!("   Created infra/probes.py");
+
+    // ==========================================================================
+    // infra/metrics.py - Prometheus metrics (Pure Rust capable)
+    // ==========================================================================
+    let metrics_content = r##""""
+Prometheus metrics endpoint (Pure Rust execution - no GIL overhead)
+
+Exposes metrics in Prometheus format at /metrics
+
+Usage in K8s:
+  Add this annotation to your pod:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+"""
+from ouroboros.api import Router, Response
+import time
+
+router = Router()
+
+# Simple in-memory metrics (replace with proper metrics library in production)
+_start_time = time.time()
+
+
+@router.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus exposition format.
+    Consider using prometheus_client library for production.
+    """
+    uptime = time.time() - _start_time
+
+    # Prometheus exposition format
+    lines = [
+        "# HELP app_uptime_seconds Application uptime in seconds",
+        "# TYPE app_uptime_seconds gauge",
+        f"app_uptime_seconds {uptime:.2f}",
+        "",
+        "# HELP app_info Application information",
+        "# TYPE app_info gauge",
+        'app_info{version="0.1.0"} 1',
+        "",
+    ]
+
+    return Response(
+        body="\n".join(lines),
+        headers={"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
+    )
+"##;
+
+    fs::write(target_dir.join("infra").join("metrics.py"), metrics_content)
+        .context("Failed to write infra/metrics.py")?;
+    println!("   Created infra/metrics.py");
+
+    // ==========================================================================
+    // config.py
+    // ==========================================================================
+    let config_content = format!(r#""""
+Configuration for {project_name}
+"""
+import os
+
+
+class Config:
+    """Application configuration."""
+
+    # Server settings
+    HOST: str = os.getenv("HOST", "127.0.0.1")
+    PORT: int = int(os.getenv("PORT", "8000"))
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+
+    # API settings
+    API_PREFIX: str = "/api"
+    API_VERSION: str = "v1"
+
+
+config = Config()
+"#, project_name = project_name);
+
+    fs::write(target_dir.join("config.py"), config_content)
+        .context("Failed to write config.py")?;
+    println!("   Created config.py");
+
+    // ==========================================================================
     // .env.example
+    // ==========================================================================
     let env_content = format!(r#"# {project_name} Configuration
 
 # Server
@@ -2254,7 +2742,601 @@ LOG_LEVEL=info
         .context("Failed to write .env.example")?;
     println!("   Created .env.example");
 
+    // Print structure summary
+    println!("\n   Project structure:");
+    println!("   {}/", project_name);
+    println!("   ├── apps/");
+    println!("   │   └── public.py      # Default app entry point");
+    println!("   ├── core/");
+    println!("   │   └── routing.py     # RouteConfig, @route, RouteTestCase");
+    println!("   ├── shared/");
+    println!("   │   ├── decorators.py  # @require_auth, @cache, etc.");
+    println!("   │   ├── guards.py      # RoleGuard, PermissionGuard");
+    println!("   │   └── schemas.py     # PaginatedResponse, ErrorResponse");
+    println!("   ├── features/          # (empty - use ob api g feature)");
+    println!("   ├── infra/");
+    println!("   │   ├── probes.py      # K8s probes (/health, /ready, /live)");
+    println!("   │   └── metrics.py     # Prometheus /metrics");
+    println!("   ├── config.py");
+    println!("   └── .env.example");
+
     Ok(())
+}
+
+// =============================================================================
+// API Generate Commands
+// =============================================================================
+
+/// Run API generate commands
+fn run_api_generate(action: GenerateAction) -> Result<()> {
+    let cwd = std::env::current_dir().context("Failed to get current directory")?;
+
+    match action {
+        GenerateAction::App { name, description } => {
+            generate_app(&cwd, &name, description.as_deref())?;
+        }
+        GenerateAction::Feature { name, with_routes, app } => {
+            generate_feature(&cwd, &name, with_routes, app.as_deref())?;
+        }
+        GenerateAction::Route { feature, app } => {
+            generate_route(&cwd, &feature, &app)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Generate a new app entry point
+fn generate_app(base_dir: &std::path::Path, name: &str, description: Option<&str>) -> Result<()> {
+    use std::fs;
+
+    let apps_dir = base_dir.join("apps");
+
+    // Check if apps directory exists
+    if !apps_dir.exists() {
+        anyhow::bail!(
+            "apps/ directory not found. Are you in a full project directory?\n\
+             Run 'ob api init --full' to create a full project structure."
+        );
+    }
+
+    let app_file = apps_dir.join(format!("{}.py", name));
+
+    // Check if app already exists
+    if app_file.exists() {
+        anyhow::bail!("App '{}' already exists at {}", name, app_file.display());
+    }
+
+    let default_desc = format!("{} API", name);
+    let desc = description.unwrap_or(&default_desc);
+
+    let content = format!(r#""""
+{desc} - App Entry Point
+"""
+from ouroboros.api import App
+
+# Import feature routers here
+# from features.users.{name} import router as users_router
+
+app = App()
+
+# OpenAPI documentation
+app.title = "{desc}"
+app.description = "API powered by Ouroboros"
+app.version = "0.1.0"
+
+# Mount feature routers
+# app.include_router(users_router, prefix="/users")
+
+# Include infrastructure routers (probes + metrics)
+from infra.probes import router as probes_router
+from infra.metrics import router as metrics_router
+
+app.include_router(probes_router)
+app.include_router(metrics_router)
+
+
+@app.get("/")
+async def root():
+    return {{"message": "Welcome to {desc}", "docs": "/docs"}}
+"#, desc = desc, name = name);
+
+    fs::write(&app_file, content)
+        .with_context(|| format!("Failed to write {}", app_file.display()))?;
+
+    println!("Created app: {}", app_file.display());
+    println!("\nNext steps:");
+    println!("  1. Create features with: ob api g feature <name>");
+    println!("  2. Generate routes for this app: ob api g route <feature> --app {}", name);
+    println!("  3. Import and mount routers in apps/{}.py", name);
+
+    Ok(())
+}
+
+/// Generate a new feature module
+fn generate_feature(
+    base_dir: &std::path::Path,
+    name: &str,
+    with_routes: bool,
+    app: Option<&str>,
+) -> Result<()> {
+    use std::fs;
+
+    let features_dir = base_dir.join("features");
+
+    // Check if features directory exists
+    if !features_dir.exists() {
+        anyhow::bail!(
+            "features/ directory not found. Are you in a full project directory?\n\
+             Run 'ob api init --full' to create a full project structure."
+        );
+    }
+
+    let feature_dir = features_dir.join(name);
+
+    // Check if feature already exists
+    if feature_dir.exists() {
+        anyhow::bail!("Feature '{}' already exists at {}", name, feature_dir.display());
+    }
+
+    // Create feature directory
+    fs::create_dir_all(&feature_dir)
+        .with_context(|| format!("Failed to create {}", feature_dir.display()))?;
+
+    // Create __init__.py
+    let init_content = format!(r#""""
+{name} feature module
+"""
+from .model import *
+from .service import *
+"#, name = name);
+
+    fs::write(feature_dir.join("__init__.py"), init_content)
+        .context("Failed to write __init__.py")?;
+
+    // Create model.py
+    let model_content = format!(r#""""
+{name} - Domain Models
+"""
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime
+
+
+@dataclass
+class {pascal_name}:
+    """Domain model for {name}."""
+    id: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    # TODO: Add fields
+
+
+@dataclass
+class {pascal_name}Create:
+    """DTO for creating {name}."""
+    pass  # TODO: Add fields
+
+
+@dataclass
+class {pascal_name}Update:
+    """DTO for updating {name}."""
+    pass  # TODO: Add fields
+"#, name = name, pascal_name = to_pascal_case(name));
+
+    fs::write(feature_dir.join("model.py"), model_content)
+        .context("Failed to write model.py")?;
+
+    // Create service.py
+    let service_content = format!(r#""""
+{name} - Business Logic / Service Layer
+"""
+from typing import Optional, List
+from .model import {pascal_name}, {pascal_name}Create, {pascal_name}Update
+
+
+class {pascal_name}Service:
+    """Service layer for {name} operations."""
+
+    async def get_by_id(self, id: int) -> Optional[{pascal_name}]:
+        """Get {name} by ID."""
+        # TODO: Implement
+        raise NotImplementedError()
+
+    async def list(self, skip: int = 0, limit: int = 100) -> List[{pascal_name}]:
+        """List {name}s with pagination."""
+        # TODO: Implement
+        raise NotImplementedError()
+
+    async def create(self, data: {pascal_name}Create) -> {pascal_name}:
+        """Create a new {name}."""
+        # TODO: Implement
+        raise NotImplementedError()
+
+    async def update(self, id: int, data: {pascal_name}Update) -> Optional[{pascal_name}]:
+        """Update an existing {name}."""
+        # TODO: Implement
+        raise NotImplementedError()
+
+    async def delete(self, id: int) -> bool:
+        """Delete a {name}."""
+        # TODO: Implement
+        raise NotImplementedError()
+
+
+# Singleton instance
+{name}_service = {pascal_name}Service()
+"#, name = name, pascal_name = to_pascal_case(name));
+
+    fs::write(feature_dir.join("service.py"), service_content)
+        .context("Failed to write service.py")?;
+
+    println!("Created feature: {}", feature_dir.display());
+    println!("   features/{}/", name);
+    println!("   ├── __init__.py");
+    println!("   ├── model.py");
+    println!("   └── service.py");
+
+    // Generate routes if requested
+    if with_routes {
+        if let Some(app_name) = app {
+            // Check if app exists
+            let app_file = base_dir.join("apps").join(format!("{}.py", app_name));
+            if !app_file.exists() {
+                println!("\nWarning: App '{}' does not exist. Create it first with: ob api g app {}", app_name, app_name);
+            } else {
+                generate_route(base_dir, name, app_name)?;
+            }
+        } else {
+            println!("\nNote: --with-routes specified but no --app provided.");
+            println!("Generate routes with: ob api g route {} --app <app_name>", name);
+        }
+    } else {
+        println!("\nNext steps:");
+        println!("  1. Define your domain models in features/{}/model.py", name);
+        println!("  2. Implement business logic in features/{}/service.py", name);
+        println!("  3. Generate routes: ob api g route {} --app <app_name>", name);
+    }
+
+    Ok(())
+}
+
+/// Generate a route module for a feature
+fn generate_route(base_dir: &std::path::Path, feature: &str, app: &str) -> Result<()> {
+    use std::fs;
+
+    let features_dir = base_dir.join("features");
+    let apps_dir = base_dir.join("apps");
+
+    // Check if features directory exists
+    if !features_dir.exists() {
+        anyhow::bail!(
+            "features/ directory not found. Are you in a full project directory?\n\
+             Run 'ob api init --full' to create a full project structure."
+        );
+    }
+
+    // Check if feature exists
+    let feature_dir = features_dir.join(feature);
+    if !feature_dir.exists() {
+        anyhow::bail!(
+            "Feature '{}' not found at {}.\n\
+             Create it first with: ob api g feature {}",
+            feature, feature_dir.display(), feature
+        );
+    }
+
+    // Check if app exists
+    let app_file = apps_dir.join(format!("{}.py", app));
+    if !app_file.exists() {
+        anyhow::bail!(
+            "App '{}' not found at {}.\n\
+             Create it first with: ob api g app {}",
+            app, app_file.display(), app
+        );
+    }
+
+    // Create app-specific route directory within the feature
+    let route_dir = feature_dir.join(app);
+    if route_dir.exists() {
+        anyhow::bail!(
+            "Routes for '{}' in feature '{}' already exist at {}",
+            app, feature, route_dir.display()
+        );
+    }
+
+    fs::create_dir_all(&route_dir)
+        .with_context(|| format!("Failed to create {}", route_dir.display()))?;
+
+    let pascal_name = to_pascal_case(feature);
+
+    // Create __init__.py
+    let init_content = format!(r#""""
+{feature} routes for {app} app
+"""
+from .routes import router
+from .schema import *
+
+__all__ = ["router"]
+"#, feature = feature, app = app);
+
+    fs::write(route_dir.join("__init__.py"), init_content)
+        .context("Failed to write __init__.py")?;
+
+    // Create routes.py with RouteConfig SSOT pattern
+    let routes_content = format!(r##""""
+{feature} routes for {app} app
+
+RouteConfig serves as Single Source of Truth (SSOT) for:
+- Route handler registration
+- OpenAPI documentation
+- Test case configuration
+"""
+from http import HTTPMethod, HTTPStatus
+
+from ouroboros.api import Router
+from core.routing import RouteConfig, route
+from .schema import {pascal_name}Response, {pascal_name}CreateRequest
+from ..service import {feature}_service
+
+router = Router()
+
+
+# =============================================================================
+# Route Configurations (SSOT)
+# =============================================================================
+
+class Routes:
+    """Route configurations - Single Source of Truth."""
+
+    list = RouteConfig(
+        method=HTTPMethod.GET,
+        path="/{feature}",
+        summary="List all {feature}",
+        response_model={pascal_name}Response,
+        tags=["{feature}"],
+    )
+
+    get = RouteConfig(
+        method=HTTPMethod.GET,
+        path="/{feature}/{{id}}",
+        summary="Get {feature} by ID",
+        response_model={pascal_name}Response,
+        tags=["{feature}"],
+    )
+
+    create = RouteConfig(
+        method=HTTPMethod.POST,
+        path="/{feature}",
+        summary="Create new {feature}",
+        request_model={pascal_name}CreateRequest,
+        response_model={pascal_name}Response,
+        status_code=HTTPStatus.CREATED,
+        tags=["{feature}"],
+    )
+
+    update = RouteConfig(
+        method=HTTPMethod.PUT,
+        path="/{feature}/{{id}}",
+        summary="Update {feature}",
+        request_model={pascal_name}CreateRequest,
+        response_model={pascal_name}Response,
+        tags=["{feature}"],
+    )
+
+    delete = RouteConfig(
+        method=HTTPMethod.DELETE,
+        path="/{feature}/{{id}}",
+        summary="Delete {feature}",
+        status_code=HTTPStatus.NO_CONTENT,
+        tags=["{feature}"],
+    )
+
+
+# =============================================================================
+# Route Handlers
+# =============================================================================
+
+@route(router, Routes.list)
+async def list_{feature}(skip: int = 0, limit: int = 100):
+    """List all {feature} with pagination."""
+    items = await {feature}_service.list(skip=skip, limit=limit)
+    return {{"items": items, "total": len(items)}}
+
+
+@route(router, Routes.get)
+async def get_{feature}(id: int):
+    """Get a single {feature} by ID."""
+    item = await {feature}_service.get_by_id(id)
+    if not item:
+        return {{"error": "Not found"}}, HTTPStatus.NOT_FOUND
+    return item
+
+
+@route(router, Routes.create)
+async def create_{feature}(payload: {pascal_name}CreateRequest):
+    """Create a new {feature}."""
+    item = await {feature}_service.create(payload)
+    return item
+
+
+@route(router, Routes.update)
+async def update_{feature}(id: int, payload: {pascal_name}CreateRequest):
+    """Update an existing {feature}."""
+    item = await {feature}_service.update(id, payload)
+    if not item:
+        return {{"error": "Not found"}}, HTTPStatus.NOT_FOUND
+    return item
+
+
+@route(router, Routes.delete)
+async def delete_{feature}(id: int):
+    """Delete a {feature}."""
+    success = await {feature}_service.delete(id)
+    if not success:
+        return {{"error": "Not found"}}, HTTPStatus.NOT_FOUND
+    return {{"message": "Deleted"}}
+"##, feature = feature, app = app, pascal_name = pascal_name);
+
+    fs::write(route_dir.join("routes.py"), routes_content)
+        .context("Failed to write routes.py")?;
+
+    // Create schema.py
+    let schema_content = format!(r#""""
+{feature} schemas for {app} app
+
+Request/Response models specific to this app's API contract.
+"""
+from dataclasses import dataclass
+from typing import Optional, List
+from datetime import datetime
+
+
+@dataclass
+class {pascal_name}Response:
+    """Response schema for {feature}."""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # TODO: Add fields from domain model
+
+
+@dataclass
+class {pascal_name}CreateRequest:
+    """Request schema for creating {feature}."""
+    # TODO: Add fields
+
+
+@dataclass
+class {pascal_name}UpdateRequest:
+    """Request schema for updating {feature}."""
+    # TODO: Add fields
+
+
+@dataclass
+class {pascal_name}ListResponse:
+    """Response schema for listing {feature}."""
+    items: List[{pascal_name}Response]
+    total: int
+"#, feature = feature, app = app, pascal_name = pascal_name);
+
+    fs::write(route_dir.join("schema.py"), schema_content)
+        .context("Failed to write schema.py")?;
+
+    // Create test.py with RouteTestCase pattern
+    let test_content = format!(r#""""
+{feature} route tests for {app} app
+
+Uses RouteTestCase base class with RouteConfig SSOT pattern.
+One TestClass tests one Route.
+"""
+from http import HTTPStatus
+
+from ouroboros.qc import TestSuite, test
+from core.routing import RouteTestCase
+from .routes import Routes
+
+
+class TestList{pascal_name}(RouteTestCase, TestSuite):
+    """Tests for list {feature} endpoint."""
+    route_config = Routes.list
+
+    @test
+    async def test_returns_empty_list(self):
+        """Should return empty list when no {feature} exist."""
+        response = await self.request()
+        self.assert_status(HTTPStatus.OK)
+        self.assert_json({{"items": [], "total": 0}})
+
+    @test
+    async def test_returns_paginated_list(self):
+        """Should return paginated list of {feature}."""
+        # TODO: Setup test data
+        response = await self.request(query={{"skip": 0, "limit": 10}})
+        self.assert_status(HTTPStatus.OK)
+
+
+class TestGet{pascal_name}(RouteTestCase, TestSuite):
+    """Tests for get {feature} by ID endpoint."""
+    route_config = Routes.get
+
+    @test
+    async def test_returns_404_when_not_found(self):
+        """Should return 404 when {feature} not found."""
+        response = await self.request(path_params={{"id": 999}})
+        self.assert_status(HTTPStatus.NOT_FOUND)
+
+    @test
+    async def test_returns_{feature}_when_found(self):
+        """Should return {feature} when found."""
+        # TODO: Setup test data
+        pass
+
+
+class TestCreate{pascal_name}(RouteTestCase, TestSuite):
+    """Tests for create {feature} endpoint."""
+    route_config = Routes.create
+
+    @test
+    async def test_creates_{feature}(self):
+        """Should create a new {feature}."""
+        response = await self.request(json={{}})  # TODO: Add request body
+        self.assert_status(HTTPStatus.CREATED)
+
+
+class TestUpdate{pascal_name}(RouteTestCase, TestSuite):
+    """Tests for update {feature} endpoint."""
+    route_config = Routes.update
+
+    @test
+    async def test_updates_{feature}(self):
+        """Should update an existing {feature}."""
+        # TODO: Setup test data
+        pass
+
+
+class TestDelete{pascal_name}(RouteTestCase, TestSuite):
+    """Tests for delete {feature} endpoint."""
+    route_config = Routes.delete
+
+    @test
+    async def test_deletes_{feature}(self):
+        """Should delete an existing {feature}."""
+        # TODO: Setup test data
+        pass
+"#, feature = feature, app = app, pascal_name = pascal_name);
+
+    fs::write(route_dir.join("test.py"), test_content)
+        .context("Failed to write test.py")?;
+
+    println!("\nCreated routes for '{}' in feature '{}':", app, feature);
+    println!("   features/{}/{}/", feature, app);
+    println!("   ├── __init__.py");
+    println!("   ├── routes.py   (with RouteConfig SSOT)");
+    println!("   ├── schema.py   (request/response models)");
+    println!("   └── test.py     (RouteTestCase pattern)");
+
+    println!("\nNext steps:");
+    println!("  1. Update schema.py with your request/response fields");
+    println!("  2. Implement service methods in features/{}/service.py", feature);
+    println!("  3. Import router in apps/{}.py:", app);
+    println!("     from features.{}.{} import router as {}_router", feature, app, feature);
+    println!("     app.include_router({}_router, prefix=\"/{}\")", feature, feature);
+
+    Ok(())
+}
+
+/// Convert snake_case to PascalCase
+fn to_pascal_case(s: &str) -> String {
+    s.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+            }
+        })
+        .collect()
 }
 
 // =============================================================================
