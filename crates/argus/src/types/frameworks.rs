@@ -965,8 +965,158 @@ impl FrameworkTypeProvider for FastAPITypeProvider {
         None
     }
 
-    fn get_method_signature(&self, _base_type: &Type, _method: &str) -> Option<MethodType> {
-        None
+    fn get_method_signature(&self, base_type: &Type, method: &str) -> Option<MethodType> {
+        // FastAPI parameter injection helpers
+        match method {
+            // Depends() - dependency injection
+            // Usage: user: User = Depends(get_current_user)
+            "Depends" => Some(MethodType {
+                params: vec![("dependency".to_string(), Type::Callable {
+                    params: vec![],
+                    ret: Box::new(Type::Any),
+                })],
+                return_type: Type::Any, // Will be inferred from the dependency function
+                is_async: false,
+            }),
+
+            // Path() - path parameter
+            // Usage: user_id: int = Path(..., gt=0)
+            "Path" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // Query() - query parameter
+            // Usage: skip: int = Query(0, ge=0)
+            "Query" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // Body() - request body
+            // Usage: user: UserCreate = Body(...)
+            "Body" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // Header() - header parameter
+            // Usage: token: str = Header(...)
+            "Header" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // Cookie() - cookie parameter
+            // Usage: session: str = Cookie(None)
+            "Cookie" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // File() - file upload
+            // Usage: file: bytes = File(...)
+            "File" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Instance {
+                    name: "bytes".to_string(),
+                    module: None,
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            // UploadFile() - uploaded file object
+            // Usage: file: UploadFile = File(...)
+            "UploadFile" => Some(MethodType {
+                params: vec![],
+                return_type: Type::Instance {
+                    name: "UploadFile".to_string(),
+                    module: Some("fastapi".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            // Form() - form data
+            // Usage: username: str = Form(...)
+            "Form" => Some(MethodType {
+                params: vec![("default".to_string(), Type::Any)],
+                return_type: Type::Any, // Returns the type specified in annotation
+                is_async: false,
+            }),
+
+            // Response models
+            "JSONResponse" => Some(MethodType {
+                params: vec![("content".to_string(), Type::Any)],
+                return_type: Type::Instance {
+                    name: "JSONResponse".to_string(),
+                    module: Some("fastapi.responses".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            "HTMLResponse" => Some(MethodType {
+                params: vec![("content".to_string(), Type::Str)],
+                return_type: Type::Instance {
+                    name: "HTMLResponse".to_string(),
+                    module: Some("fastapi.responses".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            "PlainTextResponse" => Some(MethodType {
+                params: vec![("content".to_string(), Type::Str)],
+                return_type: Type::Instance {
+                    name: "PlainTextResponse".to_string(),
+                    module: Some("fastapi.responses".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            "RedirectResponse" => Some(MethodType {
+                params: vec![("url".to_string(), Type::Str)],
+                return_type: Type::Instance {
+                    name: "RedirectResponse".to_string(),
+                    module: Some("fastapi.responses".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            "StreamingResponse" => Some(MethodType {
+                params: vec![("content".to_string(), Type::Any)],
+                return_type: Type::Instance {
+                    name: "StreamingResponse".to_string(),
+                    module: Some("fastapi.responses".to_string()),
+                    type_args: Vec::new(),
+                },
+                is_async: false,
+            }),
+
+            // FastAPI() app instance methods
+            "FastAPI" if matches!(base_type, Type::Instance { name, .. } if name == "FastAPI") => {
+                Some(MethodType {
+                    params: vec![],
+                    return_type: Type::Instance {
+                        name: "FastAPI".to_string(),
+                        module: Some("fastapi".to_string()),
+                        type_args: Vec::new(),
+                    },
+                    is_async: false,
+                })
+            },
+
+            _ => None,
+        }
     }
 
     fn framework_name(&self) -> &str {
@@ -1080,7 +1230,148 @@ impl FrameworkTypeProvider for PydanticTypeProvider {
         None
     }
 
-    fn get_method_signature(&self, _base_type: &Type, _method: &str) -> Option<MethodType> {
+    fn get_method_signature(&self, base_type: &Type, method: &str) -> Option<MethodType> {
+        if let Type::Instance { name, .. } = base_type {
+            // Check if this is a known Pydantic model
+            if let Some(_model) = self.models.get(name) {
+                return match method {
+                    // dict() - convert model to dictionary
+                    // Usage: user.dict()
+                    "dict" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Dict(
+                            Box::new(Type::Str),
+                            Box::new(Type::Any)
+                        ),
+                        is_async: false,
+                    }),
+
+                    // json() - serialize to JSON string
+                    // Usage: user.json()
+                    "json" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Str,
+                        is_async: false,
+                    }),
+
+                    // copy() - create a copy of the model
+                    // Usage: new_user = user.copy(update={"name": "New Name"})
+                    "copy" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // parse_obj() - parse from dictionary (class method)
+                    // Usage: User.parse_obj({"name": "Alice"})
+                    "parse_obj" => Some(MethodType {
+                        params: vec![("obj".to_string(), Type::Dict(
+                            Box::new(Type::Str),
+                            Box::new(Type::Any)
+                        ))],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // parse_raw() - parse from JSON string (class method)
+                    // Usage: User.parse_raw('{"name": "Alice"}')
+                    "parse_raw" => Some(MethodType {
+                        params: vec![("b".to_string(), Type::Str)],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // parse_file() - parse from JSON file (class method)
+                    // Usage: User.parse_file("user.json")
+                    "parse_file" => Some(MethodType {
+                        params: vec![("path".to_string(), Type::Str)],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // schema() - get JSON schema (class method)
+                    // Usage: User.schema()
+                    "schema" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Dict(
+                            Box::new(Type::Str),
+                            Box::new(Type::Any)
+                        ),
+                        is_async: false,
+                    }),
+
+                    // schema_json() - get JSON schema as string (class method)
+                    // Usage: User.schema_json()
+                    "schema_json" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Str,
+                        is_async: false,
+                    }),
+
+                    // construct() - construct without validation (class method)
+                    // Usage: User.construct(name="Alice")
+                    "construct" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // from_orm() - create from ORM model (class method)
+                    // Usage: UserResponse.from_orm(db_user)
+                    "from_orm" => Some(MethodType {
+                        params: vec![("obj".to_string(), Type::Any)],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // validate() - validate data (class method)
+                    // Usage: User.validate(data)
+                    "validate" => Some(MethodType {
+                        params: vec![("value".to_string(), Type::Any)],
+                        return_type: Type::Instance {
+                            name: name.clone(),
+                            module: None,
+                            type_args: Vec::new(),
+                        },
+                        is_async: false,
+                    }),
+
+                    // update_forward_refs() - update forward references (class method)
+                    // Usage: User.update_forward_refs()
+                    "update_forward_refs" => Some(MethodType {
+                        params: vec![],
+                        return_type: Type::None,
+                        is_async: false,
+                    }),
+
+                    _ => None,
+                };
+            }
+        }
         None
     }
 
@@ -1200,5 +1491,134 @@ mod tests {
         });
 
         assert!(provider.get_model("UserModel").is_some());
+    }
+
+    #[test]
+    fn test_fastapi_method_signatures() {
+        let provider = FastAPITypeProvider::new();
+
+        // Test Depends()
+        let depends_sig = provider.get_method_signature(&Type::Any, "Depends");
+        assert!(depends_sig.is_some());
+        let sig = depends_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Any));
+
+        // Test Path()
+        let path_sig = provider.get_method_signature(&Type::Any, "Path");
+        assert!(path_sig.is_some());
+        let sig = path_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Any));
+
+        // Test Query()
+        let query_sig = provider.get_method_signature(&Type::Any, "Query");
+        assert!(query_sig.is_some());
+
+        // Test JSONResponse
+        let json_response_sig = provider.get_method_signature(&Type::Any, "JSONResponse");
+        assert!(json_response_sig.is_some());
+        let sig = json_response_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "JSONResponse"));
+    }
+
+    #[test]
+    fn test_pydantic_method_signatures() {
+        let mut provider = PydanticTypeProvider::new();
+
+        // Register a model
+        provider.register_model(PydanticModel {
+            name: "User".to_string(),
+            fields: HashMap::new(),
+            validators: Vec::new(),
+            config: None,
+        });
+
+        let user_type = Type::Instance {
+            name: "User".to_string(),
+            module: None,
+            type_args: Vec::new(),
+        };
+
+        // Test dict()
+        let dict_sig = provider.get_method_signature(&user_type, "dict");
+        assert!(dict_sig.is_some());
+        let sig = dict_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Dict(..)));
+
+        // Test json()
+        let json_sig = provider.get_method_signature(&user_type, "json");
+        assert!(json_sig.is_some());
+        let sig = json_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Str));
+
+        // Test copy()
+        let copy_sig = provider.get_method_signature(&user_type, "copy");
+        assert!(copy_sig.is_some());
+        let sig = copy_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "User"));
+
+        // Test parse_obj()
+        let parse_obj_sig = provider.get_method_signature(&user_type, "parse_obj");
+        assert!(parse_obj_sig.is_some());
+        let sig = parse_obj_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "User"));
+        assert_eq!(sig.params.len(), 1);
+
+        // Test from_orm()
+        let from_orm_sig = provider.get_method_signature(&user_type, "from_orm");
+        assert!(from_orm_sig.is_some());
+        let sig = from_orm_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "User"));
+    }
+
+    #[test]
+    fn test_django_queryset_methods() {
+        let mut provider = DjangoTypeProvider::new();
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "name".to_string(),
+            DjangoField {
+                name: "name".to_string(),
+                field_type: DjangoFieldType::CharField,
+                null: false,
+                has_default: false,
+            },
+        );
+
+        provider.register_model(DjangoModel {
+            name: "User".to_string(),
+            fields,
+            relations: Vec::new(),
+        });
+
+        let queryset_type = Type::Instance {
+            name: "UserQuerySet".to_string(),
+            module: None,
+            type_args: Vec::new(),
+        };
+
+        // Test filter() returns QuerySet
+        let filter_sig = provider.get_method_signature(&queryset_type, "filter");
+        assert!(filter_sig.is_some());
+        let sig = filter_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "UserQuerySet"));
+
+        // Test get() returns Model instance
+        let get_sig = provider.get_method_signature(&queryset_type, "get");
+        assert!(get_sig.is_some());
+        let sig = get_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Instance { name, .. } if name == "User"));
+
+        // Test count() returns int
+        let count_sig = provider.get_method_signature(&queryset_type, "count");
+        assert!(count_sig.is_some());
+        let sig = count_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Int));
+
+        // Test first() returns Optional[Model]
+        let first_sig = provider.get_method_signature(&queryset_type, "first");
+        assert!(first_sig.is_some());
+        let sig = first_sig.unwrap();
+        assert!(matches!(sig.return_type, Type::Optional(..)));
     }
 }
