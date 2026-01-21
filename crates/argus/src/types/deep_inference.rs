@@ -505,7 +505,8 @@ impl ImportGraph {
             self.visit(file, &mut visited, &mut temp_visited, &mut result);
         }
 
-        result.reverse();
+        // DFS post-order gives us the correct topological order
+        // (dependencies before dependents)
         result
     }
 

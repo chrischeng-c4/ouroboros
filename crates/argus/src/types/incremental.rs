@@ -543,13 +543,19 @@ mod tests {
     fn test_incremental_analyzer() {
         let mut analyzer = IncrementalAnalyzer::default_config();
 
+        // Mark file as changed
+        let file = PathBuf::from("test.py");
         analyzer.file_changed(
-            PathBuf::from("test.py"),
+            file.clone(),
             ChangeKind::Modified,
             ContentHash::from_content("abc"),
         );
 
+        // Wait for debounce period to pass
+        std::thread::sleep(Duration::from_millis(350));
+
         let files = analyzer.get_files_to_analyze();
-        assert!(!files.is_empty());
+        assert!(!files.is_empty(), "Should have files to analyze after debounce");
+        assert!(files.contains(&file), "Should include the changed file");
     }
 }
