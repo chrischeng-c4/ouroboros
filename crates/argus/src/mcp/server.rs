@@ -386,5 +386,8 @@ pub fn print_mcp_config() {
         }
     });
 
-    println!("{}", serde_json::to_string_pretty(&config).unwrap());
+    match serde_json::to_string_pretty(&config) {
+        Ok(json) => println!("{}", json),
+        Err(e) => eprintln!("Error serializing config: {}", e),
+    }
 }

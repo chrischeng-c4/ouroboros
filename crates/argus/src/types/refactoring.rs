@@ -298,7 +298,9 @@ impl RefactoringEngine {
         if !self.ast_cache.contains_key(file) {
             self.populate_ast_cache(file, content)?;
         }
-        Ok(self.ast_cache.get(file).unwrap())
+        self.ast_cache
+            .get(file)
+            .ok_or_else(|| format!("AST not found in cache for {}", file.display()))
     }
 
     /// Get mutable AST for a file, loading it if not cached.
@@ -306,7 +308,9 @@ impl RefactoringEngine {
         if !self.ast_cache.contains_key(file) {
             self.populate_ast_cache(file, content)?;
         }
-        Ok(self.ast_cache.get_mut(file).unwrap())
+        self.ast_cache
+            .get_mut(file)
+            .ok_or_else(|| format!("AST not found in cache for {}", file.display()))
     }
 
     // ========================================================================
@@ -363,15 +367,19 @@ impl RefactoringEngine {
             if ch.is_alphanumeric() || ch == '_' {
                 current_id.push(ch);
             } else {
-                if !current_id.is_empty() && !current_id.chars().next().unwrap().is_numeric() {
-                    identifiers.insert(current_id.clone());
+                if let Some(first_char) = current_id.chars().next() {
+                    if !first_char.is_numeric() {
+                        identifiers.insert(current_id.clone());
+                    }
                 }
                 current_id.clear();
             }
         }
         // Don't forget last identifier
-        if !current_id.is_empty() && !current_id.chars().next().unwrap().is_numeric() {
-            identifiers.insert(current_id);
+        if let Some(first_char) = current_id.chars().next() {
+            if !first_char.is_numeric() {
+                identifiers.insert(current_id);
+            }
         }
     }
 
@@ -1154,18 +1162,18 @@ impl RefactoringEngine {
             }
         }
 
-        if definition_value.is_none() {
-            result.add_diagnostic(
-                DiagnosticLevel::Error,
-                format!("Could not find definition for '{}'", symbol_name),
-                Some(request.file.clone()),
-                Some(request.span),
-            );
-            return result;
-        }
-
-        let def_value = definition_value.unwrap();
-        let def_span = definition_span.unwrap();
+        let (def_value, def_span) = match (definition_value, definition_span) {
+            (Some(value), Some(span)) => (value, span),
+            _ => {
+                result.add_diagnostic(
+                    DiagnosticLevel::Error,
+                    format!("Could not find definition for '{}'", symbol_name),
+                    Some(request.file.clone()),
+                    Some(request.span),
+                );
+                return result;
+            }
+        };
 
         // Find all usages of the symbol (excluding the definition)
         let mut usages = Vec::new();

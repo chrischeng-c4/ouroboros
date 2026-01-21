@@ -4,6 +4,7 @@
 
 pub mod core;
 pub mod diagnostic;
+pub mod error;
 pub mod lint;
 pub mod lsp;
 pub mod mcp;
@@ -16,6 +17,7 @@ pub mod watch;
 
 pub use core::{ArgusConfig, LanguageConfig};
 pub use diagnostic::{Diagnostic, DiagnosticCategory, DiagnosticSeverity, Position, Range};
+pub use error::{ArgusError, Result};
 pub use lint::{Checker, CheckerRegistry};
 pub use output::{OutputFormat, Reporter};
 pub use syntax::{Language, MultiParser, ParsedFile};
@@ -28,7 +30,16 @@ use std::path::Path;
 /// Check files and return diagnostics
 pub fn check_paths(paths: &[&Path], config: &LintConfig) -> Vec<FileResult> {
     let registry = CheckerRegistry::new();
-    let mut parser = MultiParser::new().expect("Failed to initialize parser");
+
+    // Initialize parser, return empty results on failure
+    let mut parser = match MultiParser::new() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to initialize parser: {}", e);
+            return Vec::new();
+        }
+    };
+
     let mut results = Vec::new();
 
     for path in paths {
