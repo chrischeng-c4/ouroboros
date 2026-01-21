@@ -30,6 +30,9 @@ pub enum LLMError {
     #[error("Timeout error")]
     TimeoutError,
 
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

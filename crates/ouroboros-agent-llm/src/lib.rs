@@ -4,7 +4,7 @@
 //!
 //! This crate provides a unified interface for multiple LLM providers:
 //! - OpenAI (GPT-4, GPT-3.5, etc.)
-//! - Anthropic Claude (to be implemented in Phase 2)
+//! - Anthropic Claude (Claude 3.5 Sonnet, Claude 3 Opus, etc.)
 //!
 //! ## Features
 //!
@@ -27,11 +27,13 @@
 //! let response = provider.complete(request).await?;
 //! ```
 
+pub mod claude;
 pub mod error;
 pub mod openai;
 pub mod provider;
 
 // Re-export commonly used types
+pub use claude::ClaudeProvider;
 pub use error::{LLMError, LLMResult};
 pub use openai::OpenAIProvider;
 pub use provider::{
