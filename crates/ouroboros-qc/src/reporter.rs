@@ -1,5 +1,6 @@
 //! Test reporter - generates reports in various formats
 
+use crate::agent_eval::result::{AgentEvalMetrics, AgentEvalResult};
 use crate::runner::{TestResult, TestStatus, TestSummary, TestType};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write as FmtWrite;
@@ -181,6 +182,54 @@ fn calculate_summary(results: &[TestResult]) -> TestSummary {
 
     summary.total = results.len();
     summary
+}
+
+/// Agent evaluation report with all results and metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentEvalReport {
+    /// Suite name
+    pub suite_name: String,
+    /// Report generation timestamp
+    pub generated_at: String,
+    /// Individual evaluation results
+    pub results: Vec<AgentEvalResult>,
+    /// Aggregated metrics
+    pub metrics: AgentEvalMetrics,
+    /// Environment info
+    pub environment: EnvironmentInfo,
+}
+
+impl AgentEvalReport {
+    /// Create a new agent evaluation report
+    pub fn new(
+        suite_name: impl Into<String>,
+        results: Vec<AgentEvalResult>,
+        metrics: AgentEvalMetrics,
+    ) -> Self {
+        Self {
+            suite_name: suite_name.into(),
+            generated_at: chrono::Utc::now().to_rfc3339(),
+            results,
+            metrics,
+            environment: EnvironmentInfo::default(),
+        }
+    }
+
+    /// Set environment info
+    pub fn with_environment(mut self, env: EnvironmentInfo) -> Self {
+        self.environment = env;
+        self
+    }
+
+    /// Get failed results
+    pub fn failed_results(&self) -> Vec<&AgentEvalResult> {
+        self.results.iter().filter(|r| !r.passed).collect()
+    }
+
+    /// Check if all tests passed
+    pub fn all_passed(&self) -> bool {
+        self.metrics.passed == self.metrics.total_cases
+    }
 }
 
 /// Test reporter - generates reports in various formats
@@ -1018,6 +1067,331 @@ impl Reporter {
 
         output
     }
+
+    // ==================== Agent Evaluation Reporting ====================
+
+    /// Generate agent evaluation report
+    pub fn generate_agent_eval(&self, report: &AgentEvalReport) -> String {
+        match self.format {
+            ReportFormat::Markdown => self.generate_agent_eval_markdown(report),
+            ReportFormat::Html => self.generate_agent_eval_html(report),
+            ReportFormat::Json => self.generate_agent_eval_json(report),
+            ReportFormat::Yaml => self.generate_agent_eval_yaml(report),
+            ReportFormat::JUnit => self.generate_agent_eval_junit(report),
+            ReportFormat::Console => self.generate_agent_eval_console(report),
+        }
+    }
+
+    /// Generate Markdown report for agent evaluation
+    fn generate_agent_eval_markdown(&self, report: &AgentEvalReport) -> String {
+        let mut output = String::new();
+
+        // Header
+        writeln!(output, "# Agent Evaluation Report: {}", report.suite_name).unwrap();
+        writeln!(output).unwrap();
+
+        // Metadata
+        let status_emoji = if report.all_passed() {
+            "✅ PASSED"
+        } else {
+            "❌ FAILED"
+        };
+        writeln!(
+            output,
+            "**Date**: {} | **Status**: {} ({}/{})",
+            &report.generated_at[..10],
+            status_emoji,
+            report.metrics.passed,
+            report.metrics.total_cases
+        )
+        .unwrap();
+        writeln!(output).unwrap();
+
+        // Summary table
+        writeln!(output, "## Summary").unwrap();
+        writeln!(output).unwrap();
+        writeln!(output, "| Metric | Value |").unwrap();
+        writeln!(output, "|--------|-------|").unwrap();
+        writeln!(output, "| Total Cases | {} |", report.metrics.total_cases).unwrap();
+        writeln!(output, "| Passed | {} |", report.metrics.passed).unwrap();
+        writeln!(output, "| Pass Rate | {:.1}% |", report.metrics.pass_rate * 100.0).unwrap();
+        writeln!(output, "| Correctness Rate | {:.1}% |", report.metrics.correctness.rate * 100.0).unwrap();
+        writeln!(output, "| Avg Latency (P50) | {:.0}ms |", report.metrics.latency_stats.median_ms).unwrap();
+        writeln!(output, "| Avg Latency (P95) | {:.0}ms |", report.metrics.latency_stats.p95_ms).unwrap();
+        writeln!(output, "| Total Cost | ${:.4} |", report.metrics.cost_stats.total_cost_usd).unwrap();
+        writeln!(output, "| Avg Cost/Case | ${:.4} |", report.metrics.cost_stats.avg_cost_per_case_usd).unwrap();
+        writeln!(output).unwrap();
+
+        // Tool accuracy
+        writeln!(output, "## Tool Accuracy").unwrap();
+        writeln!(output).unwrap();
+        writeln!(output, "| Metric | Value |").unwrap();
+        writeln!(output, "|--------|-------|").unwrap();
+        writeln!(output, "| Precision | {:.2} |", report.metrics.tool_usage.avg_precision).unwrap();
+        writeln!(output, "| Recall | {:.2} |", report.metrics.tool_usage.avg_recall).unwrap();
+        writeln!(output, "| F1 Score | {:.2} |", report.metrics.tool_usage.avg_f1_score).unwrap();
+        writeln!(output).unwrap();
+
+        // Quality scores (if available)
+        if let Some(ref quality) = report.metrics.quality {
+            writeln!(output, "## Quality Assessment").unwrap();
+            writeln!(output).unwrap();
+            writeln!(output, "| Metric | Value |").unwrap();
+            writeln!(output, "|--------|-------|").unwrap();
+            writeln!(output, "| Overall Score | {:.2} |", quality.overall_avg_score).unwrap();
+            for (criterion, score) in &quality.avg_scores_by_criterion {
+                writeln!(output, "| {} | {:.2} |", criterion, score).unwrap();
+            }
+            writeln!(output).unwrap();
+        }
+
+        // Failed tests
+        let failed = report.failed_results();
+        if !failed.is_empty() {
+            writeln!(output, "## Failed Tests ({}/{})", failed.len(), report.metrics.total_cases).unwrap();
+            writeln!(output).unwrap();
+            for result in failed {
+                writeln!(output, "### ❌ {} ({})", result.test_case_name, result.test_case_id).unwrap();
+                if let Some(ref reason) = result.failure_reason {
+                    writeln!(output, "**Reason**: {}", reason).unwrap();
+                }
+                writeln!(output, "- **Correctness**: {}", if result.correctness.matches { "✅" } else { "❌" }).unwrap();
+                writeln!(output, "- **Tool F1**: {:.2}", result.tool_accuracy.f1_score).unwrap();
+                writeln!(output, "- **Latency**: {:.0}ms", result.latency.total_ms).unwrap();
+                writeln!(output, "- **Cost**: ${:.4}", result.cost.total_cost_usd).unwrap();
+                writeln!(output).unwrap();
+            }
+        }
+
+        output
+    }
+
+    /// Generate HTML report for agent evaluation
+    fn generate_agent_eval_html(&self, report: &AgentEvalReport) -> String {
+        let status_color = if report.all_passed() { "#22c55e" } else { "#ef4444" };
+        let status_text = if report.all_passed() { "PASSED" } else { "FAILED" };
+
+        format!(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Agent Evaluation Report - {suite_name}</title>
+    <style>
+        body {{ font-family: system-ui, -apple-system, sans-serif; margin: 40px; background: #f9fafb; }}
+        .header {{ background: white; padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .status {{ display: inline-block; padding: 6px 12px; border-radius: 6px; color: white; background: {status_color}; font-weight: 600; }}
+        .metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }}
+        .metric-card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .metric-label {{ font-size: 14px; color: #6b7280; margin-bottom: 8px; }}
+        .metric-value {{ font-size: 28px; font-weight: 700; color: #111827; }}
+        .section {{ background: white; padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .section-title {{ font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #111827; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }}
+        th {{ background: #f9fafb; font-weight: 600; color: #374151; }}
+        .failed-test {{ border-left: 4px solid #ef4444; padding-left: 16px; margin-bottom: 16px; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Agent Evaluation Report: {suite_name}</h1>
+        <p><strong>Date:</strong> {date} | <strong>Status:</strong> <span class="status">{status_text}</span></p>
+        <p><strong>Pass Rate:</strong> {pass_rate:.1}% ({passed}/{total} tests)</p>
+    </div>
+
+    <div class="metrics">
+        <div class="metric-card">
+            <div class="metric-label">Correctness Rate</div>
+            <div class="metric-value">{correctness_rate:.1}%</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Avg Latency (P95)</div>
+            <div class="metric-value">{latency_p95:.0}ms</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Total Cost</div>
+            <div class="metric-value">${total_cost:.4}</div>
+        </div>
+        <div class="metric-card">
+            <div class="metric-label">Tool F1 Score</div>
+            <div class="metric-value">{tool_f1:.2}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Test Results</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test ID</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Latency</th>
+                    <th>Cost</th>
+                    <th>Tool F1</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>"#,
+            suite_name = report.suite_name,
+            date = &report.generated_at[..10],
+            status_text = status_text,
+            status_color = status_color,
+            pass_rate = report.metrics.pass_rate * 100.0,
+            passed = report.metrics.passed,
+            total = report.metrics.total_cases,
+            correctness_rate = report.metrics.correctness.rate * 100.0,
+            latency_p95 = report.metrics.latency_stats.p95_ms,
+            total_cost = report.metrics.cost_stats.total_cost_usd,
+            tool_f1 = report.metrics.tool_usage.avg_f1_score,
+            rows = report.results.iter().map(|r| {
+                let status_icon = if r.passed { "✅" } else { "❌" };
+                format!(
+                    "<tr><td>{}</td><td>{}</td><td>{}</td><td>{:.0}ms</td><td>${:.4}</td><td>{:.2}</td></tr>",
+                    r.test_case_id, r.test_case_name, status_icon,
+                    r.latency.total_ms, r.cost.total_cost_usd, r.tool_accuracy.f1_score
+                )
+            }).collect::<Vec<_>>().join("\n                ")
+        )
+    }
+
+    /// Generate JSON report for agent evaluation
+    fn generate_agent_eval_json(&self, report: &AgentEvalReport) -> String {
+        serde_json::to_string_pretty(report).unwrap_or_else(|e| {
+            format!("{{\"error\": \"Failed to serialize report: {}\"}}", e)
+        })
+    }
+
+    /// Generate YAML report for agent evaluation
+    fn generate_agent_eval_yaml(&self, report: &AgentEvalReport) -> String {
+        serde_yaml::to_string(report).unwrap_or_else(|e| {
+            format!("error: Failed to serialize report: {}", e)
+        })
+    }
+
+    /// Generate JUnit XML report for agent evaluation
+    fn generate_agent_eval_junit(&self, report: &AgentEvalReport) -> String {
+        let mut output = String::new();
+
+        // XML header
+        writeln!(output, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>").unwrap();
+
+        // Testsuite
+        let total_time = report.results.iter().map(|r| r.latency.total_ms).sum::<f64>() / 1000.0;
+        writeln!(
+            output,
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" errors=\"0\" time=\"{:.3}\" timestamp=\"{}\">",
+            escape_xml(&report.suite_name),
+            report.metrics.total_cases,
+            report.metrics.total_cases - report.metrics.passed,
+            total_time,
+            report.generated_at
+        )
+        .unwrap();
+
+        // Test cases
+        for result in &report.results {
+            let time = result.latency.total_ms / 1000.0;
+            writeln!(
+                output,
+                "  <testcase name=\"{}\" classname=\"agent_eval\" time=\"{:.3}\">",
+                escape_xml(&result.test_case_name),
+                time
+            )
+            .unwrap();
+
+            if !result.passed {
+                if let Some(ref reason) = result.failure_reason {
+                    writeln!(
+                        output,
+                        "    <failure message=\"{}\" type=\"AgentEvalFailure\">",
+                        escape_xml(reason)
+                    )
+                    .unwrap();
+                    writeln!(output, "Test Case: {}", escape_xml(&result.test_case_id)).unwrap();
+                    writeln!(output, "Correctness: {}", result.correctness.matches).unwrap();
+                    writeln!(output, "Tool F1: {:.2}", result.tool_accuracy.f1_score).unwrap();
+                    writeln!(output, "Latency: {:.0}ms", result.latency.total_ms).unwrap();
+                    writeln!(output, "Cost: ${:.4}", result.cost.total_cost_usd).unwrap();
+                    writeln!(output, "    </failure>").unwrap();
+                }
+            }
+
+            writeln!(output, "  </testcase>").unwrap();
+        }
+
+        writeln!(output, "</testsuite>").unwrap();
+        output
+    }
+
+    /// Generate console report for agent evaluation
+    fn generate_agent_eval_console(&self, report: &AgentEvalReport) -> String {
+        const GREEN: &str = "\x1b[32m";
+        const RED: &str = "\x1b[31m";
+        const YELLOW: &str = "\x1b[33m";
+        const CYAN: &str = "\x1b[36m";
+        const BOLD: &str = "\x1b[1m";
+        const DIM: &str = "\x1b[2m";
+        const RESET: &str = "\x1b[0m";
+
+        let mut output = String::new();
+
+        // Header
+        writeln!(output, "{}════════════════════════════════════════{}", CYAN, RESET).unwrap();
+        writeln!(output, "{}{}Agent Evaluation Report{}", BOLD, CYAN, RESET).unwrap();
+        writeln!(output, "{}════════════════════════════════════════{}", CYAN, RESET).unwrap();
+        writeln!(output).unwrap();
+
+        // Status
+        let (status_color, status_text) = if report.all_passed() {
+            (GREEN, "✓ PASSED")
+        } else {
+            (RED, "✗ FAILED")
+        };
+        writeln!(
+            output,
+            "{}{}{} {}/{} tests passed ({:.1}%){}",
+            BOLD, status_color, status_text,
+            report.metrics.passed, report.metrics.total_cases,
+            report.metrics.pass_rate * 100.0, RESET
+        ).unwrap();
+        writeln!(output).unwrap();
+
+        // Metrics
+        writeln!(output, "{}Metrics:{}", BOLD, RESET).unwrap();
+        writeln!(output, "  {}Correctness Rate:{}    {:.1}%", DIM, RESET, report.metrics.correctness.rate * 100.0).unwrap();
+        writeln!(output, "  {}Latency (P50/P95):{} {:.0}ms / {:.0}ms", DIM, RESET,
+            report.metrics.latency_stats.median_ms, report.metrics.latency_stats.p95_ms).unwrap();
+        writeln!(output, "  {}Total Cost:{}        ${:.4}", DIM, RESET, report.metrics.cost_stats.total_cost_usd).unwrap();
+        writeln!(output, "  {}Tool F1 Score:{}     {:.2}", DIM, RESET, report.metrics.tool_usage.avg_f1_score).unwrap();
+        writeln!(output).unwrap();
+
+        // Failed tests
+        let failed = report.failed_results();
+        if !failed.is_empty() {
+            writeln!(output, "{}Failed Tests:{}", YELLOW, RESET).unwrap();
+            for result in failed.iter().take(5) {
+                writeln!(output, "  {}{}✗{} {}", RED, BOLD, RESET, result.test_case_name).unwrap();
+                if let Some(ref reason) = result.failure_reason {
+                    writeln!(output, "    {}→ {}{}", DIM, reason, RESET).unwrap();
+                }
+            }
+            if failed.len() > 5 {
+                writeln!(output, "  {}... and {} more{}", DIM, failed.len() - 5, RESET).unwrap();
+            }
+        }
+
+        writeln!(output).unwrap();
+        writeln!(output, "{}────────────────────────────────────────{}", DIM, RESET).unwrap();
+
+        output
+    }
 }
 
 /// Format bytes to human-readable string
@@ -1168,5 +1542,331 @@ mod tests {
         assert_eq!(escape_xml("<test>"), "&lt;test&gt;");
         assert_eq!(escape_xml("a & b"), "a &amp; b");
         assert_eq!(escape_xml("\"quoted\""), "&quot;quoted&quot;");
+    }
+
+    #[test]
+    fn test_agent_eval_report_creation() {
+        use crate::agent_eval::result::*;
+        use crate::benchmark::BenchmarkStats;
+        use chrono::Utc;
+
+        let results = vec![
+            AgentEvalResult {
+                test_case_id: "test-001".to_string(),
+                test_case_name: "Test 1".to_string(),
+                passed: true,
+                actual_output: "output".to_string(),
+                correctness: CorrectnessResult::passed(MatchType::Exact),
+                tool_accuracy: ToolAccuracyResult {
+                    precision: 1.0,
+                    recall: 1.0,
+                    f1_score: 1.0,
+                    missing_tools: Vec::new(),
+                    unexpected_tools: Vec::new(),
+                },
+                quality_scores: None,
+                latency: LatencyMetrics {
+                    total_ms: 100.0,
+                    within_budget: true,
+                    budget_ms: None,
+                },
+                cost: CostMetrics {
+                    total_cost_usd: 0.001,
+                    prompt_tokens: 10,
+                    completion_tokens: 5,
+                    total_tokens: 15,
+                    within_budget: true,
+                    budget_usd: None,
+                    model: "gpt-4o-mini".to_string(),
+                },
+                timestamp: Utc::now(),
+                failure_reason: None,
+            },
+        ];
+
+        let mut by_match_type = std::collections::HashMap::new();
+        by_match_type.insert("Exact".to_string(), 1);
+
+        let metrics = AgentEvalMetrics {
+            total_cases: 1,
+            passed: 1,
+            pass_rate: 1.0,
+            correctness: CorrectnessMetrics {
+                total: 1,
+                correct: 1,
+                rate: 1.0,
+                by_match_type,
+            },
+            tool_usage: ToolUsageMetrics {
+                avg_precision: 1.0,
+                avg_recall: 1.0,
+                avg_f1_score: 1.0,
+                total_tools_called: 0,
+                total_expected_tools: 0,
+            },
+            quality: None,
+            latency_stats: BenchmarkStats::default(),
+            cost_stats: CostStats {
+                total_cost_usd: 0.001,
+                avg_cost_per_case_usd: 0.001,
+                total_tokens: 15,
+                total_prompt_tokens: 10,
+                total_completion_tokens: 5,
+                min_cost_usd: 0.001,
+                max_cost_usd: 0.001,
+            },
+        };
+
+        let report = AgentEvalReport::new("TestSuite", results, metrics);
+
+        assert_eq!(report.suite_name, "TestSuite");
+        assert_eq!(report.results.len(), 1);
+        assert!(report.all_passed());
+    }
+
+    #[test]
+    fn test_agent_eval_markdown_generation() {
+        use crate::agent_eval::result::*;
+        use crate::benchmark::BenchmarkStats;
+        use chrono::Utc;
+
+        let results = vec![
+            AgentEvalResult {
+                test_case_id: "test-001".to_string(),
+                test_case_name: "Capital question".to_string(),
+                passed: true,
+                actual_output: "Paris".to_string(),
+                correctness: CorrectnessResult::passed(MatchType::Regex),
+                tool_accuracy: ToolAccuracyResult {
+                    precision: 1.0,
+                    recall: 1.0,
+                    f1_score: 1.0,
+                    missing_tools: Vec::new(),
+                    unexpected_tools: Vec::new(),
+                },
+                quality_scores: None,
+                latency: LatencyMetrics {
+                    total_ms: 1000.0,
+                    within_budget: true,
+                    budget_ms: Some(2000.0),
+                },
+                cost: CostMetrics {
+                    total_cost_usd: 0.0015,
+                    prompt_tokens: 100,
+                    completion_tokens: 50,
+                    total_tokens: 150,
+                    within_budget: true,
+                    budget_usd: Some(0.01),
+                    model: "gpt-4o-mini".to_string(),
+                },
+                timestamp: Utc::now(),
+                failure_reason: None,
+            },
+        ];
+
+        let mut by_match_type = std::collections::HashMap::new();
+        by_match_type.insert("Regex".to_string(), 1);
+
+        let metrics = AgentEvalMetrics {
+            total_cases: 1,
+            passed: 1,
+            pass_rate: 1.0,
+            correctness: CorrectnessMetrics {
+                total: 1,
+                correct: 1,
+                rate: 1.0,
+                by_match_type,
+            },
+            tool_usage: ToolUsageMetrics {
+                avg_precision: 1.0,
+                avg_recall: 1.0,
+                avg_f1_score: 1.0,
+                total_tools_called: 0,
+                total_expected_tools: 0,
+            },
+            quality: None,
+            latency_stats: BenchmarkStats::default(),
+            cost_stats: CostStats {
+                total_cost_usd: 0.0015,
+                avg_cost_per_case_usd: 0.0015,
+                total_tokens: 150,
+                total_prompt_tokens: 100,
+                total_completion_tokens: 50,
+                min_cost_usd: 0.0015,
+                max_cost_usd: 0.0015,
+            },
+        };
+
+        let report = AgentEvalReport::new("AgentSuite", results, metrics);
+        let reporter = Reporter::markdown();
+        let output = reporter.generate_agent_eval(&report);
+
+        assert!(output.contains("# Agent Evaluation Report: AgentSuite"));
+        assert!(output.contains("✅ PASSED"));
+        assert!(output.contains("Pass Rate"));
+        assert!(output.contains("100.0%"));
+        assert!(output.contains("Correctness Rate"));
+        assert!(output.contains("Tool Accuracy"));
+    }
+
+    #[test]
+    fn test_agent_eval_json_generation() {
+        use crate::agent_eval::result::*;
+        use crate::benchmark::BenchmarkStats;
+
+        let results = vec![];
+        let metrics = AgentEvalMetrics {
+            total_cases: 0,
+            passed: 0,
+            pass_rate: 0.0,
+            correctness: CorrectnessMetrics {
+                total: 0,
+                correct: 0,
+                rate: 0.0,
+                by_match_type: std::collections::HashMap::new(),
+            },
+            tool_usage: ToolUsageMetrics {
+                avg_precision: 0.0,
+                avg_recall: 0.0,
+                avg_f1_score: 0.0,
+                total_tools_called: 0,
+                total_expected_tools: 0,
+            },
+            quality: None,
+            latency_stats: BenchmarkStats::default(),
+            cost_stats: CostStats {
+                total_cost_usd: 0.0,
+                avg_cost_per_case_usd: 0.0,
+                total_tokens: 0,
+                total_prompt_tokens: 0,
+                total_completion_tokens: 0,
+                min_cost_usd: 0.0,
+                max_cost_usd: 0.0,
+            },
+        };
+
+        let report = AgentEvalReport::new("JSONSuite", results, metrics);
+        let reporter = Reporter::json();
+        let output = reporter.generate_agent_eval(&report);
+
+        // Verify it's valid JSON
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["suite_name"], "JSONSuite");
+        assert_eq!(parsed["metrics"]["total_cases"], 0);
+    }
+
+    #[test]
+    fn test_agent_eval_junit_generation() {
+        use crate::agent_eval::result::*;
+        use crate::benchmark::BenchmarkStats;
+        use chrono::Utc;
+
+        let results = vec![
+            AgentEvalResult {
+                test_case_id: "test-001".to_string(),
+                test_case_name: "Test Pass".to_string(),
+                passed: true,
+                actual_output: "output".to_string(),
+                correctness: CorrectnessResult::passed(MatchType::Exact),
+                tool_accuracy: ToolAccuracyResult {
+                    precision: 1.0,
+                    recall: 1.0,
+                    f1_score: 1.0,
+                    missing_tools: Vec::new(),
+                    unexpected_tools: Vec::new(),
+                },
+                quality_scores: None,
+                latency: LatencyMetrics {
+                    total_ms: 100.0,
+                    within_budget: true,
+                    budget_ms: None,
+                },
+                cost: CostMetrics {
+                    total_cost_usd: 0.001,
+                    prompt_tokens: 10,
+                    completion_tokens: 5,
+                    total_tokens: 15,
+                    within_budget: true,
+                    budget_usd: None,
+                    model: "gpt-4o-mini".to_string(),
+                },
+                timestamp: Utc::now(),
+                failure_reason: None,
+            },
+            AgentEvalResult {
+                test_case_id: "test-002".to_string(),
+                test_case_name: "Test Fail".to_string(),
+                passed: false,
+                actual_output: "wrong".to_string(),
+                correctness: CorrectnessResult::failed("mismatch".to_string()),
+                tool_accuracy: ToolAccuracyResult {
+                    precision: 0.5,
+                    recall: 0.5,
+                    f1_score: 0.5,
+                    missing_tools: Vec::new(),
+                    unexpected_tools: Vec::new(),
+                },
+                quality_scores: None,
+                latency: LatencyMetrics {
+                    total_ms: 200.0,
+                    within_budget: true,
+                    budget_ms: None,
+                },
+                cost: CostMetrics {
+                    total_cost_usd: 0.002,
+                    prompt_tokens: 20,
+                    completion_tokens: 10,
+                    total_tokens: 30,
+                    within_budget: true,
+                    budget_usd: None,
+                    model: "gpt-4o-mini".to_string(),
+                },
+                timestamp: Utc::now(),
+                failure_reason: Some("Correctness check failed".to_string()),
+            },
+        ];
+
+        let mut by_match_type = std::collections::HashMap::new();
+        by_match_type.insert("Exact".to_string(), 1);
+
+        let metrics = AgentEvalMetrics {
+            total_cases: 2,
+            passed: 1,
+            pass_rate: 0.5,
+            correctness: CorrectnessMetrics {
+                total: 2,
+                correct: 1,
+                rate: 0.5,
+                by_match_type,
+            },
+            tool_usage: ToolUsageMetrics {
+                avg_precision: 0.75,
+                avg_recall: 0.75,
+                avg_f1_score: 0.75,
+                total_tools_called: 0,
+                total_expected_tools: 0,
+            },
+            quality: None,
+            latency_stats: BenchmarkStats::default(),
+            cost_stats: CostStats {
+                total_cost_usd: 0.003,
+                avg_cost_per_case_usd: 0.0015,
+                total_tokens: 45,
+                total_prompt_tokens: 30,
+                total_completion_tokens: 15,
+                min_cost_usd: 0.001,
+                max_cost_usd: 0.002,
+            },
+        };
+
+        let report = AgentEvalReport::new("JUnitSuite", results, metrics);
+        let reporter = Reporter::junit();
+        let output = reporter.generate_agent_eval(&report);
+
+        assert!(output.contains("<testsuite"));
+        assert!(output.contains("tests=\"2\""));
+        assert!(output.contains("failures=\"1\""));
+        assert!(output.contains("<failure"));
+        assert!(output.contains("Correctness check failed"));
     }
 }

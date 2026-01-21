@@ -52,6 +52,7 @@ ouroboros-http = { path = "../ouroboros-http", optional = true }
 [dev-dependencies]
 reqwest.workspace = true
 criterion = "0.5"
+tempfile = "3.8"
 
 [[bench]]
 name = "discovery_benchmark"
