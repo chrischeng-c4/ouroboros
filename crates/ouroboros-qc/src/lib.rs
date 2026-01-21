@@ -19,6 +19,7 @@
 //!         expect(1 + 1).to_equal(2)
 //! ```
 
+pub mod agent_eval;
 pub mod assertions;
 pub mod baseline;
 pub mod benchmark;
@@ -33,6 +34,13 @@ pub mod runner;
 pub mod security;
 
 // Re-export main types
+pub use agent_eval::{
+    AgentEvaluator, AgentTestCase, CostCalculator, ExpectedToolCall, ModelPricing,
+    PricingRegistry, QualityCriterion, AgentEvalMetrics, AgentEvalResult, CorrectnessResult,
+    ToolAccuracyResult, LatencyMetrics, CostMetrics, QualityScores,
+    LLMJudge, LLMJudgeConfig, LLMJudgeResponse,
+    DatasetGitIntegration, DatasetMetadata, DatasetSnapshot, GoldenDataset,
+};
 pub use assertions::{expect, Expectation, AssertionError, AssertionResult};
 pub use baseline::{
     BaselineMetadata, BaselineSnapshot, FileBaselineStore, GitMetadata,

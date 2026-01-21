@@ -57,7 +57,11 @@ python-source = "python"
 manifest-path = "crates/ouroboros/Cargo.toml"
 # Build with all features by default
 # To enable observability: maturin develop --features observability
-features = ["mongodb", "postgres", "http", "qc", "kv", "api", "pyloop"]
+# Note: agent feature added for Phase 2
+# Note: postgres, api, pyloop temporarily disabled due to pre-existing compilation errors
+# - postgres: ExtractedValue::Decimal type mismatch
+# - api: TypeDescriptor missing BSON patterns
+features = ["mongodb", "http", "qc", "kv", "agent"]
 
 [tool.ruff]
 line-length = 100
