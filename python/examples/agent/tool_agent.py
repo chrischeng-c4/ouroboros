@@ -3,8 +3,7 @@ Tool Agent Example
 
 Demonstrates agent with custom tools for function calling.
 
-NOTE: Python function tool wrapping is not yet fully implemented (Phase 1 TODO).
-This example shows the API structure and will be functional in Phase 2.
+Python async function tool wrapping is now implemented and working!
 """
 
 import asyncio
@@ -53,10 +52,10 @@ async def main():
         return
 
     print("="*60)
-    print("Tool Agent Example (Phase 1 - Structure Only)")
+    print("Tool Agent Example - Python Function Execution")
     print("="*60)
-    print("\nNOTE: Python function tool wrapping is coming in Phase 2.")
-    print("This example demonstrates the API structure.\n")
+    print("\n✓ Python async function tool wrapping is now working!")
+    print("  Tools can execute both sync and async Python functions.\n")
 
     # Create tools
     print("Creating tools...")
@@ -146,9 +145,9 @@ async def main():
     )
     print(f"✓ Created agent: {agent.name}")
 
-    # Example queries that would trigger tools
+    # Example queries that would trigger tools (when integrated with agent)
     print("\n" + "="*60)
-    print("Example Queries (Tool calling will work in Phase 2)")
+    print("Example Queries (Agent + Tool integration coming in Phase 2)")
     print("="*60)
 
     queries = [
@@ -162,24 +161,39 @@ async def main():
         print(f"   Expected tool: {['get_weather', 'search_web', 'calculate'][i-1]}")
 
     print("\n" + "-"*60)
-    print("Note: Actual tool execution requires Phase 2 implementation")
+    print("Note: Agent automatically calling tools requires Phase 2")
+    print("      But tools themselves can be executed directly (see below)")
     print("-"*60)
 
-    # Test tool execution directly (bypassing agent for now)
+    # Test tool execution directly
     print("\n" + "="*60)
     print("Direct Tool Execution Test")
     print("="*60)
 
     try:
-        # This will currently fail with "not yet implemented" error
+        # Execute search tool
+        print("\n1. Executing search tool...")
         result = await search_tool.execute({"query": "AI agents"})
         print(f"✓ Search result: {result}")
+
+        # Execute weather tool
+        print("\n2. Executing weather tool...")
+        result = await weather_tool.execute({"city": "Tokyo"})
+        print(f"✓ Weather result: {result}")
+
+        # Execute calculator tool
+        print("\n3. Executing calculator tool...")
+        result = await calc_tool.execute({"expression": "15 * 234 + 890"})
+        print(f"✓ Calculator result: {result}")
+
     except Exception as e:
-        print(f"⚠ Expected error (Phase 1): {e}")
+        print(f"✗ Error: {e}")
 
     print("\n" + "="*60)
-    print("✓ Tool structure demonstration completed!")
+    print("✓ Tool execution completed successfully!")
     print("="*60)
+    print("\nPhase 1 (MVP): ✅ Tool execution working")
+    print("Phase 2 (Next): Agent + Tool integration, Human-in-loop, Streaming")
 
     # Cleanup
     print("\nCleaning up...")

@@ -67,14 +67,81 @@ impl PyTool {
             })
             .collect::<PyResult<Vec<_>>>()?;
 
-        // TODO: Implement Python function wrapping with proper async support
-        // For now, create a simple placeholder tool
-        let _func = function; // Keep to avoid unused warning
-        let tool = FunctionTool::new(name, description, rust_params, move |_args| {
+        // Wrap the Python function for tool execution
+        // The function is stored as PyObject and will be called with GIL acquired
+        let tool = FunctionTool::new(name, description, rust_params, move |args| {
+            // Clone the function reference for this execution
+            let func = Python::with_gil(|py| function.clone_ref(py));
             Box::pin(async move {
-                Err(ouroboros_agent_tools::ToolError::ExecutionFailed(
-                    "Python function tools not yet implemented - coming soon!".to_string(),
-                ))
+                // Convert JSON args to Python and call function
+                let result = Python::with_gil(|py| {
+                    // Convert JSON args to Python dict
+                    let py_args = json_to_py(py, &args).map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Failed to convert arguments to Python: {}",
+                            e
+                        ))
+                    })?;
+
+                    // Call the Python function
+                    let result = func.call1(py, (py_args,)).map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Python function call failed: {}",
+                            sanitize_error_message(&e.to_string())
+                        ))
+                    })?;
+
+                    Ok::<_, ouroboros_agent_tools::ToolError>(result)
+                })?;
+
+                // Check if result is a coroutine (async) and await it
+                let is_coroutine = Python::with_gil(|py| {
+                    let result_obj = result.bind(py);
+                    result_obj.hasattr("__await__").unwrap_or(false)
+                });
+
+                if is_coroutine {
+                    // It's an async function - convert to Rust future and await
+                    let future = Python::with_gil(|py| {
+                        let bound = result.bind(py);
+                        pyo3_async_runtimes::tokio::into_future(bound.clone())
+                    })
+                    .map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Failed to convert coroutine to future: {}",
+                            e
+                        ))
+                    })?;
+
+                    let awaited = future.await.map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Async function execution failed: {}",
+                            sanitize_error_message(&e.to_string())
+                        ))
+                    })?;
+
+                    // Convert awaited result to JSON
+                    Python::with_gil(|py| {
+                        py_to_json(awaited.bind(py).as_any())
+                    })
+                    .map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Failed to convert async result to JSON: {}",
+                            e
+                        ))
+                    })
+                } else {
+                    // Synchronous function - result is ready, convert to JSON
+                    Python::with_gil(|py| {
+                        py_to_json(result.bind(py).as_any())
+                    })
+                    .map_err(|e| {
+                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                            "Failed to convert result to JSON: {}",
+                            e
+                        ))
+                    })
+                }
             })
         });
 
