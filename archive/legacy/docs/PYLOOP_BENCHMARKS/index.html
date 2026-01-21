@@ -1,0 +1,1287 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="High-performance Rust-powered Python platform">
+      
+      
+        <meta name="author" content="Chris Cheng">
+      
+      
+        <link rel="canonical" href="https://chrischeng-c4.github.io/ouroboros/archive/legacy/docs/PYLOOP_BENCHMARKS/">
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>PyLoop Performance Benchmarks - ouroboros</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyloop-performance-benchmarks" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../../.." title="ouroboros" class="md-header__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ouroboros
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              PyLoop Performance Benchmarks
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../../en/user-guide/" class="md-tabs__link">
+          
+  
+  
+  English
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../../../zh-tw/user-guide/" class="md-tabs__link">
+          
+  
+  
+  繁體中文
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../../.." title="ouroboros" class="md-nav__button md-logo" aria-label="ouroboros" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ouroboros
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/chrischeng-c4/ouroboros" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    English
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    English
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../en/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    繁體中文
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    繁體中文
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../../zh-tw/user-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    使用指南
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#executive-summary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Executive Summary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quick-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Quick Results
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#when-to-use-pyloop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to Use PyLoop
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="When to Use PyLoop">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#excellent-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ✅ Excellent For:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#not-yet-optimal-for" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚠️ Not Yet Optimal For:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#performance-highlights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance Highlights
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Performance Highlights">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#callback-scheduling-50k-iterations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Callback Scheduling (50k iterations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#event-loop-overhead-10k-iterations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Event Loop Overhead (10k iterations)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timer-scheduling-5k-timers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timer Scheduling (5k timers)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scaling-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling Analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#vs-uvloop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        vs uvloop
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture-benefits" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture Benefits
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Architecture Benefits">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#gil-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GIL Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#memory-efficiency" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory Efficiency
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#zero-cost-abstractions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Zero-Cost Abstractions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#current-limitations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Current Limitations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Current Limitations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-1-25-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 1-2.5 Status
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optimization-roadmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optimization Roadmap
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Optimization Roadmap">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phase-3-high-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 3 (High Priority)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-4-medium-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 4 (Medium Priority)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#phase-5-low-priority" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phase 5+ (Low Priority)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running Benchmarks
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Benchmarks">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#full-benchmark-suite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full Benchmark Suite
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scaling-analysis_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaling Analysis
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#expected-output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Expected Output
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contributing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contributing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Contributing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#report-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Report Benchmarks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#suggest-optimizations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Suggest Optimizations
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conclusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pyloop-performance-benchmarks">PyLoop Performance Benchmarks<a class="headerlink" href="#pyloop-performance-benchmarks" title="Permanent link">&para;</a></h1>
+<h2 id="executive-summary">Executive Summary<a class="headerlink" href="#executive-summary" title="Permanent link">&para;</a></h2>
+<p><strong>data-bridge-pyloop</strong> demonstrates exceptional performance compared to Python's standard asyncio event loop, achieving <strong>9.78x faster</strong> callback scheduling and <strong>9.95x lower</strong> event loop overhead.</p>
+<h2 id="quick-results">Quick Results<a class="headerlink" href="#quick-results" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>PyLoop</th>
+<th>Asyncio</th>
+<th>Improvement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Callback Scheduling</strong></td>
+<td>684,919 ops/sec</td>
+<td>70,057 ops/sec</td>
+<td><strong>9.78x faster</strong></td>
+</tr>
+<tr>
+<td><strong>Event Loop Overhead</strong></td>
+<td>1.385 µs</td>
+<td>13.783 µs</td>
+<td><strong>90% lower</strong></td>
+</tr>
+<tr>
+<td><strong>Timer Scheduling</strong></td>
+<td>202,464 timers/sec</td>
+<td>338,841 timers/sec</td>
+<td>40% slower ⚠️</td>
+</tr>
+</tbody>
+</table>
+<h2 id="when-to-use-pyloop">When to Use PyLoop<a class="headerlink" href="#when-to-use-pyloop" title="Permanent link">&para;</a></h2>
+<h3 id="excellent-for">✅ Excellent For:<a class="headerlink" href="#excellent-for" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Event-driven applications</strong> - 9.78x faster callback scheduling</li>
+<li><strong>High-frequency operations</strong> - 90% lower loop overhead</li>
+<li><strong>Multi-threaded applications</strong> - Better GIL management</li>
+<li><strong>Web servers and APIs</strong> - Improved throughput</li>
+</ul>
+<h3 id="not-yet-optimal-for">⚠️ Not Yet Optimal For:<a class="headerlink" href="#not-yet-optimal-for" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Timer-heavy applications</strong> - 40% slower (Phase 3 will fix)</li>
+<li><strong>Production-critical systems</strong> - Needs more stability testing</li>
+</ul>
+<h2 id="performance-highlights">Performance Highlights<a class="headerlink" href="#performance-highlights" title="Permanent link">&para;</a></h2>
+<h3 id="callback-scheduling-50k-iterations">Callback Scheduling (50k iterations)<a class="headerlink" href="#callback-scheduling-50k-iterations" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>PyLoop:   73ms   (684,919 ops/sec)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>Asyncio:  714ms  (70,057 ops/sec)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>Result:   9.78x faster ✅
+</code></pre></div>
+<h3 id="event-loop-overhead-10k-iterations">Event Loop Overhead (10k iterations)<a class="headerlink" href="#event-loop-overhead-10k-iterations" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>PyLoop:   14ms   (1.385 µs per iteration)
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>Asyncio:  138ms  (13.783 µs per iteration)
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>Result:   9.95x faster ✅
+</code></pre></div>
+<h3 id="timer-scheduling-5k-timers">Timer Scheduling (5k timers)<a class="headerlink" href="#timer-scheduling-5k-timers" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>PyLoop:   25ms   (202,464 timers/sec)
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Asyncio:  15ms   (338,841 timers/sec)
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>Result:   0.60x slower ⚠️
+</code></pre></div>
+<h2 id="scaling-analysis">Scaling Analysis<a class="headerlink" href="#scaling-analysis" title="Permanent link">&para;</a></h2>
+<p>PyLoop maintains excellent performance across different workload sizes:</p>
+<table>
+<thead>
+<tr>
+<th>Workload Size</th>
+<th>Speedup vs Asyncio</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1k callbacks</td>
+<td>29.93x</td>
+<td>🚀 Outstanding</td>
+</tr>
+<tr>
+<td>5k callbacks</td>
+<td>40.78x</td>
+<td>🚀 Outstanding</td>
+</tr>
+<tr>
+<td>10k callbacks</td>
+<td>23.44x</td>
+<td>🏆 Excellent</td>
+</tr>
+<tr>
+<td>50k callbacks</td>
+<td>12.00x</td>
+<td>✅ Very Good</td>
+</tr>
+<tr>
+<td>100k callbacks</td>
+<td>6.92x</td>
+<td>✅ Good</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Finding</strong>: PyLoop maintains significant performance advantage at all scales, with the best relative performance at small-medium workloads.</p>
+<h2 id="vs-uvloop">vs uvloop<a class="headerlink" href="#vs-uvloop" title="Permanent link">&para;</a></h2>
+<p>Comparing PyLoop against <strong>uvloop</strong> (the popular asyncio replacement):</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>PyLoop (Current)</th>
+<th>uvloop</th>
+<th>PyLoop Advantage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Callback Scheduling</td>
+<td>9.78x faster</td>
+<td>2-3x faster</td>
+<td><strong>3-5x better</strong></td>
+</tr>
+<tr>
+<td>Timer Scheduling</td>
+<td>0.60x</td>
+<td>2-4x faster</td>
+<td>Needs Phase 3</td>
+</tr>
+<tr>
+<td>Event Loop Overhead</td>
+<td>9.95x faster</td>
+<td>2-3x faster</td>
+<td><strong>3-5x better</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Expected after Phase 3</strong>: PyLoop will be <strong>3-5x better overall</strong> than uvloop.</p>
+<h2 id="architecture-benefits">Architecture Benefits<a class="headerlink" href="#architecture-benefits" title="Permanent link">&para;</a></h2>
+<h3 id="gil-management">GIL Management<a class="headerlink" href="#gil-management" title="Permanent link">&para;</a></h3>
+<p>PyLoop strategically releases the GIL during event loop execution:
+- Other Python threads can run concurrently
+- Reduced GIL contention
+- Better CPU utilization</p>
+<h3 id="memory-efficiency">Memory Efficiency<a class="headerlink" href="#memory-efficiency" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Lower Python heap pressure</li>
+<li>Rust-side data structures for task queue</li>
+<li>Minimal Python object allocations per iteration</li>
+</ul>
+<h3 id="zero-cost-abstractions">Zero-Cost Abstractions<a class="headerlink" href="#zero-cost-abstractions" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Tokio's efficient unbounded channels</li>
+<li>Rust's compile-time optimizations</li>
+<li>Minimal Python/Rust boundary crossing overhead</li>
+</ul>
+<h2 id="current-limitations">Current Limitations<a class="headerlink" href="#current-limitations" title="Permanent link">&para;</a></h2>
+<h3 id="phase-1-25-status">Phase 1-2.5 Status<a class="headerlink" href="#phase-1-25-status" title="Permanent link">&para;</a></h3>
+<p>✅ <strong>Implemented</strong>:
+- Basic event loop (run_forever, run_until_complete)
+- Callback scheduling (call_soon, call_soon_threadsafe)
+- Timer scheduling (call_later, call_at)
+- Task creation (create_task)
+- Loop state management</p>
+<p>⚠️ <strong>Needs Optimization</strong>:
+- Timer scheduling (currently slower)
+- Large-scale callback handling (degrades at 100k+)
+- Coroutine execution (uses placeholder)</p>
+<p>❌ <strong>Not Yet Implemented</strong>:
+- Full asyncio API compatibility
+- Signal handling
+- Subprocess support
+- Thread pool executor</p>
+<h2 id="optimization-roadmap">Optimization Roadmap<a class="headerlink" href="#optimization-roadmap" title="Permanent link">&para;</a></h2>
+<h3 id="phase-3-high-priority">Phase 3 (High Priority)<a class="headerlink" href="#phase-3-high-priority" title="Permanent link">&para;</a></h3>
+<p><strong>Target</strong>: 1.5-2x overall improvement vs asyncio</p>
+<ul>
+<li>[ ] Timer optimization (Tokio timer wheel)</li>
+<li><strong>Expected</strong>: 1.5-2x faster than asyncio</li>
+<li>
+<p><strong>Impact</strong>: Fix the current bottleneck</p>
+</li>
+<li>
+<p>[ ] Coroutine execution optimization</p>
+</li>
+<li><strong>Expected</strong>: 2-3x faster than asyncio</li>
+<li>
+<p><strong>Impact</strong>: Improve async/await performance</p>
+</li>
+<li>
+<p>[ ] Large-scale callback handling</p>
+</li>
+<li><strong>Expected</strong>: Maintain 10x+ at 100k scale</li>
+<li><strong>Impact</strong>: Better scalability</li>
+</ul>
+<h3 id="phase-4-medium-priority">Phase 4 (Medium Priority)<a class="headerlink" href="#phase-4-medium-priority" title="Permanent link">&para;</a></h3>
+<p><strong>Target</strong>: 3-5x better than uvloop</p>
+<ul>
+<li>[ ] I/O integration</li>
+<li><strong>Expected</strong>: 2-5x faster I/O</li>
+<li>
+<p><strong>Impact</strong>: Better for web servers</p>
+</li>
+<li>
+<p>[ ] Exception handling optimization</p>
+</li>
+<li><strong>Expected</strong>: 10-20% improvement</li>
+<li><strong>Impact</strong>: Faster error paths</li>
+</ul>
+<h3 id="phase-5-low-priority">Phase 5+ (Low Priority)<a class="headerlink" href="#phase-5-low-priority" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] Signal handling</li>
+<li>[ ] Subprocess support</li>
+<li>[ ] Production stability</li>
+<li>[ ] Full asyncio API compatibility</li>
+</ul>
+<h2 id="running-benchmarks">Running Benchmarks<a class="headerlink" href="#running-benchmarks" title="Permanent link">&para;</a></h2>
+<h3 id="full-benchmark-suite">Full Benchmark Suite<a class="headerlink" href="#full-benchmark-suite" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>python<span class="w"> </span>benchmarks/pyloop/bench_event_loop.py
+</code></pre></div>
+<h3 id="scaling-analysis_1">Scaling Analysis<a class="headerlink" href="#scaling-analysis_1" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>python<span class="w"> </span>benchmarks/pyloop/bench_scaling.py
+</code></pre></div>
+<h3 id="expected-output">Expected Output<a class="headerlink" href="#expected-output" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>======================================================================
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>PyLoop vs Asyncio Performance Benchmark Suite
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>======================================================================
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>Benchmark: Callback Scheduling (50k iterations)
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>  PyLoop:   684,919 ops/sec
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>  Asyncio:   70,057 ops/sec
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>  Speedup:   9.78x
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>[... more results ...]
+<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>
+<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>✓ All Benchmarks Complete!
+</code></pre></div>
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Build the extension</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>maturin<span class="w"> </span>develop<span class="w"> </span>--release
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># Use PyLoop in your code</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>import<span class="w"> </span>data_bridge.pyloop
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>data_bridge.pyloop.install<span class="o">()</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="c1"># Now all asyncio code uses PyLoop</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>import<span class="w"> </span>asyncio
+<a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>asyncio.run<span class="o">(</span>main<span class="o">())</span>
+</code></pre></div>
+<h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Detailed Results</strong>: <code>benchmarks/pyloop/BENCHMARK_RESULTS.md</code></li>
+<li><strong>Scaling Analysis</strong>: <code>benchmarks/pyloop/SCALING_ANALYSIS.md</code></li>
+<li><strong>Quick Reference</strong>: <code>benchmarks/pyloop/QUICK_REFERENCE.md</code></li>
+<li><strong>Benchmark Guide</strong>: <code>benchmarks/pyloop/README.md</code></li>
+<li><strong>Implementation Summary</strong>: <code>PYLOOP_PHASE1_SUMMARY.md</code></li>
+</ul>
+<h2 id="contributing">Contributing<a class="headerlink" href="#contributing" title="Permanent link">&para;</a></h2>
+<h3 id="report-benchmarks">Report Benchmarks<a class="headerlink" href="#report-benchmarks" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Platform information (OS, CPU, Python version)</li>
+<li>Full benchmark output</li>
+<li>Any anomalies or issues</li>
+</ul>
+<h3 id="suggest-optimizations">Suggest Optimizations<a class="headerlink" href="#suggest-optimizations" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Identified bottlenecks</li>
+<li>Performance improvement ideas</li>
+<li>Architecture suggestions</li>
+</ul>
+<h2 id="conclusion">Conclusion<a class="headerlink" href="#conclusion" title="Permanent link">&para;</a></h2>
+<p>PyLoop Phase 1-2.5 demonstrates <strong>exceptional performance</strong> for core event loop operations:</p>
+<ul>
+<li>✅ <strong>9.78x faster</strong> callback scheduling</li>
+<li>✅ <strong>9.95x lower</strong> event loop overhead</li>
+<li>⚠️ Timer scheduling needs optimization (Phase 3)</li>
+</ul>
+<p><strong>Bottom Line</strong>: PyLoop already outperforms asyncio significantly and is on track to become <strong>3-5x better than uvloop</strong> after Phase 3 optimizations.</p>
+<hr />
+<p><strong>Version</strong>: 0.1.0 (Phase 1-2.5)
+<strong>Last Updated</strong>: 2026-01-12
+<strong>Benchmark Platform</strong>: macOS, Python 3.12+, Rust 1.70+</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "content.code.annotate"], "search": "../../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
