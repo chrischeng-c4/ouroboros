@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 pub mod jsx;
 pub mod typescript;
+pub mod transform_tsx;
 pub mod css;
 pub mod incremental;
 pub mod modules;
@@ -73,9 +74,8 @@ impl Transformer {
         match ext {
             "jsx" => jsx::transform_jsx(source, &self.options),
             "tsx" => {
-                // First strip TypeScript types, then transform JSX
-                let ts_result = typescript::transform_typescript(source, &self.options)?;
-                jsx::transform_jsx(&ts_result.code, &self.options)
+                // ✅ Single-pass transformation: removes types + transforms JSX
+                transform_tsx::transform_tsx(source, &self.options)
             }
             "ts" => typescript::transform_typescript(source, &self.options),
             "js" | "mjs" | "cjs" => {
@@ -103,8 +103,8 @@ impl Transformer {
         let transformed = match ext {
             "jsx" => jsx::transform_jsx(source, &self.options)?,
             "tsx" => {
-                let ts_result = typescript::transform_typescript(source, &self.options)?;
-                jsx::transform_jsx(&ts_result.code, &self.options)?
+                // ✅ Single-pass transformation: removes types + transforms JSX
+                transform_tsx::transform_tsx(source, &self.options)?
             }
             "ts" => typescript::transform_typescript(source, &self.options)?,
             "js" | "mjs" | "cjs" => {

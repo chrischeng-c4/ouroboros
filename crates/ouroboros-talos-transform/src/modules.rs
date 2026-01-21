@@ -45,16 +45,24 @@ fn transform_node(
 ) -> Result<String> {
     let mut result = String::new();
     let mut cursor = node.walk();
+    let mut last_pos = node.start_byte();
 
     for child in node.children(&mut cursor) {
+        // Preserve whitespace before this child
+        if child.start_byte() > last_pos {
+            result.push_str(&source[last_pos..child.start_byte()]);
+        }
+
         match child.kind() {
             "import_statement" => {
                 result.push_str(&transform_import(source, &child, module_map)?);
-                result.push('\n');
+                // Don't add extra newline - it's already in the source
+                last_pos = child.end_byte();
             }
             "export_statement" => {
                 result.push_str(&transform_export(source, &child, module_map)?);
-                result.push('\n');
+                // Don't add extra newline - it's already in the source
+                last_pos = child.end_byte();
             }
             _ => {
                 if child.child_count() > 0 {
@@ -62,8 +70,14 @@ fn transform_node(
                 } else {
                     result.push_str(&source[child.byte_range()]);
                 }
+                last_pos = child.end_byte();
             }
         }
+    }
+
+    // Append any remaining source after the last child
+    if last_pos < node.end_byte() {
+        result.push_str(&source[last_pos..node.end_byte()]);
     }
 
     Ok(result)

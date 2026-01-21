@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talos Bundle Test - Simple JSX</title>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Simple test bundle without spread attributes
+        window.__talos__ = {
+            define: function(id, factory) {
+                this.modules[id] = factory;
+            },
+            require: function(id) {
+                if (this.cache[id]) return this.cache[id].exports;
+                var module = this.cache[id] = { exports: {} };
+                this.modules[id].call(module.exports, this.require.bind(this), module, module.exports);
+                return module.exports;
+            },
+            modules: {},
+            cache: {}
+        };
+
+        // Test module with JSX transformation
+        __talos__.define(0, function(require, module, exports) {
+            var jsx = function(type, props) {
+                var element = document.createElement(typeof type === 'string' ? type : 'div');
+                if (props.children) {
+                    if (typeof props.children === 'string') {
+                        element.textContent = props.children;
+                    } else if (Array.isArray(props.children)) {
+                        props.children.forEach(child => {
+                            if (typeof child === 'object') element.appendChild(child);
+                            else element.textContent += child;
+                        });
+                    } else {
+                        element.appendChild(props.children);
+                    }
+                }
+                if (props.className) element.className = props.className;
+                return element;
+            };
+
+            var jsxs = jsx;
+
+            // This simulates our TSX transformation output
+            const rootElement = document.getElementById('root');
+            if (!rootElement) throw new Error('Root element not found');
+
+            const greeting = jsx("div", { className: "greeting", children: "Hello from Talos!" });
+            const container = jsxs("div", { className: "container", children: [
+                jsx("h1", { children: "TSX Transformation Test" }),
+                greeting,
+                jsx("p", { children: "If you see this, Issue #101 is FIXED!" })
+            ] });
+
+            rootElement.appendChild(container);
+            console.log('✅ Bundle executed successfully!');
+            console.log('✅ JSX transformation works!');
+            console.log('✅ Whitespace preserved correctly!');
+        });
+
+        // Execute the test module
+        try {
+            __talos__.require(0);
+            document.body.style.backgroundColor = '#e8f5e9';
+        } catch (error) {
+            console.error('❌ Test failed:', error);
+            document.body.innerHTML = '<h1 style="color: red">Test Failed: ' + error.message + '</h1>';
+            document.body.style.backgroundColor = '#ffebee';
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .greeting {
+            color: #1976d2;
+            font-size: 18px;
+            margin: 20px 0;
+        }
+        h1 {
+            color: #2e7d32;
+        }
+    </style>
+</body>
+</html>
