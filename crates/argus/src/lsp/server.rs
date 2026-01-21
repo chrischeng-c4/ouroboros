@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use serde_json::Value;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -237,6 +238,15 @@ impl LanguageServer for ArgusServer {
                         ..Default::default()
                     },
                 )),
+                // Execute command for refactoring with user input
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec![
+                        "argus.refactor.extractVariable".to_string(),
+                        "argus.refactor.extractFunction".to_string(),
+                        "argus.refactor.rename".to_string(),
+                    ],
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -508,6 +518,54 @@ impl LanguageServer for ArgusServer {
         } else {
             Ok(Some(actions))
         }
+    }
+
+    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+        // Execute refactoring commands with user-provided parameters
+        let command = &params.command;
+
+        // Parse arguments from params.arguments
+        // Expected format: [{"uri": "file://...", "range": {...}, "name": "..."}]
+        if params.arguments.is_empty() {
+            return Ok(None);
+        }
+
+        let arg = &params.arguments[0];
+
+        // Extract parameters (simplified - real implementation would use proper JSON deserialization)
+        let uri_str = arg.get("uri")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let name = arg.get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("refactored");
+
+        let uri = match Url::parse(uri_str) {
+            Ok(u) => u,
+            Err(_) => return Ok(None),
+        };
+
+        // Get document content
+        let _content = {
+            let documents = self.documents.read().await;
+            documents.get(&uri).map(|d| d.content.clone())
+        };
+
+        let Some(_content) = _content else {
+            return Ok(None);
+        };
+
+        // Execute the appropriate refactoring based on command
+        // This would apply the refactoring and return workspace edits
+        // For now, just log success
+        self.client
+            .log_message(
+                MessageType::INFO,
+                format!("Executing command: {} with name: {}", command, name),
+            )
+            .await;
+
+        Ok(Some(Value::Null))
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
