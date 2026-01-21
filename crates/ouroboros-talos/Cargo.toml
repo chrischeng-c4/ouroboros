@@ -1,0 +1,19 @@
+[package]
+name = "ouroboros-talos"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Talos build tool - integrated into ouroboros-cli (use: ob talos)"
+
+# Note: This is now a library crate. Use 'ob talos' command instead of standalone binary.
+
+[dependencies]
+# Talos internal crates (re-exported for convenience)
+ouroboros-talos-bundler = { path = "../ouroboros-talos-bundler" }
+ouroboros-talos-dev-server = { path = "../ouroboros-talos-dev-server" }
+ouroboros-talos-pkg-manager = { path = "../ouroboros-talos-pkg-manager" }
+ouroboros-talos-resolver = { path = "../ouroboros-talos-resolver" }
+ouroboros-talos-transform = { path = "../ouroboros-talos-transform" }
+ouroboros-talos-asset = { path = "../ouroboros-talos-asset" }
