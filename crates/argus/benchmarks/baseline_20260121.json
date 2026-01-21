@@ -1,0 +1,109 @@
+{
+  "date": "2026-01-21",
+  "commit": "64ff222",
+  "system": {
+    "os": "macOS 14.6.0",
+    "arch": "arm64"
+  },
+  "benchmarks": {
+    "parsing": {
+      "python_small": {
+        "time_us": 6.61,
+        "target_ms": 10,
+        "status": "EXCELLENT",
+        "description": "< 10 lines Python code"
+      },
+      "python_medium": {
+        "time_us": 43.65,
+        "target_ms": 50,
+        "status": "EXCELLENT",
+        "description": "< 100 lines Python code"
+      },
+      "python_large": {
+        "time_ms": 2.28,
+        "target_ms": 200,
+        "status": "EXCELLENT",
+        "description": "500+ lines Python code"
+      },
+      "typescript": {
+        "time_us": 10.89,
+        "status": "EXCELLENT",
+        "description": "Small TypeScript interface"
+      }
+    },
+    "refactoring": {
+      "rename_symbol": {
+        "time_ns": 432.55,
+        "target_ms": 200,
+        "status": "EXCELLENT",
+        "description": "Rename variable in function"
+      },
+      "extract_variable": {
+        "time_us": 16.60,
+        "target_ms": 200,
+        "status": "EXCELLENT",
+        "description": "Extract expression to variable"
+      }
+    },
+    "search": {
+      "search_usages": {
+        "time_ns": 5.57,
+        "target_ms": 100,
+        "status": "EXCELLENT",
+        "description": "Find symbol usages"
+      }
+    },
+    "incremental": {
+      "first_analysis": {
+        "time_ns": 928.07,
+        "status": "EXCELLENT",
+        "description": "First file analysis"
+      },
+      "cache_hit": {
+        "time_ns": 817.29,
+        "status": "EXCELLENT",
+        "description": "Cached file analysis (12% faster)"
+      },
+      "cache_invalidation": {
+        "time_us": 1.84,
+        "status": "EXCELLENT",
+        "description": "Modified file reanalysis"
+      }
+    },
+    "batch": {
+      "10_files": {
+        "time_us": 19.12,
+        "per_file_us": 1.91,
+        "status": "EXCELLENT"
+      },
+      "50_files": {
+        "time_us": 93.10,
+        "per_file_us": 1.86,
+        "status": "EXCELLENT"
+      },
+      "100_files": {
+        "time_us": 182.12,
+        "per_file_us": 1.82,
+        "status": "EXCELLENT"
+      },
+      "200_files": {
+        "time_us": 376.84,
+        "per_file_us": 1.88,
+        "status": "EXCELLENT",
+        "description": "Scales linearly ~1.9µs/file"
+      }
+    }
+  },
+  "summary": {
+    "total_benchmarks": 15,
+    "all_targets_met": true,
+    "performance_rating": "EXCELLENT",
+    "key_findings": [
+      "All operations significantly faster than targets",
+      "Parsing: 1500x faster than target (python_small)",
+      "Refactoring: 460,000x faster than target (rename)",
+      "Batch processing scales linearly at ~1.9µs/file",
+      "Incremental analysis cache provides 12% speedup"
+    ]
+  }
+}

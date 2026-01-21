@@ -197,8 +197,6 @@ pub struct SemanticSearchEngine {
     inferencer: DeepTypeInferencer,
     /// Symbol index
     symbol_index: HashMap<String, Vec<SymbolLocation>>,
-    /// Type index
-    type_index: HashMap<String, Vec<TypeLocation>>,
     /// Type signature index: signature key -> functions
     type_signature_index: HashMap<String, Vec<SymbolLocation>>,
     /// Call graph
@@ -296,7 +294,6 @@ impl SemanticSearchEngine {
         Self {
             inferencer: DeepTypeInferencer::new(),
             symbol_index: HashMap::new(),
-            type_index: HashMap::new(),
             type_signature_index: HashMap::new(),
             call_graph: CallGraph::new(),
         }
@@ -307,7 +304,6 @@ impl SemanticSearchEngine {
         Self {
             inferencer,
             symbol_index: HashMap::new(),
-            type_index: HashMap::new(),
             type_signature_index: HashMap::new(),
             call_graph: CallGraph::new(),
         }

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use super::mutable_ast::{MutableAst, MutableNode, NodeId, NodeMetadata, Span};
 use super::deep_inference::{TypeContext, DeepTypeInferencer};
 use super::semantic_search::{SemanticSearchEngine, SearchQuery, SearchKind, SearchScope};
-use crate::syntax::{Language, MultiParser};
+use crate::syntax::MultiParser;
 use tree_sitter::Node;
 
 // ============================================================================
@@ -200,8 +200,6 @@ impl RefactorResult {
 struct DataFlow {
     /// Variables used but not defined in the selection (become parameters)
     external_vars: Vec<String>,
-    /// Variables defined in the selection (local variables)
-    defined_vars: Vec<String>,
     /// Variables that are defined and used after selection (need to be returned)
     returned_vars: Vec<String>,
 }
@@ -315,37 +313,7 @@ impl RefactoringEngine {
     // Helper Methods
     // ========================================================================
 
-    /// Analyze data flow for a code selection within a span.
-    fn analyze_data_flow(&self, target: &MutableNode, _root: &MutableNode, source: &str) -> DataFlow {
-        let mut used_vars = std::collections::HashSet::new();
-        let mut defined_vars = std::collections::HashSet::new();
-
-        // Walk the target AST to find all used and defined variables
-        self.collect_vars(target, source, &mut used_vars, &mut defined_vars);
-
-        // External vars are used but not defined in the selection
-        let external_vars: Vec<String> = used_vars
-            .iter()
-            .filter(|v| !defined_vars.contains(*v))
-            .filter(|v| !self.is_builtin(v)) // Filter out builtins like 'print', 'len', etc.
-            .cloned()
-            .collect();
-
-        // Variables defined in the selection
-        let defined: Vec<String> = defined_vars.iter().cloned().collect();
-
-        // For simplicity, return all defined vars (in a full implementation,
-        // would analyze usage after the selection)
-        let returned: Vec<String> = defined.clone();
-
-        DataFlow {
-            external_vars,
-            defined_vars: defined,
-            returned_vars: returned,
-        }
-    }
-
-    /// Analyze data flow for a specific span (alternative approach using text-based analysis).
+    /// Analyze data flow for a specific span using text-based analysis.
     fn analyze_data_flow_simple(&self, span: Span, source: &str) -> DataFlow {
         let selected_code = &source[span.start..span.end];
 
@@ -379,12 +347,11 @@ impl RefactoringEngine {
             .cloned()
             .collect();
 
-        let defined: Vec<String> = defined_vars.iter().cloned().collect();
-        let returned: Vec<String> = defined.clone();
+        // Variables defined in the selection (potential return values)
+        let returned: Vec<String> = defined_vars.iter().cloned().collect();
 
         DataFlow {
             external_vars,
-            defined_vars: defined,
             returned_vars: returned,
         }
     }
@@ -421,121 +388,6 @@ impl RefactoringEngine {
         builtins.contains(&name)
     }
 
-    /// Collect all used and defined variables in an AST node.
-    fn collect_vars(
-        &self,
-        node: &MutableNode,
-        source: &str,
-        used: &mut std::collections::HashSet<String>,
-        defined: &mut std::collections::HashSet<String>,
-    ) {
-        match node.kind.as_str() {
-            // Assignment: left side is defined, right side is used
-            "assignment" => {
-                // Find left and right sides
-                let mut left_nodes = Vec::new();
-                let mut right_nodes = Vec::new();
-                let mut found_eq = false;
-
-                for child in node.children.iter() {
-                    if child.kind == "=" {
-                        found_eq = true;
-                    } else if !found_eq {
-                        left_nodes.push(child);
-                    } else {
-                        right_nodes.push(child);
-                    }
-                }
-
-                // Collect defined vars from left side
-                for left in left_nodes {
-                    self.collect_defined_identifiers(left, source, defined);
-                }
-
-                // Collect used vars from right side
-                for right in right_nodes {
-                    self.collect_used_identifiers(right, source, used);
-                }
-            }
-
-            // For statement: loop variable is defined, iterable is used
-            "for_statement" => {
-                // Find pattern: for <var> in <iterable>
-                let mut found_in = false;
-                for child in node.children.iter() {
-                    if child.kind == "in" {
-                        found_in = true;
-                    } else if child.kind == "identifier" && !found_in {
-                        // Loop variable is defined
-                        if let Some(ref value) = child.value {
-                            defined.insert(value.clone());
-                        }
-                    } else if found_in {
-                        // Iterable is used
-                        self.collect_used_identifiers(child, source, used);
-                    }
-                }
-
-                // Recurse into body
-                for child in node.children.iter() {
-                    if child.kind == "block" {
-                        self.collect_vars(child, source, used, defined);
-                    }
-                }
-            }
-
-            // Expression statement: just collect used vars
-            "expression_statement" => {
-                self.collect_used_identifiers(node, source, used);
-            }
-
-            // Generic: recurse into children
-            _ => {
-                for child in node.children.iter() {
-                    self.collect_vars(child, source, used, defined);
-                }
-            }
-        }
-    }
-
-    /// Collect identifiers that are being defined (assigned to).
-    fn collect_defined_identifiers(
-        &self,
-        node: &MutableNode,
-        source: &str,
-        defined: &mut std::collections::HashSet<String>,
-    ) {
-        if node.kind == "identifier" {
-            if let Some(ref value) = node.value {
-                defined.insert(value.clone());
-            }
-        }
-
-        // Recurse into children
-        for child in node.children.iter() {
-            self.collect_defined_identifiers(child, source, defined);
-        }
-    }
-
-    /// Collect identifiers that are being used (read from).
-    fn collect_used_identifiers(
-        &self,
-        node: &MutableNode,
-        source: &str,
-        used: &mut std::collections::HashSet<String>,
-    ) {
-        if node.kind == "identifier" {
-            if let Some(ref value) = node.value {
-                used.insert(value.clone());
-            }
-        }
-
-        // Recurse into children
-        for child in node.children.iter() {
-            self.collect_used_identifiers(child, source, used);
-        }
-    }
-
     /// Get indentation at a specific byte position.
     fn get_indent_at_position_static(source: &str, byte_pos: usize) -> String {
         // Find the line number containing this byte position
@@ -554,66 +406,6 @@ impl RefactoringEngine {
         }
 
         String::new()
-    }
-
-    /// Find the statement containing an expression.
-    fn find_containing_statement<'a>(
-        &self,
-        target: &'a MutableNode,
-        root: &'a MutableNode,
-    ) -> Option<&'a MutableNode> {
-        // Walk up from target to find a statement node
-        self.find_ancestor_of_kind(target, root, &[
-            "expression_statement",
-            "assignment",
-            "return_statement",
-            "if_statement",
-            "for_statement",
-            "while_statement",
-        ])
-    }
-
-    /// Find ancestor node of specific kinds.
-    fn find_ancestor_of_kind<'a>(
-        &self,
-        target: &'a MutableNode,
-        root: &'a MutableNode,
-        kinds: &[&str],
-    ) -> Option<&'a MutableNode> {
-        // Check if current node is one of the target kinds
-        if kinds.contains(&target.kind.as_str()) {
-            return Some(target);
-        }
-
-        // Recursively search parent nodes
-        self.find_ancestor_helper(target, root, root, kinds)
-    }
-
-    /// Helper for finding ancestors.
-    fn find_ancestor_helper<'a>(
-        &self,
-        target: &'a MutableNode,
-        current: &'a MutableNode,
-        root: &'a MutableNode,
-        kinds: &[&str],
-    ) -> Option<&'a MutableNode> {
-        for child in current.children.iter() {
-            if child.id == target.id {
-                // Found the target, check if current is the right kind
-                if kinds.contains(&current.kind.as_str()) {
-                    return Some(current);
-                }
-                // Continue searching up
-                return None;
-            }
-
-            // Recursively search in child
-            if let Some(found) = self.find_ancestor_helper(target, child, root, kinds) {
-                return Some(found);
-            }
-        }
-
-        None
     }
 
     /// Find insertion point for a new function definition.

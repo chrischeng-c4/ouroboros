@@ -425,62 +425,6 @@ impl ModuleGraph {
     }
 }
 
-/// Resolve module path from import statement
-pub fn resolve_module_path(
-    import_name: &str,
-    from_module: &str,
-    root: &Path,
-) -> Option<PathBuf> {
-    // Handle relative imports
-    let resolved_name = if import_name.starts_with('.') {
-        resolve_relative_import(import_name, from_module)?
-    } else {
-        import_name.to_string()
-    };
-
-    // Try to find the module file
-    let paths = ModuleGraph::module_name_to_paths(&resolved_name, root);
-    paths.into_iter().find(|p| p.exists())
-}
-
-/// Resolve a relative import to an absolute module name
-/// - `.module` from `pkg.sub` -> `pkg.module` (one dot = same package)
-/// - `..module` from `pkg.sub.deep` -> `pkg.module` (two dots = parent package)
-fn resolve_relative_import(import: &str, from_module: &str) -> Option<String> {
-    let dots = import.chars().take_while(|&c| c == '.').count();
-    let name_part = &import[dots..];
-
-    let from_parts: Vec<&str> = from_module.split('.').collect();
-
-    // For a module `pkg.sub.module`:
-    // - 1 dot means same package as the module's parent -> pkg.sub
-    // - 2 dots means parent of that -> pkg
-    // So we remove `dots` components from the module path
-    if dots > from_parts.len() {
-        return None; // Too many dots
-    }
-
-    let base_parts = &from_parts[..from_parts.len() - dots];
-
-    if base_parts.is_empty() && name_part.is_empty() {
-        return None; // Can't have empty result
-    }
-
-    let base = base_parts.join(".");
-
-    if name_part.is_empty() {
-        if base.is_empty() {
-            None
-        } else {
-            Some(base)
-        }
-    } else if base.is_empty() {
-        Some(name_part.to_string())
-    } else {
-        Some(format!("{}.{}", base, name_part))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -621,24 +565,6 @@ mod tests {
         let path3 = Path::new("/project/src/mypackage/__init__.py");
         assert_eq!(
             ModuleGraph::path_to_module_name(path3, root),
-            Some("mypackage".to_string())
-        );
-    }
-
-    #[test]
-    fn test_resolve_relative_import() {
-        assert_eq!(
-            resolve_relative_import(".utils", "mypackage.submodule"),
-            Some("mypackage.utils".to_string())
-        );
-
-        assert_eq!(
-            resolve_relative_import("..core", "mypackage.sub.module"),
-            Some("mypackage.core".to_string())
-        );
-
-        assert_eq!(
-            resolve_relative_import(".", "mypackage.submodule"),
             Some("mypackage".to_string())
         );
     }

@@ -213,32 +213,6 @@ impl<'a> TypeInferencer<'a> {
         node.utf8_text(self.source.as_bytes()).unwrap_or("")
     }
 
-    /// Check if a node is inside an error region (has an error ancestor)
-    ///
-    /// This is used for error recovery - expressions inside error regions
-    /// should not trigger cascading type errors.
-    fn is_in_error_region(&self, node: &Node) -> bool {
-        let mut current = *node;
-        while let Some(parent) = current.parent() {
-            if parent.is_error() {
-                return true;
-            }
-            current = parent;
-        }
-        false
-    }
-
-    /// Return appropriate fallback type based on context
-    ///
-    /// Returns Error type in error regions, Unknown otherwise.
-    fn fallback_type(&self, node: &Node) -> Type {
-        if self.is_in_error_region(node) {
-            Type::Error
-        } else {
-            Type::Unknown
-        }
-    }
-
     /// Infer the type of an expression
     ///
     /// Returns `Type::Error` for error nodes (from parser recovery) to prevent
