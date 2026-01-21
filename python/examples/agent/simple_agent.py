@@ -16,8 +16,8 @@ async def main():
         print("Error: OPENAI_API_KEY environment variable not set")
         return
 
-    # Create OpenAI provider
-    llm = OpenAI(api_key=api_key, model="gpt-4")
+    # Create OpenAI provider (using gpt-4o-mini - fastest and cheapest)
+    llm = OpenAI(api_key=api_key, model="gpt-4o-mini")
     print(f"✓ Created OpenAI provider: {llm.provider_name}")
     print(f"  Supported models: {llm.supported_models}")
 

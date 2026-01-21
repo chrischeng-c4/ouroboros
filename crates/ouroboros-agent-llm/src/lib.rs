@@ -27,13 +27,14 @@
 //! let response = provider.complete(request).await?;
 //! ```
 
-pub mod claude;
+// TODO: Re-enable when Claude provider compilation errors are fixed
+// pub mod claude;
 pub mod error;
 pub mod openai;
 pub mod provider;
 
 // Re-export commonly used types
-pub use claude::ClaudeProvider;
+// pub use claude::ClaudeProvider;
 pub use error::{LLMError, LLMResult};
 pub use openai::OpenAIProvider;
 pub use provider::{

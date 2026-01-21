@@ -4,6 +4,12 @@
 
 ### 1. Set OpenAI API Key / 設定 OpenAI API Key
 
+Create `.env` file (recommended):
+```bash
+echo 'OPENAI_API_KEY=sk-...' > .env
+```
+
+Or export:
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
@@ -23,7 +29,7 @@ uv run --with maturin maturin develop
 ### 3. Run Integration Tests / 執行整合測試
 
 ```bash
-uv run python python/examples/agent/integration_test.py
+uv run --env-file=.env python python/examples/agent/integration_test.py
 ```
 
 ---

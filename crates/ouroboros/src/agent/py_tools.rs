@@ -83,13 +83,25 @@ impl PyTool {
                         ))
                     })?;
 
-                    // Call the Python function
-                    let result = func.call1(py, (py_args,)).map_err(|e| {
-                        ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
-                            "Python function call failed: {}",
-                            sanitize_error_message(&e.to_string())
-                        ))
-                    })?;
+                    // Call the Python function with keyword arguments
+                    // If py_args is a dict, use it as **kwargs; otherwise pass as single arg
+                    let result = if let Ok(py_dict) = py_args.downcast_bound::<pyo3::types::PyDict>(py) {
+                        // Call with keyword arguments (**kwargs)
+                        func.call_bound(py, (), Some(&py_dict)).map_err(|e| {
+                            ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                                "Python function call failed: {}",
+                                sanitize_error_message(&e.to_string())
+                            ))
+                        })?
+                    } else {
+                        // Fallback: call with single positional argument
+                        func.call1(py, (py_args,)).map_err(|e| {
+                            ouroboros_agent_tools::ToolError::ExecutionFailed(format!(
+                                "Python function call failed: {}",
+                                sanitize_error_message(&e.to_string())
+                            ))
+                        })?
+                    };
 
                     Ok::<_, ouroboros_agent_tools::ToolError>(result)
                 })?;

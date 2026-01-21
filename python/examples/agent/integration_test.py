@@ -72,7 +72,7 @@ async def test_openai_provider():
             return False
 
         # Create provider
-        llm = OpenAI(api_key=api_key, model="gpt-4")
+        llm = OpenAI(api_key=api_key, model="gpt-4o-mini")
         print_success(f"Created OpenAI provider: {llm.provider_name}")
 
         # Check supported models
@@ -98,8 +98,8 @@ async def test_basic_agent():
             print_error("OPENAI_API_KEY not set")
             return False
 
-        # Create agent
-        llm = OpenAI(api_key=api_key, model="gpt-4")
+        # Create agent (using gpt-4o-mini - fast and cheap for testing)
+        llm = OpenAI(api_key=api_key, model="gpt-4o-mini")
         agent = Agent(
             name="test_agent",
             llm=llm,
@@ -328,7 +328,7 @@ async def main():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         print_error("\nOPENAI_API_KEY environment variable not set!")
-        print_info("Please set it with: export OPENAI_API_KEY='sk-...'")
+        print_info("Please set it with: export OPENAI_API_KEY='sk-...' or add to .env file")
         sys.exit(1)
 
     print_info(f"API key: {api_key[:10]}...{api_key[-4:]}")

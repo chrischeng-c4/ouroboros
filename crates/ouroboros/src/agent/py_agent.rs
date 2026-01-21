@@ -139,7 +139,7 @@ impl PyAgent {
             context.add_message(user_message.clone());
 
             // Build LLM request
-            let model_to_use = model.unwrap_or_else(|| "gpt-4".to_string());
+            let model_to_use = model.unwrap_or_else(|| "gpt-4o-mini".to_string());
             let mut request = CompletionRequest::new(context.messages.clone(), model_to_use);
 
             if let Some(temp) = temperature {

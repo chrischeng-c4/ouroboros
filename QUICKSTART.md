@@ -4,6 +4,14 @@
 
 ### 1. Set Your OpenAI API Key
 
+Create a `.env` file in the project root:
+
+```bash
+echo 'OPENAI_API_KEY=sk-...' > .env
+```
+
+Or export it:
+
 ```bash
 export OPENAI_API_KEY="sk-..."
 ```
@@ -23,7 +31,7 @@ Ready to run integration test
 ### 3. Run Integration Test
 
 ```bash
-uv run python python/examples/agent/integration_test.py
+uv run --env-file=.env python python/examples/agent/integration_test.py
 ```
 
 **Expected output**:
@@ -65,18 +73,18 @@ uv run python python/examples/agent/integration_test.py
 ### Simple Agent
 
 ```bash
-uv run python python/examples/agent/simple_agent.py
+uv run --env-file=.env python python/examples/agent/simple_agent.py
 ```
 
 **What it does**:
-- Creates OpenAI-powered agent
+- Creates OpenAI-powered agent (gpt-4o-mini)
 - Runs 3 example queries
 - Shows response metadata
 
 ### Tool Agent
 
 ```bash
-uv run python python/examples/agent/tool_agent.py
+uv run --env-file=.env python python/examples/agent/tool_agent.py
 ```
 
 **What it does**:
@@ -148,13 +156,14 @@ uv run pytest python/tests/agent/test_tool_execution.py -v
 
 ## 💰 API Costs
 
-| Model | Integration Test | All Examples |
-|-------|------------------|--------------|
-| gpt-4 | ~$0.10 | ~$0.20 |
-| **gpt-3.5-turbo** | **~$0.01** | **~$0.02** |
-| gpt-4-turbo | ~$0.03 | ~$0.06 |
+| Model | Cost/1M tokens | Integration Test | All Examples |
+|-------|----------------|------------------|--------------|
+| **gpt-4o-mini** | **$0.15 / $0.60** | **~$0.001** | **~$0.002** |
+| gpt-3.5-turbo | $0.50 / $1.50 | ~$0.01 | ~$0.02 |
+| gpt-4o | $2.50 / $10.00 | ~$0.05 | ~$0.10 |
+| gpt-4-turbo | $10 / $30 | ~$0.20 | ~$0.40 |
 
-**Tip**: Use gpt-3.5-turbo for testing to save costs.
+**Default**: We use **gpt-4o-mini** (cheapest, fastest, newest GPT-4 model)
 
 ---
 
