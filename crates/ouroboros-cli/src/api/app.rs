@@ -69,13 +69,13 @@ __all__ = ["app"]
     let port = args.port.unwrap_or(8000);
     let app_content = format!(
         r#""""
-FastAPI application configuration for {}.
+{name} API application.
 """
-from fastapi import FastAPI
+from ouroboros.api import App
 
-app = FastAPI(
-    title="{} API",
-    description="{}",
+app = App(
+    title="{name} API",
+    description="{description}",
     version="0.1.0",
 )
 
@@ -93,63 +93,59 @@ except ImportError:
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port={})
+    import asyncio
+    asyncio.run(app.serve(host="0.0.0.0", port={port}))
 "#,
-        args.name,
-        args.name,
-        args.description.as_deref().unwrap_or(&format!("{} API", args.name)),
-        port
+        name = args.name,
+        description = args.description.as_deref().unwrap_or(&format!("{} API", args.name)),
+        port = port
     );
     fs::write(app_dir.join("app.py"), app_content)?;
 
     // Create routes.py (RouteConfig SSOT)
     let routes_content = format!(
         r#""""
-Route configuration for {} app.
+Route configuration for {name} app.
 
-This file serves as the Single Source of Truth (SSOT) for all routes
-registered in this app. Import this to understand the full API surface.
+This file serves as the Single Source of Truth (SSOT) for all routes.
+Handlers and tests import from here to ensure consistency.
+
+Usage:
+    from apps.{name}.routes import TodoRoutes as R
+
+    # In handler:
+    @router.route(R.LIST.method, R.LIST.path)
+    async def list_todos(): ...
+
+    # In test:
+    response = await server.request(R.LIST.method, f"{{R.PREFIX}}{{R.LIST.path}}")
 """
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
 
 
-@dataclass
-class EndpointConfig:
-    """Configuration for a single endpoint."""
+@dataclass(frozen=True)
+class Endpoint:
+    """Single endpoint configuration."""
     path: str
     method: str
     handler: str
-    summary: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    summary: str = ""
 
 
-@dataclass
-class RouteConfig:
-    """Configuration for a route group."""
-    prefix: str
-    module: str
-    endpoints: List[EndpointConfig] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-
-
-# Route registry - add routes here
-ROUTES: List[RouteConfig] = [
-    # Example:
-    # RouteConfig(
-    #     prefix="/orders",
-    #     module="features.orders.routes",
-    #     tags=["orders"],
-    #     endpoints=[
-    #         EndpointConfig("/", "GET", "list_orders", "List all orders"),
-    #         EndpointConfig("/", "POST", "create_order", "Create a new order"),
-    #         EndpointConfig("/{{id}}", "GET", "get_order", "Get order by ID"),
-    #     ],
-    # ),
-]
+# Module route classes are added here by `ob api feat route`
+# Example:
+#
+# class TodoRoutes:
+#     """Routes for todo module."""
+#     PREFIX = "/todo"
+#
+#     LIST = Endpoint("/", "GET", "list_todos", "List all todos")
+#     CREATE = Endpoint("/", "POST", "create_todo", "Create a todo")
+#     GET = Endpoint("/{{id}}", "GET", "get_todo", "Get todo by ID")
+#     UPDATE = Endpoint("/{{id}}", "PUT", "update_todo", "Update a todo")
+#     DELETE = Endpoint("/{{id}}", "DELETE", "delete_todo", "Delete a todo")
 "#,
-        args.name
+        name = args.name
     );
     fs::write(app_dir.join("routes.py"), routes_content)?;
 

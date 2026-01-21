@@ -9,6 +9,8 @@
 //! - `ob api serve` - Start API server
 
 pub mod config;
+pub mod fields;
+pub mod codegen;
 pub mod init;
 pub mod app;
 pub mod core;

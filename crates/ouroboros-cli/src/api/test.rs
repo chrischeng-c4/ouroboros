@@ -296,7 +296,7 @@ class Test{module_name_title}ServiceIntegration(TestSuite):
     Ok(())
 }
 
-/// Generate route/API tests
+/// Generate route/API tests - one TestClass per endpoint, referencing endpoints.py (SSOT)
 fn generate_route_tests(tests_dir: &Path, module_name: &str, app_name: &str) -> Result<()> {
     let filename = if app_name == "api" {
         "test_routes.py".to_string()
@@ -304,110 +304,235 @@ fn generate_route_tests(tests_dir: &Path, module_name: &str, app_name: &str) -> 
         format!("test_routes_{}.py", app_name)
     };
 
+    let module_title = to_pascal_case(module_name);
+
     let content = format!(
         r#""""
 Route tests for {module_name} module ({app_name} app).
 
 Tests HTTP endpoints using ouroboros.test's TestServer.
+References endpoint definitions from .endpoints (SSOT).
+One TestClass per endpoint for better organization and isolation.
 """
 from ouroboros.test import TestSuite, test, expect, TestServer, parametrize
 
+from ..endpoints import {module_title}Endpoints as E
 
-class Test{module_name_title}Routes(TestSuite):
-    """API endpoint tests for {module_name}."""
 
-    @test(tags=["api", "routes"])
-    async def test_list_{module_name}(self):
-        """Test GET /{module_name} returns list."""
+class TestList{module_title}(TestSuite):
+    """Tests for {{E.LIST.method.value}} {{E.PREFIX}}{{E.LIST.path}} - List all {module_name}s."""
+
+    @test(tags=["api", "list"])
+    async def test_returns_list(self):
+        """Should return a list of {module_name}s."""
         async with TestServer() as server:
-            response = await server.get("/{module_name}")
+            response = await server.request(
+                method=E.LIST.method.value,
+                path=f"{{E.PREFIX}}{{E.LIST.path}}",
+            )
 
-            expect(response.status_code).to_equal(200)
-            expect(response.json()).to_be_instance_of(list)
-
-    @test(tags=["api", "routes"])
-    async def test_get_{module_name}_by_id(self):
-        """Test GET /{module_name}/{{id}} returns single item."""
-        async with TestServer() as server:
-            response = await server.get("/{module_name}/test-id-001")
-
-            expect(response.status_code).to_equal(200)
+            expect(response.status_code).to_equal(E.LIST.status_code.value)
             data = response.json()
-            expect(data["id"]).to_equal("test-id-001")
+            expect(data).to_have_key("items")
+            expect(data["items"]).to_be_instance_of(list)
 
-    @test(tags=["api", "routes"])
-    async def test_get_{module_name}_not_found(self):
-        """Test GET /{module_name}/{{id}} returns 404 for non-existent."""
+    @test(tags=["api", "list"])
+    async def test_pagination(self):
+        """Should support pagination parameters."""
         async with TestServer() as server:
-            response = await server.get("/{module_name}/non-existent")
+            response = await server.request(
+                method=E.LIST.method.value,
+                path=f"{{E.PREFIX}}{{E.LIST.path}}?page=1&page_size=10",
+            )
+
+            expect(response.status_code).to_equal(E.LIST.status_code.value)
+            data = response.json()
+            expect(data).to_have_key("page")
+            expect(data).to_have_key("page_size")
+            expect(data).to_have_key("total")
+
+    @test(tags=["api", "list", "perf"], benchmark=True)
+    async def test_performance(self):
+        """Benchmark list endpoint response time."""
+        async with TestServer() as server:
+            await server.request(E.LIST.method.value, f"{{E.PREFIX}}{{E.LIST.path}}")  # Warm up
+            for _ in range(100):
+                response = await server.request(E.LIST.method.value, f"{{E.PREFIX}}{{E.LIST.path}}")
+                expect(response.status_code).to_equal(E.LIST.status_code.value)
+
+
+class TestGet{module_title}(TestSuite):
+    """Tests for {{E.GET.method.value}} {{E.PREFIX}}{{E.GET.path}} - Get single {module_name}."""
+
+    @test(tags=["api", "get"])
+    async def test_returns_item(self):
+        """Should return a single {module_name} by ID."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.GET.path}}".replace("{{id}}", "1")
+            response = await server.request(
+                method=E.GET.method.value,
+                path=path,
+            )
+
+            expect(response.status_code).to_equal(E.GET.status_code.value)
+            data = response.json()
+            expect(data).to_have_key("id")
+
+    @test(tags=["api", "get"])
+    async def test_not_found(self):
+        """Should return 404 for non-existent {module_name}."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.GET.path}}".replace("{{id}}", "999999")
+            response = await server.request(
+                method=E.GET.method.value,
+                path=path,
+            )
 
             expect(response.status_code).to_equal(404)
 
-    @test(tags=["api", "routes"])
-    async def test_create_{module_name}(self, sample_{module_name}_data):
-        """Test POST /{module_name} creates new item."""
+    @test(tags=["api", "get"])
+    async def test_invalid_id(self):
+        """Should return 422 for invalid ID format."""
         async with TestServer() as server:
-            response = await server.post(
-                "/{module_name}",
-                json=sample_{module_name}_data
+            path = f"{{E.PREFIX}}{{E.GET.path}}".replace("{{id}}", "invalid")
+            response = await server.request(
+                method=E.GET.method.value,
+                path=path,
             )
 
-            expect(response.status_code).to_equal(201)
-            data = response.json()
-            expect(data["name"]).to_equal(sample_{module_name}_data["name"])
+            expect(response.status_code).to_equal(422)
 
-    @test(tags=["api", "routes"])
-    async def test_update_{module_name}(self, sample_{module_name}_data):
-        """Test PUT /{module_name}/{{id}} updates item."""
+
+class TestCreate{module_title}(TestSuite):
+    """Tests for {{E.CREATE.method.value}} {{E.PREFIX}}{{E.CREATE.path}} - Create new {module_name}."""
+
+    @test(tags=["api", "create"])
+    async def test_creates_item(self, sample_{module_name}_data):
+        """Should create a new {module_name}."""
         async with TestServer() as server:
-            updated = {{**sample_{module_name}_data, "name": "Updated"}}
-            response = await server.put(
-                "/{module_name}/test-id-001",
-                json=updated
+            response = await server.request(
+                method=E.CREATE.method.value,
+                path=f"{{E.PREFIX}}{{E.CREATE.path}}",
+                json=sample_{module_name}_data,
             )
 
-            expect(response.status_code).to_equal(200)
+            expect(response.status_code).to_equal(E.CREATE.status_code.value)
             data = response.json()
-            expect(data["name"]).to_equal("Updated")
+            expect(data).to_have_key("id")
 
-    @test(tags=["api", "routes"])
-    async def test_delete_{module_name}(self):
-        """Test DELETE /{module_name}/{{id}} removes item."""
+    @test(tags=["api", "create"])
+    async def test_empty_body(self):
+        """Should return 422 for empty request body."""
         async with TestServer() as server:
-            response = await server.delete("/{module_name}/test-id-001")
+            response = await server.request(
+                method=E.CREATE.method.value,
+                path=f"{{E.PREFIX}}{{E.CREATE.path}}",
+                json={{}},
+            )
 
-            expect(response.status_code).to_equal(204)
+            expect(response.status_code).to_equal(422)
 
     @parametrize([
-        {{"payload": {{}}, "expected_status": 422}},
-        {{"payload": {{"name": ""}}, "expected_status": 422}},
+        {{"field": "title", "value": "", "error": "required"}},
+        {{"field": "title", "value": "a" * 256, "error": "too long"}},
     ])
-    @test(tags=["api", "validation"])
-    async def test_create_validation(self, payload, expected_status):
-        """Test POST /{module_name} validation errors."""
+    @test(tags=["api", "create", "validation"])
+    async def test_validation(self, field, value, error):
+        """Should validate input fields."""
         async with TestServer() as server:
-            response = await server.post("/{module_name}", json=payload)
+            response = await server.request(
+                method=E.CREATE.method.value,
+                path=f"{{E.PREFIX}}{{E.CREATE.path}}",
+                json={{field: value}},
+            )
 
-            expect(response.status_code).to_equal(expected_status)
+            expect(response.status_code).to_equal(422)
 
 
-class Test{module_name_title}RoutesPerformance(TestSuite):
-    """Performance tests for {module_name} routes."""
+class TestUpdate{module_title}(TestSuite):
+    """Tests for {{E.UPDATE.method.value}} {{E.PREFIX}}{{E.UPDATE.path}} - Update {module_name}."""
 
-    @test(tags=["perf", "routes"], benchmark=True)
-    async def test_list_performance(self):
-        """Benchmark GET /{module_name} response time."""
+    @test(tags=["api", "update"])
+    async def test_updates_item(self, sample_{module_name}_data):
+        """Should update an existing {module_name}."""
         async with TestServer() as server:
-            # Warm up
-            await server.get("/{module_name}")
+            path = f"{{E.PREFIX}}{{E.UPDATE.path}}".replace("{{id}}", "1")
+            response = await server.request(
+                method=E.UPDATE.method.value,
+                path=path,
+                json=sample_{module_name}_data,
+            )
 
-            # Benchmark
-            for _ in range(100):
-                response = await server.get("/{module_name}")
-                expect(response.status_code).to_equal(200)
+            expect(response.status_code).to_equal(E.UPDATE.status_code.value)
+            data = response.json()
+            expect(data).to_have_key("id")
+
+    @test(tags=["api", "update"])
+    async def test_not_found(self, sample_{module_name}_data):
+        """Should return 404 for non-existent {module_name}."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.UPDATE.path}}".replace("{{id}}", "999999")
+            response = await server.request(
+                method=E.UPDATE.method.value,
+                path=path,
+                json=sample_{module_name}_data,
+            )
+
+            expect(response.status_code).to_equal(404)
+
+    @test(tags=["api", "update"])
+    async def test_partial_update(self):
+        """Should support partial updates."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.UPDATE.path}}".replace("{{id}}", "1")
+            response = await server.request(
+                method=E.UPDATE.method.value,
+                path=path,
+                json={{"title": "Updated Title"}},
+            )
+
+            expect(response.status_code).to_equal(E.UPDATE.status_code.value)
+
+
+class TestDelete{module_title}(TestSuite):
+    """Tests for {{E.DELETE.method.value}} {{E.PREFIX}}{{E.DELETE.path}} - Delete {module_name}."""
+
+    @test(tags=["api", "delete"])
+    async def test_deletes_item(self):
+        """Should delete an existing {module_name}."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.DELETE.path}}".replace("{{id}}", "1")
+            response = await server.request(
+                method=E.DELETE.method.value,
+                path=path,
+            )
+
+            expect(response.status_code).to_equal(E.DELETE.status_code.value)
+
+    @test(tags=["api", "delete"])
+    async def test_not_found(self):
+        """Should return 404 for non-existent {module_name}."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.DELETE.path}}".replace("{{id}}", "999999")
+            response = await server.request(
+                method=E.DELETE.method.value,
+                path=path,
+            )
+
+            expect(response.status_code).to_equal(404)
+
+    @test(tags=["api", "delete"])
+    async def test_idempotent(self):
+        """Should be idempotent - deleting twice returns 404."""
+        async with TestServer() as server:
+            path = f"{{E.PREFIX}}{{E.DELETE.path}}".replace("{{id}}", "1")
+            await server.request(E.DELETE.method.value, path)
+            response = await server.request(E.DELETE.method.value, path)
+
+            expect(response.status_code).to_equal(404)
 "#,
         module_name = module_name,
-        module_name_title = to_pascal_case(module_name),
+        module_title = module_title,
         app_name = app_name,
     );
 

@@ -1,5 +1,5 @@
 """
-data-bridge-api: High-performance API framework
+ouroboros.api: High-performance API framework
 
 A Rust-based API framework designed as a FastAPI replacement.
 
@@ -12,6 +12,8 @@ Example:
     async def get_user(user_id: Annotated[str, Path()]) -> User:
         return await User.get(user_id)
 """
+
+from http import HTTPMethod, HTTPStatus
 
 from .app import App, setup_signal_handlers, AppState
 from .types import Path, Query, Body, Header, Depends
@@ -27,6 +29,7 @@ from .background import BackgroundTasks, get_background_tasks
 from .forms import Form, File, UploadFile, FormMarker, FileMarker
 from .websocket import WebSocket, WebSocketDisconnect, WebSocketState
 from .sse import ServerSentEvent, EventSourceResponse
+from .endpoint import Endpoint
 
 # Import Rust validation function from the native module
 try:
@@ -43,6 +46,9 @@ __all__ = [
     "App",
     "setup_signal_handlers",
     "AppState",
+    # HTTP
+    "HTTPMethod",
+    "HTTPStatus",
     # Types
     "Path",
     "Query",
@@ -53,6 +59,8 @@ __all__ = [
     # Models
     "BaseModel",
     "Field",
+    # Endpoint
+    "Endpoint",
     # Response
     "Response",
     "JSONResponse",

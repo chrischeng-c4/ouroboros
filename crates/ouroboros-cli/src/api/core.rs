@@ -2,11 +2,13 @@
 //!
 //! Manages core modules (shared, widely-depended modules like auth, users).
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 use std::fs;
 
+use super::codegen;
 use super::config::{find_pyproject, DbType};
+use super::fields::{parse_fields, FieldDef};
 use super::CoreAction;
 
 /// Arguments for `ob api core create`
@@ -32,6 +34,10 @@ pub struct ModelArgs {
     /// Database type override
     #[arg(long)]
     pub db: Option<DbType>,
+
+    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api core service`
@@ -42,6 +48,14 @@ pub struct ServiceArgs {
 
     /// Name of the service to create
     pub name: String,
+
+    /// Database type override
+    #[arg(long)]
+    pub db: Option<DbType>,
+
+    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api core route`
@@ -53,6 +67,14 @@ pub struct RouteArgs {
     /// Target app for the routes
     #[arg(long)]
     pub app: Option<String>,
+
+    /// Model name for route generation
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Field definitions for route generation
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api core endpoint`
@@ -85,6 +107,10 @@ pub struct SchemaArgs {
     /// Schema type (request, response, or both)
     #[arg(long, default_value = "both")]
     pub r#type: String,
+
+    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Execute a core action
@@ -254,113 +280,34 @@ async fn model(args: ModelArgs) -> Result<()> {
     let models_path = module_dir.join("models.py");
     let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, true));
 
-    let model_code = generate_model_code(&args.name, db_type);
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        vec![]
+    };
+
+    let model_code = codegen::generate_model_code(&args.name, &fields, db_type);
 
     // Append to models.py
     let mut content = fs::read_to_string(&models_path).unwrap_or_default();
-    content.push_str("\n\n");
+    content.push_str("\n");
     content.push_str(&model_code);
     fs::write(&models_path, content)?;
 
     println!("Added model '{}' to core/{}/models.py", args.name, args.module);
     println!("  Database: {}", db_type);
+    if !fields.is_empty() {
+        println!("  Fields: {}", fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(", "));
+    }
 
     Ok(())
-}
-
-/// Generate model code based on database type
-fn generate_model_code(name: &str, db_type: DbType) -> String {
-    let table_name = to_snake_case(name);
-    match db_type {
-        DbType::Pg => format!(
-            r#"
-class {name}(Model):
-    """
-    {name} model.
-
-    PostgreSQL table: {table_name}s
-
-    Field types mapping (Python -> PostgreSQL):
-      - int -> INTEGER/BIGINT
-      - str -> VARCHAR/TEXT
-      - float -> DOUBLE PRECISION
-      - bool -> BOOLEAN
-      - datetime -> TIMESTAMPTZ
-      - date -> DATE
-      - UUID -> UUID
-      - dict -> JSONB
-      - list -> ARRAY
-    """
-    __tablename__ = "{table_name}s"
-
-    # Primary key (auto-increment)
-    id: int = Field(primary_key=True, column_type="BIGSERIAL")
-
-    # Timestamps
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        column_type="TIMESTAMPTZ",
-        index=True,
-    )
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        column_type="TIMESTAMPTZ",
-        onupdate=datetime.utcnow,
-    )
-
-    # Add your fields here, examples:
-    # name: str = Field(max_length=255, nullable=False)
-    # email: str = Field(max_length=255, unique=True, nullable=False)
-    # status: str = Field(default="active", column_type="VARCHAR(50)")
-    # amount: float = Field(default=0.0, column_type="NUMERIC(10,2)")
-    # metadata: dict = Field(default_factory=dict, column_type="JSONB")
-    # user_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
-"#,
-            name = name,
-            table_name = table_name
-        ),
-        DbType::Mongo => format!(
-            r#"
-class {name}(Document):
-    """
-    {name} document.
-
-    MongoDB collection: {table_name}s
-
-    Field types mapping (Python -> MongoDB):
-      - int -> int32/int64
-      - str -> string
-      - float -> double
-      - bool -> bool
-      - datetime -> date
-      - dict -> object
-      - list -> array
-      - ObjectId -> objectId
-    """
-    __collection__ = "{table_name}s"
-
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-    # Add your fields here, examples:
-    # name: str = Field(max_length=255, required=True)
-    # email: str = Field(max_length=255, unique=True, required=True)
-    # status: str = Field(default="active")
-    # amount: float = Field(default=0.0)
-    # tags: list[str] = Field(default_factory=list)
-    # metadata: dict = Field(default_factory=dict)
-"#,
-            name = name,
-            table_name = table_name
-        ),
-    }
 }
 
 /// Add a service to a core module
 async fn service(args: ServiceArgs) -> Result<()> {
     let current_dir = std::env::current_dir()?;
-    let (pyproject_path, _pyproject) = find_pyproject(&current_dir)?;
+    let (pyproject_path, pyproject) = find_pyproject(&current_dir)?;
     let project_root = pyproject_path.parent().unwrap();
 
     let module_dir = project_root.join("core").join(&args.module);
@@ -369,54 +316,29 @@ async fn service(args: ServiceArgs) -> Result<()> {
     }
 
     let services_path = module_dir.join("services.py");
-    let service_code = generate_service_code(&args.name, &args.module);
+    let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, true));
+
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        vec![]
+    };
+
+    let service_code = codegen::generate_service_code(&args.name, &fields, db_type);
 
     let mut content = fs::read_to_string(&services_path).unwrap_or_default();
-    content.push_str("\n\n");
+    content.push_str("\n");
     content.push_str(&service_code);
     fs::write(&services_path, content)?;
 
     println!("Added service '{}' to core/{}/services.py", args.name, args.module);
+    println!("  Database: {}", db_type);
+    if !fields.is_empty() {
+        println!("  Fields: {}", fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(", "));
+    }
 
     Ok(())
-}
-
-/// Generate service code
-fn generate_service_code(name: &str, _module: &str) -> String {
-    let class_name = to_pascal_case(name);
-    format!(
-        r#"
-class {class_name}Service:
-    """
-    Service for {name} operations.
-    """
-
-    async def get(self, id: int):
-        """Get a {name} by ID."""
-        pass
-
-    async def list(self, skip: int = 0, limit: int = 100):
-        """List all {name}s with pagination."""
-        pass
-
-    async def create(self, data: dict):
-        """Create a new {name}."""
-        pass
-
-    async def update(self, id: int, data: dict):
-        """Update an existing {name}."""
-        pass
-
-    async def delete(self, id: int):
-        """Delete a {name}."""
-        pass
-
-
-{name}_service = {class_name}Service()
-"#,
-        class_name = class_name,
-        name = name
-    )
 }
 
 /// Initialize routes for a core module
@@ -435,7 +357,30 @@ async fn route(args: RouteArgs) -> Result<()> {
         anyhow::bail!("Routes already exist for core/{}. Use 'ob api core endpoint' to add endpoints.", args.module);
     }
 
-    let routes_code = generate_routes_code(&args.module, true);
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        vec![]
+    };
+
+    // Use model name if provided, otherwise use module name (PascalCase)
+    let model_name = args.model.unwrap_or_else(|| codegen::to_pascal_case(&args.module));
+
+    // Generate endpoints.py (SSOT) - always generated
+    let endpoints_path = module_dir.join("endpoints.py");
+    let endpoints_code = codegen::generate_endpoints_code(&args.module, &model_name);
+    fs::write(&endpoints_path, endpoints_code)?;
+    println!("  Created endpoints.py (SSOT)");
+
+    // Generate routes.py referencing endpoints.py
+    let routes_code = if args.app.is_some() {
+        // Generate routes that reference endpoints.py
+        codegen::generate_routes_code(&args.module, &model_name, &fields)
+    } else {
+        // Standalone routes (no RouteConfig reference)
+        generate_routes_code(&args.module)
+    };
     fs::write(&routes_path, routes_code)?;
 
     // Update __init__.py to export router
@@ -449,54 +394,64 @@ async fn route(args: RouteArgs) -> Result<()> {
 
     println!("Created routes for core/{}", args.module);
     println!("  File: {}", routes_path.display());
-    if let Some(app) = args.app {
-        println!("\nAdd to apps/{}/app.py:", app);
-        println!("  from core.{}.routes import router as {}_router", args.module, args.module);
-        println!("  app.include_router({}_router, prefix=\"/{}\", tags=[\"{}\"])", args.module, args.module, args.module);
+
+    // Auto-register with app.py if --app is specified
+    if let Some(ref app) = args.app {
+        let app_path = project_root.join("apps").join(app).join("app.py");
+        if app_path.exists() {
+            codegen::register_router_in_app(&app_path, &args.module, true)?;
+            println!("  ✓ Registered in apps/{}/app.py", app);
+        } else {
+            println!("\nAdd to apps/{}/app.py:", app);
+            println!("  from core.{}.routes import router as {}_router", args.module, args.module);
+            println!("  app.include_router({}_router, prefix=\"/{}\", tags=[\"{}\"])", args.module, args.module, args.module);
+        }
     }
 
     Ok(())
 }
 
-/// Generate routes code
-fn generate_routes_code(module: &str, _is_core: bool) -> String {
+/// Generate standalone routes code (when --app not specified)
+fn generate_routes_code(module: &str) -> String {
     format!(
         r#""""
 {module} routes.
 
-API endpoints for the {module} module.
+API endpoints for the {module} core module.
+
+Note: Use --app to enable RouteConfig SSOT pattern.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from ouroboros.api import Router, Path, Query, HTTPException
 
-router = APIRouter()
+router = Router(prefix="/{module}", tags=["{module}"])
 
 
-@router.get("/")
+@router.route("GET", "/")
 async def list_{module}s():
     """List all {module}s."""
     return []
 
 
-@router.get("/{{id}}")
-async def get_{module}(id: int):
+@router.route("GET", "/{{id}}")
+async def get_{module}(id: int = Path()):
     """Get a {module} by ID."""
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{module} not found")
+    raise HTTPException(404, "{module} not found")
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.route("POST", "/", status_code=201)
 async def create_{module}():
     """Create a new {module}."""
     return {{"id": 1}}
 
 
-@router.put("/{{id}}")
-async def update_{module}(id: int):
+@router.route("PUT", "/{{id}}")
+async def update_{module}(id: int = Path()):
     """Update a {module}."""
     return {{"id": id}}
 
 
-@router.delete("/{{id}}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_{module}(id: int):
+@router.route("DELETE", "/{{id}}", status_code=204)
+async def delete_{module}(id: int = Path()):
     """Delete a {module}."""
     pass
 "#,
@@ -518,6 +473,12 @@ async fn endpoint(args: EndpointArgs) -> Result<()> {
     let routes_path = module_dir.join("routes.py");
     if !routes_path.exists() {
         anyhow::bail!("Routes not initialized. Run: ob api core route {}", args.module);
+    }
+
+    // Check if endpoint already exists
+    if codegen::check_endpoint_exists(&routes_path, &args.method, &args.path)? {
+        println!("  ⚠ Endpoint {} {} already exists, skipping", args.method.to_uppercase(), args.path);
+        return Ok(());
     }
 
     let endpoint_code = generate_endpoint_code(&args.name, &args.method, &args.path);
@@ -565,110 +526,27 @@ async fn schema(args: SchemaArgs) -> Result<()> {
     }
 
     let schemas_path = module_dir.join("schemas.py");
-    let schema_code = generate_schema_code(&args.name, &args.r#type);
+
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        vec![]
+    };
+
+    let schema_code = codegen::generate_schema_code(&args.name, &fields);
 
     let mut content = fs::read_to_string(&schemas_path).unwrap_or_default();
-    content.push_str("\n\n");
+    content.push_str("\n");
     content.push_str(&schema_code);
     fs::write(&schemas_path, content)?;
 
     println!("Added schema '{}' to core/{}/schemas.py", args.name, args.module);
+    if !fields.is_empty() {
+        println!("  Fields: {}", fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>().join(", "));
+    }
 
     Ok(())
-}
-
-/// Generate schema code based on type
-fn generate_schema_code(name: &str, schema_type: &str) -> String {
-    let mut code = String::new();
-
-    if schema_type == "request" || schema_type == "both" {
-        code.push_str(&format!(
-            r#"
-class {name}Create(Schema):
-    """
-    {name} creation request schema.
-
-    Validation examples (from ouroboros.validation):
-      - Field(min_length=1, max_length=255) - string length
-      - Field(ge=0, le=100) - numeric range (>=, <=)
-      - Field(gt=0, lt=1000) - numeric range (>, <)
-      - Field(pattern=r"^[a-z]+$") - regex pattern
-      - Field(email=True) - email validation
-      - Field(url=True) - URL validation
-      - EmailStr, HttpUrl - typed validators
-
-    Model validators:
-      @model_validator(mode="before") - pre-processing
-      @model_validator(mode="after") - post-processing
-
-    Field validators:
-      @field_validator("field_name")
-      def validate_field(cls, v): ...
-    """
-    # Add your fields here, examples:
-    # name: str = Field(min_length=1, max_length=255)
-    # email: EmailStr
-    # amount: float = Field(ge=0)
-    # status: Literal["active", "inactive"] = "active"
-    pass
-
-
-class {name}Update(Schema):
-    """
-    {name} update request schema.
-
-    All fields are optional for partial updates.
-    Use Optional[T] or T | None for nullable fields.
-    """
-    # Add your fields here, examples:
-    # name: str | None = None
-    # email: EmailStr | None = None
-    # status: Literal["active", "inactive"] | None = None
-    pass
-"#,
-            name = name
-        ));
-    }
-
-    if schema_type == "response" || schema_type == "both" {
-        code.push_str(&format!(
-            r#"
-class {name}Response(Schema):
-    """
-    {name} response schema.
-
-    Computed fields (from ouroboros.validation):
-      @computed_field
-      @property
-      def full_name(self) -> str:
-          return f"{{self.first_name}} {{self.last_name}}"
-
-    Serialization options:
-      model_config = ConfigDict(
-          from_attributes=True,  # Allow ORM mode
-          json_encoders={{datetime: lambda v: v.isoformat()}},
-      )
-    """
-    id: int
-    created_at: datetime
-    updated_at: datetime
-    # Add your fields here
-
-
-class {name}ListResponse(Schema):
-    """{name} paginated list response."""
-    items: list[{name}Response]
-    total: int
-    page: int = 1
-    page_size: int = 20
-    has_next: bool = False
-    has_prev: bool = False
-"#,
-            name = name
-        ));
-    }
-
-    code
 }
 
 /// List all core modules
@@ -717,17 +595,4 @@ fn to_snake_case(s: &str) -> String {
         }
     }
     result
-}
-
-/// Convert string to PascalCase
-fn to_pascal_case(s: &str) -> String {
-    s.split('_')
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-            }
-        })
-        .collect()
 }

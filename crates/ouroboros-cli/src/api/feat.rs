@@ -2,11 +2,13 @@
 //!
 //! Manages feature modules (business domain modules like orders, products).
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Args;
 use std::fs;
 
+use super::codegen;
 use super::config::{find_pyproject, DbType};
+use super::fields::{parse_fields, FieldDef};
 use super::FeatAction;
 
 /// Arguments for `ob api feat create`
@@ -32,6 +34,10 @@ pub struct ModelArgs {
     /// Database type override
     #[arg(long)]
     pub db: Option<DbType>,
+
+    /// Field definitions (e.g., "title:str,completed:bool=false,priority:int?")
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api feat service`
@@ -42,6 +48,10 @@ pub struct ServiceArgs {
 
     /// Name of the service to create
     pub name: String,
+
+    /// Field definitions for CRUD generation
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api feat route`
@@ -53,6 +63,14 @@ pub struct RouteArgs {
     /// Target app for the routes
     #[arg(long)]
     pub app: Option<String>,
+
+    /// Model name for route generation
+    #[arg(long)]
+    pub model: Option<String>,
+
+    /// Field definitions for route generation
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Arguments for `ob api feat endpoint`
@@ -85,6 +103,10 @@ pub struct SchemaArgs {
     /// Schema type (request, response, or both)
     #[arg(long, default_value = "both")]
     pub r#type: String,
+
+    /// Field definitions for schema generation
+    #[arg(long)]
+    pub fields: Option<String>,
 }
 
 /// Execute a feat action
@@ -253,7 +275,19 @@ async fn model(args: ModelArgs) -> Result<()> {
     let models_path = module_dir.join("models.py");
     let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, false));
 
-    let model_code = generate_model_code(&args.name, db_type);
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        Vec::new()
+    };
+
+    // Generate model code
+    let model_code = if fields.is_empty() {
+        generate_model_code(&args.name, db_type)
+    } else {
+        codegen::generate_model_code(&args.name, &fields, db_type)
+    };
 
     // Append to models.py
     let mut content = fs::read_to_string(&models_path).unwrap_or_default();
@@ -263,6 +297,9 @@ async fn model(args: ModelArgs) -> Result<()> {
 
     println!("Added model '{}' to features/{}/models.py", args.name, args.module);
     println!("  Database: {}", db_type);
+    if !fields.is_empty() {
+        println!("  Fields: {}", args.fields.unwrap_or_default());
+    }
 
     Ok(())
 }
@@ -359,7 +396,7 @@ class {name}(Document):
 /// Add a service to a feature module
 async fn service(args: ServiceArgs) -> Result<()> {
     let current_dir = std::env::current_dir()?;
-    let (pyproject_path, _pyproject) = find_pyproject(&current_dir)?;
+    let (pyproject_path, pyproject) = find_pyproject(&current_dir)?;
     let project_root = pyproject_path.parent().unwrap();
 
     let module_dir = project_root.join("features").join(&args.module);
@@ -368,7 +405,21 @@ async fn service(args: ServiceArgs) -> Result<()> {
     }
 
     let services_path = module_dir.join("services.py");
-    let service_code = generate_service_code(&args.name);
+    let db_type = pyproject.ouroboros().get_db_for_module(&args.module, false);
+
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        Vec::new()
+    };
+
+    // Generate service code
+    let service_code = if fields.is_empty() {
+        generate_service_code(&args.name)
+    } else {
+        codegen::generate_service_code(&args.name, &fields, db_type)
+    };
 
     let mut content = fs::read_to_string(&services_path).unwrap_or_default();
     content.push_str("\n\n");
@@ -376,6 +427,9 @@ async fn service(args: ServiceArgs) -> Result<()> {
     fs::write(&services_path, content)?;
 
     println!("Added service '{}' to features/{}/services.py", args.name, args.module);
+    if !fields.is_empty() {
+        println!("  CRUD implementation generated with {} fields", fields.len());
+    }
 
     Ok(())
 }
@@ -434,7 +488,30 @@ async fn route(args: RouteArgs) -> Result<()> {
         anyhow::bail!("Routes already exist for features/{}. Use 'ob api feat endpoint' to add endpoints.", args.module);
     }
 
-    let routes_code = generate_routes_code(&args.module);
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        Vec::new()
+    };
+
+    // Get model name (default to PascalCase of module name)
+    let model_name = args.model.clone().unwrap_or_else(|| to_pascal_case(&args.module));
+
+    // Generate endpoints.py (SSOT) - always generated
+    let endpoints_path = module_dir.join("endpoints.py");
+    let endpoints_code = codegen::generate_endpoints_code(&args.module, &model_name);
+    fs::write(&endpoints_path, endpoints_code)?;
+    println!("  Created endpoints.py (SSOT)");
+
+    // Generate routes.py referencing endpoints.py
+    let routes_code = if args.app.is_some() {
+        // Generate routes that reference endpoints.py
+        codegen::generate_routes_code(&args.module, &model_name, &fields)
+    } else {
+        // Standalone routes (no RouteConfig reference)
+        generate_routes_code(&args.module)
+    };
     fs::write(&routes_path, routes_code)?;
 
     // Update __init__.py to export router
@@ -448,54 +525,64 @@ async fn route(args: RouteArgs) -> Result<()> {
 
     println!("Created routes for features/{}", args.module);
     println!("  File: {}", routes_path.display());
-    if let Some(app) = args.app {
-        println!("\nAdd to apps/{}/app.py:", app);
-        println!("  from features.{}.routes import router as {}_router", args.module, args.module);
-        println!("  app.include_router({}_router, prefix=\"/{}\", tags=[\"{}\"])", args.module, args.module, args.module);
+
+    // Auto-register in app.py if --app is specified
+    if let Some(ref app_name) = args.app {
+        let app_path = project_root.join("apps").join(app_name).join("app.py");
+        if app_path.exists() {
+            codegen::register_router_in_app(&app_path, &args.module, false)?;
+            println!("  Registered router in apps/{}/app.py", app_name);
+        } else {
+            println!("\nAdd to apps/{}/app.py:", app_name);
+            println!("  from features.{}.routes import router as {}_router", args.module, args.module);
+            println!("  app.include_router({}_router, prefix=\"/{}\", tags=[\"{}\"])", args.module, args.module, args.module);
+        }
     }
 
     Ok(())
 }
 
-/// Generate routes code
+/// Generate standalone routes code (when --app not specified)
 fn generate_routes_code(module: &str) -> String {
     format!(
         r#""""
 {module} routes.
 
 API endpoints for the {module} feature.
+
+Note: Use --app to enable RouteConfig SSOT pattern.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from ouroboros.api import Router, Path, Query, HTTPException
 
-router = APIRouter()
+router = Router(prefix="/{module}", tags=["{module}"])
 
 
-@router.get("/")
+@router.route("GET", "/")
 async def list_{module}s():
     """List all {module}s."""
     return []
 
 
-@router.get("/{{id}}")
-async def get_{module}(id: int):
+@router.route("GET", "/{{id}}")
+async def get_{module}(id: int = Path()):
     """Get a {module} by ID."""
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{module} not found")
+    raise HTTPException(404, "{module} not found")
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.route("POST", "/", status_code=201)
 async def create_{module}():
     """Create a new {module}."""
     return {{"id": 1}}
 
 
-@router.put("/{{id}}")
-async def update_{module}(id: int):
+@router.route("PUT", "/{{id}}")
+async def update_{module}(id: int = Path()):
     """Update a {module}."""
     return {{"id": id}}
 
 
-@router.delete("/{{id}}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_{module}(id: int):
+@router.route("DELETE", "/{{id}}", status_code=204)
+async def delete_{module}(id: int = Path()):
     """Delete a {module}."""
     pass
 "#,
@@ -517,6 +604,16 @@ async fn endpoint(args: EndpointArgs) -> Result<()> {
     let routes_path = module_dir.join("routes.py");
     if !routes_path.exists() {
         anyhow::bail!("Routes not initialized. Run: ob api feat route {}", args.module);
+    }
+
+    // Check for duplicate endpoint
+    if codegen::check_endpoint_exists(&routes_path, &args.method, &args.path)? {
+        anyhow::bail!(
+            "Endpoint with path '{}' and method '{}' already exists in features/{}/routes.py",
+            args.path,
+            args.method.to_uppercase(),
+            args.module
+        );
     }
 
     let endpoint_code = generate_endpoint_code(&args.name, &args.method, &args.path);
@@ -564,7 +661,20 @@ async fn schema(args: SchemaArgs) -> Result<()> {
     }
 
     let schemas_path = module_dir.join("schemas.py");
-    let schema_code = generate_schema_code(&args.name, &args.r#type);
+
+    // Parse fields if provided
+    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
+        parse_fields(fields_str)?
+    } else {
+        Vec::new()
+    };
+
+    // Generate schema code
+    let schema_code = if fields.is_empty() {
+        generate_schema_code(&args.name, &args.r#type)
+    } else {
+        codegen::generate_schema_code(&args.name, &fields)
+    };
 
     let mut content = fs::read_to_string(&schemas_path).unwrap_or_default();
     content.push_str("\n\n");
@@ -572,6 +682,9 @@ async fn schema(args: SchemaArgs) -> Result<()> {
     fs::write(&schemas_path, content)?;
 
     println!("Added schema '{}' to features/{}/schemas.py", args.name, args.module);
+    if !fields.is_empty() {
+        println!("  Fields: {}", args.fields.unwrap_or_default());
+    }
 
     Ok(())
 }
