@@ -588,3 +588,370 @@ pub fn register_router_in_app(app_path: &Path, module: &str, is_core: bool) -> R
     fs::write(app_path, content)?;
     Ok(())
 }
+
+// =============================================================================
+// Infrastructure Templates (P1)
+// =============================================================================
+
+/// Generate configs.py for project configuration
+pub fn generate_configs_code(project_name: &str, db_type: DbType) -> String {
+    let db_config = match db_type {
+        DbType::Pg => r#"
+# PostgreSQL Configuration
+DATABASE_URL: str = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/{project_name}"
+)
+
+class DatabaseSettings(BaseSettings):
+    """PostgreSQL database settings."""
+    url: str = DATABASE_URL
+    pool_size: int = 5
+    max_overflow: int = 10
+    echo: bool = ENV == Environment.DEV
+
+    model_config = SettingsConfigDict(env_prefix="DB_")
+
+db_settings = DatabaseSettings()"#,
+        DbType::Mongo => r#"
+# MongoDB Configuration
+MONGO_URL: str = os.getenv(
+    "MONGO_URL",
+    "mongodb://localhost:27017/{project_name}"
+)
+
+class DatabaseSettings(BaseSettings):
+    """MongoDB database settings."""
+    url: str = MONGO_URL
+    database: str = "{project_name}"
+
+    model_config = SettingsConfigDict(env_prefix="MONGO_")
+
+db_settings = DatabaseSettings()"#,
+    };
+
+    format!(
+        r#""""
+Project configuration.
+
+Environment-based settings for the application.
+"""
+from __future__ import annotations
+
+import os
+import pathlib
+from enum import StrEnum
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Environment(StrEnum):
+    """Application environments."""
+    DEV = "dev"
+    TEST = "test"
+    UAT = "uat"
+    PROD = "prod"
+
+
+# Core settings
+PROJECT_DIR: pathlib.Path = pathlib.Path(__file__).parent.parent
+ENV: Environment = Environment(os.getenv("ENV", "dev"))
+DEBUG: bool = ENV in {{Environment.DEV, Environment.TEST}}
+{db_config}
+
+
+class AppSettings(BaseSettings):
+    """Application settings."""
+    name: str = "{project_name}"
+    version: str = "0.1.0"
+    host: str = "0.0.0.0"
+    port: int = 8000
+
+    model_config = SettingsConfigDict(env_prefix="APP_")
+
+app_settings = AppSettings()
+"#,
+        project_name = project_name,
+        db_config = db_config.replace("{project_name}", project_name)
+    )
+}
+
+/// Generate dependencies.py for FastAPI dependency injection
+pub fn generate_dependencies_code(db_type: DbType) -> String {
+    let db_dependency = match db_type {
+        DbType::Pg => r#"
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Get database session."""
+    async with async_session_maker() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+DbSession = Annotated[AsyncSession, Depends(get_db)]"#,
+        DbType::Mongo => r#"
+def get_db() -> Database:
+    """Get MongoDB database."""
+    from .lifespans import mongo_client
+    from .configs import db_settings
+    return mongo_client[db_settings.database]
+
+
+DbSession = Annotated[Database, Depends(get_db)]"#,
+    };
+
+    format!(
+        r#""""
+FastAPI dependencies.
+
+Common dependency injection functions for routes.
+"""
+from __future__ import annotations
+
+import logging
+from typing import Annotated, AsyncGenerator, NamedTuple
+
+import fastapi
+from fastapi import Depends, Query, Request
+
+from .configs import ENV, Environment
+
+
+# Logging
+def get_logger(request: Request) -> logging.LoggerAdapter:
+    """Get logger with request context."""
+    logger = logging.getLogger(__name__)
+    return logging.LoggerAdapter(logger, {{"request_id": id(request)}})
+
+Logger = Annotated[logging.LoggerAdapter, Depends(get_logger)]
+
+
+# Pagination
+class Pagination(NamedTuple):
+    """Pagination parameters."""
+    page: int
+    page_size: int
+    offset: int
+    limit: int
+
+
+def get_pagination(
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+) -> Pagination:
+    """Get pagination parameters."""
+    return Pagination(
+        page=page,
+        page_size=page_size,
+        offset=(page - 1) * page_size,
+        limit=page_size,
+    )
+
+PaginationDep = Annotated[Pagination, Depends(get_pagination)]
+
+
+# Database
+{db_dependency}
+"#,
+        db_dependency = db_dependency
+    )
+}
+
+/// Generate lifespans.py for application lifecycle
+pub fn generate_lifespans_code(db_type: DbType) -> String {
+    let (imports, startup, shutdown) = match db_type {
+        DbType::Pg => (
+            r#"from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+from .configs import db_settings"#,
+            r#"    # Initialize PostgreSQL connection
+    global async_engine, async_session_maker
+    async_engine = create_async_engine(
+        db_settings.url,
+        pool_size=db_settings.pool_size,
+        max_overflow=db_settings.max_overflow,
+        echo=db_settings.echo,
+    )
+    async_session_maker = async_sessionmaker(
+        async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    app.state.db_engine = async_engine
+    print(f"✓ PostgreSQL connected")"#,
+            r#"    # Close PostgreSQL connection
+    if hasattr(app.state, "db_engine"):
+        await app.state.db_engine.dispose()
+        print("✓ PostgreSQL disconnected")"#,
+        ),
+        DbType::Mongo => (
+            r#"from motor.motor_asyncio import AsyncIOMotorClient
+
+from .configs import db_settings"#,
+            r#"    # Initialize MongoDB connection
+    global mongo_client
+    mongo_client = AsyncIOMotorClient(db_settings.url)
+    app.state.mongo_client = mongo_client
+    print(f"✓ MongoDB connected")"#,
+            r#"    # Close MongoDB connection
+    if hasattr(app.state, "mongo_client"):
+        app.state.mongo_client.close()
+        print("✓ MongoDB disconnected")"#,
+        ),
+    };
+
+    format!(
+        r#""""
+Application lifecycle management.
+
+Handles startup and shutdown events for the application.
+"""
+from __future__ import annotations
+
+import contextlib
+import logging
+from typing import TYPE_CHECKING
+
+{imports}
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+# Module-level references (set during startup)
+async_engine = None
+async_session_maker = None
+mongo_client = None
+
+
+@contextlib.asynccontextmanager
+async def default_lifespan(app: "FastAPI"):
+    """Default application lifespan handler."""
+    # Startup
+    logging.basicConfig(level=logging.INFO)
+    print(f"🚀 Starting {{app.title}}...")
+
+{startup}
+
+    yield
+
+    # Shutdown
+    print(f"👋 Shutting down {{app.title}}...")
+
+{shutdown}
+
+    print("✓ Shutdown complete")
+"#,
+        imports = imports,
+        startup = startup,
+        shutdown = shutdown
+    )
+}
+
+/// Generate apps.py for multi-service factory
+pub fn generate_apps_code(project_name: &str, services: &[&str]) -> String {
+    let service_enum = services
+        .iter()
+        .map(|s| format!("    {} = \"{}\"", s.to_uppercase(), s.to_lowercase()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let service_cases = services
+        .iter()
+        .map(|s| {
+            let upper = s.to_uppercase();
+            let lower = s.to_lowercase();
+            format!(
+                r#"    if service == APIService.{upper}:
+        app = FastAPI(
+            title="{project_name} {upper} API",
+            version=app_settings.version,
+            lifespan=default_lifespan,
+            root_path="/{lower}-api",
+        )
+        # Include {lower}-specific routers here
+        # app.include_router({lower}_router)"#,
+                upper = upper,
+                lower = lower,
+                project_name = project_name
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n    el");
+
+    format!(
+        r#""""
+Multi-service application factory.
+
+Creates FastAPI applications for different services.
+"""
+from __future__ import annotations
+
+from enum import StrEnum
+
+from fastapi import FastAPI
+
+from .configs import app_settings
+from .lifespans import default_lifespan
+
+
+class APIService(StrEnum):
+    """Available API services."""
+{service_enum}
+
+
+def create_app(service: APIService) -> FastAPI:
+    """Create a FastAPI application for the specified service."""
+{service_cases}
+    else:
+        raise ValueError(f"Unknown service: {{service}}")
+
+    # Common middleware
+    # app.middleware("http")(your_middleware)
+
+    # Common exception handlers
+    # app.exception_handler(Exception)(generic_handler)
+
+    return app
+
+
+# Default app for development
+app = create_app(APIService.{default_service})
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host=app_settings.host, port=app_settings.port)
+"#,
+        service_enum = service_enum,
+        service_cases = service_cases,
+        default_service = services.first().map(|s| s.to_uppercase()).unwrap_or_else(|| "ADMIN".to_string())
+    )
+}
+
+/// Generate constants.py for project constants
+pub fn generate_constants_code() -> String {
+    r#""""
+Project constants.
+
+Common constants used across the application.
+"""
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class HTTPStatus(StrEnum):
+    """Common HTTP status codes."""
+    OK = "200"
+    CREATED = "201"
+    NO_CONTENT = "204"
+    BAD_REQUEST = "400"
+    UNAUTHORIZED = "401"
+    FORBIDDEN = "403"
+    NOT_FOUND = "404"
+    CONFLICT = "409"
+    UNPROCESSABLE_ENTITY = "422"
+    INTERNAL_SERVER_ERROR = "500"
+"#.to_string()
+}

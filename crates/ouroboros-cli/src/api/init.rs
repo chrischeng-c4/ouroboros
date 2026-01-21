@@ -3,6 +3,7 @@
 //! Initializes a new ouroboros API project with:
 //! - pyproject.toml with [tool.ouroboros] configuration
 //! - Standard directory structure (apps/, core/, features/, shared/, infra/)
+//! - Infrastructure files (configs.py, dependencies.py, lifespans.py, apps.py)
 //! - Optional Kubernetes probe endpoints and metrics
 
 use anyhow::{Context, Result};
@@ -10,6 +11,7 @@ use clap::Args;
 use std::fs;
 use std::path::Path;
 
+use super::codegen;
 use super::config::{DbType, PyProject};
 
 /// Arguments for `ob api init`
@@ -34,6 +36,10 @@ pub struct InitArgs {
     /// Skip creating pyproject.toml if it exists
     #[arg(long)]
     pub no_overwrite: bool,
+
+    /// API services to create (comma-separated, e.g., "admin,inbox,task")
+    #[arg(long, value_delimiter = ',')]
+    pub services: Option<Vec<String>>,
 }
 
 /// Execute the init command
@@ -64,6 +70,10 @@ pub async fn execute(args: InitArgs) -> Result<()> {
 
     // Create shared __init__.py
     create_shared_init(&current_dir)?;
+
+    // Create infrastructure files (configs.py, dependencies.py, lifespans.py, apps.py)
+    let services = args.services.unwrap_or_else(|| vec!["admin".to_string()]);
+    create_infrastructure_files(&current_dir, &project_name, args.db, &services)?;
 
     if !args.minimal {
         // Create infra module with k8s probes and metrics
@@ -126,6 +136,60 @@ T = TypeVar("T")
 "#;
         fs::write(&shared_init, content)?;
     }
+    Ok(())
+}
+
+/// Create infrastructure files (configs.py, dependencies.py, lifespans.py, apps.py)
+fn create_infrastructure_files(
+    base: &Path,
+    project_name: &str,
+    db_type: DbType,
+    services: &[String],
+) -> Result<()> {
+    let shared_dir = base.join("shared");
+    fs::create_dir_all(&shared_dir)?;
+
+    // configs.py
+    let configs_path = shared_dir.join("configs.py");
+    if !configs_path.exists() {
+        let content = codegen::generate_configs_code(project_name, db_type);
+        fs::write(&configs_path, content)?;
+        println!("Created shared/configs.py");
+    }
+
+    // dependencies.py
+    let deps_path = shared_dir.join("dependencies.py");
+    if !deps_path.exists() {
+        let content = codegen::generate_dependencies_code(db_type);
+        fs::write(&deps_path, content)?;
+        println!("Created shared/dependencies.py");
+    }
+
+    // lifespans.py
+    let lifespans_path = shared_dir.join("lifespans.py");
+    if !lifespans_path.exists() {
+        let content = codegen::generate_lifespans_code(db_type);
+        fs::write(&lifespans_path, content)?;
+        println!("Created shared/lifespans.py");
+    }
+
+    // apps.py (multi-service factory)
+    let apps_path = shared_dir.join("apps.py");
+    if !apps_path.exists() {
+        let service_refs: Vec<&str> = services.iter().map(|s| s.as_str()).collect();
+        let content = codegen::generate_apps_code(project_name, &service_refs);
+        fs::write(&apps_path, content)?;
+        println!("Created shared/apps.py with services: {:?}", services);
+    }
+
+    // constants.py
+    let constants_path = shared_dir.join("constants.py");
+    if !constants_path.exists() {
+        let content = codegen::generate_constants_code();
+        fs::write(&constants_path, content)?;
+        println!("Created shared/constants.py");
+    }
+
     Ok(())
 }
 

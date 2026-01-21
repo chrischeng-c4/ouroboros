@@ -8,11 +8,19 @@
 //!      - `completed:bool=false` - bool with default
 //!      - `priority:int?` - optional int
 //!
-//! 2. JSON syntax: `[{"name": "title", "type": "str", "index": true}]`
-//!    Supports full PostgreSQL features: indexes, unique, foreign keys, etc.
+//! 2. JSON Schema syntax with x- extensions:
+//!    ```json
+//!    {
+//!      "title": {"type": "string", "maxLength": 255, "x-index": true},
+//!      "email": {"type": "string", "format": "email", "x-unique": true},
+//!      "user_id": {"type": "integer", "x-fk": "users.id"}
+//!    }
+//!    ```
+//!    Supports full PostgreSQL features via x- extensions.
 
 use anyhow::{bail, Result};
 use serde::Deserialize;
+use std::collections::HashMap;
 
 use super::config::DbType;
 
@@ -342,18 +350,139 @@ pub fn parse_fields(input: &str) -> Result<Vec<FieldDef>> {
     Ok(fields)
 }
 
-/// Parse fields from JSON syntax
-///
-/// Format: `[{"name": "title", "type": "str", "index": true}]`
-pub fn parse_fields_json(input: &str) -> Result<Vec<FieldDef>> {
-    let fields: Vec<FieldDef> = serde_json::from_str(input)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON fields: {}", e))?;
+/// JSON Schema field definition for parsing
+#[derive(Debug, Clone, Deserialize)]
+struct JsonSchemaField {
+    #[serde(rename = "type")]
+    field_type: JsonSchemaType,
+    #[serde(default)]
+    format: Option<String>,
+    #[serde(default)]
+    default: Option<serde_json::Value>,
+    #[serde(rename = "maxLength")]
+    #[serde(default)]
+    max_length: Option<u32>,
+    // x- extensions for database features
+    #[serde(rename = "x-index")]
+    #[serde(default)]
+    x_index: bool,
+    #[serde(rename = "x-unique")]
+    #[serde(default)]
+    x_unique: bool,
+    #[serde(rename = "x-pk")]
+    #[serde(default)]
+    x_pk: bool,
+    #[serde(rename = "x-fk")]
+    #[serde(default)]
+    x_fk: Option<String>,
+    #[serde(rename = "x-check")]
+    #[serde(default)]
+    x_check: Option<String>,
+    #[serde(rename = "x-precision")]
+    #[serde(default)]
+    x_precision: Option<(u8, u8)>,
+    #[serde(rename = "x-optional")]
+    #[serde(default)]
+    x_optional: bool,
+}
 
-    if fields.is_empty() {
-        bail!("No fields specified in JSON array");
+/// JSON Schema type - can be single or array (for nullable)
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum JsonSchemaType {
+    Single(String),
+    Array(Vec<String>),
+}
+
+impl JsonSchemaType {
+    /// Get primary type (excluding "null")
+    fn primary_type(&self) -> &str {
+        match self {
+            JsonSchemaType::Single(t) => t,
+            JsonSchemaType::Array(types) => {
+                types.iter().find(|t| *t != "null").map(|s| s.as_str()).unwrap_or("string")
+            }
+        }
     }
 
+    /// Check if nullable (contains "null" in array)
+    fn is_nullable(&self) -> bool {
+        match self {
+            JsonSchemaType::Single(_) => false,
+            JsonSchemaType::Array(types) => types.iter().any(|t| t == "null"),
+        }
+    }
+}
+
+/// Parse fields from JSON Schema syntax
+///
+/// Format:
+/// ```json
+/// {
+///   "title": {"type": "string", "maxLength": 255, "x-index": true},
+///   "email": {"type": "string", "format": "email", "x-unique": true},
+///   "user_id": {"type": "integer", "x-fk": "users.id"},
+///   "priority": {"type": ["integer", "null"]}
+/// }
+/// ```
+pub fn parse_fields_json(input: &str) -> Result<Vec<FieldDef>> {
+    let schema: HashMap<String, JsonSchemaField> = serde_json::from_str(input)
+        .map_err(|e| anyhow::anyhow!("Invalid JSON Schema: {}", e))?;
+
+    if schema.is_empty() {
+        bail!("No fields specified in JSON Schema");
+    }
+
+    let mut fields = Vec::new();
+    for (name, field) in schema {
+        let field_def = json_schema_to_field_def(name, field)?;
+        fields.push(field_def);
+    }
+
+    // Sort by name for consistent ordering
+    fields.sort_by(|a, b| a.name.cmp(&b.name));
+
     Ok(fields)
+}
+
+/// Convert JSON Schema field to FieldDef
+fn json_schema_to_field_def(name: String, field: JsonSchemaField) -> Result<FieldDef> {
+    // Map JSON Schema type + format to our FieldType
+    let field_type = match (field.field_type.primary_type(), field.format.as_deref()) {
+        (_, Some("uuid")) => FieldType::Uuid,
+        (_, Some("date-time")) => FieldType::Datetime,
+        (_, Some("date")) => FieldType::Date,
+        ("string", _) => FieldType::Str,
+        ("integer", _) => FieldType::Int,
+        ("number", _) => {
+            // Check if precision is specified for decimal
+            if field.x_precision.is_some() {
+                FieldType::Decimal
+            } else {
+                FieldType::Float
+            }
+        }
+        ("boolean", _) => FieldType::Bool,
+        ("object", _) => FieldType::Json,
+        ("array", _) => FieldType::Array,
+        (t, _) => bail!("Unknown JSON Schema type: '{}'", t),
+    };
+
+    let optional = field.x_optional || field.field_type.is_nullable();
+
+    Ok(FieldDef {
+        name,
+        field_type,
+        default: field.default,
+        optional,
+        max_length: field.max_length,
+        precision: field.x_precision,
+        index: field.x_index,
+        unique: field.x_unique,
+        pk: field.x_pk,
+        fk: field.x_fk,
+        check: field.x_check,
+    })
 }
 
 /// Parse a single field definition (simple syntax)
@@ -443,19 +572,69 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_json_fields() {
-        let json = r#"[
-            {"name": "title", "type": "str", "max_length": 255, "index": true},
-            {"name": "email", "type": "str", "unique": true},
-            {"name": "user_id", "type": "int", "fk": "users.id"}
-        ]"#;
+    fn test_parse_json_schema_fields() {
+        let json = r#"{
+            "title": {"type": "string", "maxLength": 255, "x-index": true},
+            "email": {"type": "string", "x-unique": true},
+            "user_id": {"type": "integer", "x-fk": "users.id"}
+        }"#;
         let fields = parse_fields_json(json).unwrap();
         assert_eq!(fields.len(), 3);
-        assert_eq!(fields[0].name, "title");
-        assert_eq!(fields[0].max_length, Some(255));
-        assert!(fields[0].index);
-        assert!(fields[1].unique);
-        assert_eq!(fields[2].fk, Some("users.id".to_string()));
+
+        // Fields are sorted by name
+        let email = fields.iter().find(|f| f.name == "email").unwrap();
+        let title = fields.iter().find(|f| f.name == "title").unwrap();
+        let user_id = fields.iter().find(|f| f.name == "user_id").unwrap();
+
+        assert_eq!(title.max_length, Some(255));
+        assert!(title.index);
+        assert!(email.unique);
+        assert_eq!(user_id.fk, Some("users.id".to_string()));
+    }
+
+    #[test]
+    fn test_parse_json_schema_nullable() {
+        let json = r#"{
+            "priority": {"type": ["integer", "null"]},
+            "status": {"type": "string", "x-optional": true}
+        }"#;
+        let fields = parse_fields_json(json).unwrap();
+
+        let priority = fields.iter().find(|f| f.name == "priority").unwrap();
+        let status = fields.iter().find(|f| f.name == "status").unwrap();
+
+        assert!(priority.optional);
+        assert!(status.optional);
+    }
+
+    #[test]
+    fn test_parse_json_schema_formats() {
+        let json = r#"{
+            "id": {"type": "string", "format": "uuid"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "birth_date": {"type": "string", "format": "date"}
+        }"#;
+        let fields = parse_fields_json(json).unwrap();
+
+        let id = fields.iter().find(|f| f.name == "id").unwrap();
+        let created_at = fields.iter().find(|f| f.name == "created_at").unwrap();
+        let birth_date = fields.iter().find(|f| f.name == "birth_date").unwrap();
+
+        assert!(matches!(id.field_type, FieldType::Uuid));
+        assert!(matches!(created_at.field_type, FieldType::Datetime));
+        assert!(matches!(birth_date.field_type, FieldType::Date));
+    }
+
+    #[test]
+    fn test_parse_json_schema_decimal() {
+        let json = r#"{
+            "amount": {"type": "number", "x-precision": [10, 2]}
+        }"#;
+        let fields = parse_fields_json(json).unwrap();
+
+        let amount = fields.iter().find(|f| f.name == "amount").unwrap();
+        assert!(matches!(amount.field_type, FieldType::Decimal));
+        assert_eq!(amount.precision, Some((10, 2)));
     }
 
     #[test]
