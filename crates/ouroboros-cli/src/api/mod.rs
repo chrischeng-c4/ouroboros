@@ -15,6 +15,7 @@ pub mod core;
 pub mod feat;
 pub mod generate;
 pub mod serve;
+pub mod test;
 
 use clap::Subcommand;
 
@@ -138,6 +139,9 @@ pub enum GenerateAction {
         #[arg(long)]
         core: bool,
     },
+
+    /// Generate tests for a module using ouroboros-qc
+    Test(test::TestArgs),
 }
 
 /// Execute an API action

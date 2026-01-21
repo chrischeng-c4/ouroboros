@@ -5,8 +5,7 @@
 
 use anyhow::Result;
 
-use super::{GenerateAction, app, feat, core};
-use super::config::DbType;
+use super::{GenerateAction, app, feat, core, test};
 
 /// Execute a generate action
 pub async fn execute(action: GenerateAction) -> Result<()> {
@@ -31,6 +30,9 @@ pub async fn execute(action: GenerateAction) -> Result<()> {
                 let args = feat::RouteArgs { module, app: Some(app) };
                 feat::execute(super::FeatAction::Route(args)).await
             }
+        }
+        GenerateAction::Test(args) => {
+            test::execute(args).await
         }
     }
 }
