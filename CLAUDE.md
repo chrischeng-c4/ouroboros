@@ -21,10 +21,26 @@ System documentation is in `agentd/knowledge/`. Use MCP tools to read:
 <!-- agentd:end -->
 
 ## Abbreviation
-- ob: obouroboros
-- obpg: ouroboros-postgres 
+- ob: ouroboros
+- obpg: ouroboros-postgres
 - obqc: ouroboros-qc
+- obagent: ouroboros-agent (framework)
 
-## Limitaion
+## ouroboros-agent Framework
+
+**Competitors**: PydanticAI, LangChain, LangGraph
+
+The ouroboros-agent framework is a high-performance LLM agent framework with deep Rust integration, designed to compete with:
+- **PydanticAI**: Type-safe Python agent framework with Pydantic models
+- **LangChain**: Popular LLM application framework with extensive integrations
+- **LangGraph**: Stateful multi-agent workflow framework from LangChain team
+
+**Key Differentiators**:
+- Zero Python Byte Handling (all processing in Rust)
+- GIL-free execution for maximum performance
+- Deep integration with ouroboros ecosystem (MongoDB, PostgreSQL, HTTP, KV)
+- Type-safe Rust core with Pythonic API
+
+## Limitation
 
 No big file; If file lines ≥ 1000, must split; If file lines ≥ 500, consider split.
