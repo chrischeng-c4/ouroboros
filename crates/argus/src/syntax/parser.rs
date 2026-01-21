@@ -2,6 +2,7 @@
 
 use std::path::Path;
 use tree_sitter::{Parser, Tree};
+use crate::error::{ArgusError, Result};
 
 /// Supported languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -37,21 +38,21 @@ pub struct MultiParser {
 }
 
 impl MultiParser {
-    pub fn new() -> Result<Self, String> {
+    pub fn new() -> Result<Self> {
         let mut python_parser = Parser::new();
         python_parser
             .set_language(&tree_sitter_python::LANGUAGE.into())
-            .map_err(|e| format!("Failed to load Python grammar: {}", e))?;
+            .map_err(|e| ArgusError::parser(format!("Failed to load Python grammar: {}", e)))?;
 
         let mut typescript_parser = Parser::new();
         typescript_parser
             .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
-            .map_err(|e| format!("Failed to load TypeScript grammar: {}", e))?;
+            .map_err(|e| ArgusError::parser(format!("Failed to load TypeScript grammar: {}", e)))?;
 
         let mut rust_parser = Parser::new();
         rust_parser
             .set_language(&tree_sitter_rust::LANGUAGE.into())
-            .map_err(|e| format!("Failed to load Rust grammar: {}", e))?;
+            .map_err(|e| ArgusError::parser(format!("Failed to load Rust grammar: {}", e)))?;
 
         Ok(Self {
             python_parser,

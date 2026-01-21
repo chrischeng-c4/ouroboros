@@ -16,6 +16,7 @@ use super::modules::ModuleGraph;
 use super::stubs::StubLoader;
 use super::ty::Type;
 use crate::syntax::{Language, MultiParser};
+use crate::error::Result;
 use rayon::prelude::*;
 
 use super::cache::{AnalysisCache, CacheEntry, ContentHash};
@@ -171,13 +172,13 @@ pub struct ProjectAnalyzer {
 }
 
 impl ProjectAnalyzer {
-    pub fn new(config: ProjectConfig) -> Self {
+    pub fn new(config: ProjectConfig) -> Result<Self> {
         let mut stubs = StubLoader::new();
         stubs.load_builtins();
 
-        let parser = MultiParser::new().expect("Failed to create parser");
+        let parser = MultiParser::new()?;
 
-        Self {
+        Ok(Self {
             config,
             graph: ModuleGraph::new(),
             stubs,
@@ -185,11 +186,11 @@ impl ProjectAnalyzer {
             cache: AnalysisCache::new(),
             module_info: HashMap::new(),
             errors: HashMap::new(),
-        }
+        })
     }
 
     /// Create analyzer from project root
-    pub fn from_root(root: &Path) -> Self {
+    pub fn from_root(root: &Path) -> Result<Self> {
         let config = ProjectConfig::from_pyproject(root);
         Self::new(config)
     }
@@ -563,7 +564,7 @@ key = "value"
 
     #[test]
     fn test_extract_imports() {
-        let analyzer = ProjectAnalyzer::new(ProjectConfig::new(PathBuf::from("/test")));
+        let analyzer = ProjectAnalyzer::new(ProjectConfig::new(PathBuf::from("/test"))).unwrap();
 
         let source = r#"
 import os
@@ -586,7 +587,7 @@ import numpy as np
     #[test]
     fn test_project_analyzer_creation() {
         let config = ProjectConfig::new(PathBuf::from("/test"));
-        let analyzer = ProjectAnalyzer::new(config);
+        let analyzer = ProjectAnalyzer::new(config).unwrap();
 
         assert!(analyzer.errors.is_empty());
     }
@@ -605,7 +606,7 @@ import numpy as np
         fs::write(temp_dir.join("venv/lib.py"), "# should be excluded").unwrap();
 
         let config = ProjectConfig::new(temp_dir.clone());
-        let analyzer = ProjectAnalyzer::new(config);
+        let analyzer = ProjectAnalyzer::new(config).unwrap();
 
         let files = analyzer.discover_files();
 
@@ -636,7 +637,7 @@ import numpy as np
         fs::write(temp_dir.join("utils.py"), "def helper(): pass").unwrap();
 
         let config = ProjectConfig::new(temp_dir.clone());
-        let mut analyzer = ProjectAnalyzer::new(config);
+        let mut analyzer = ProjectAnalyzer::new(config).unwrap();
         analyzer.build_graph();
 
         let graph = analyzer.graph();
@@ -662,7 +663,7 @@ import numpy as np
         fs::write(temp_dir.join("c.py"), "from a import baz").unwrap();
 
         let config = ProjectConfig::new(temp_dir.clone());
-        let mut analyzer = ProjectAnalyzer::new(config);
+        let mut analyzer = ProjectAnalyzer::new(config).unwrap();
         analyzer.build_graph();
 
         let cycles = analyzer.circular_imports();

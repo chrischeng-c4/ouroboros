@@ -261,7 +261,8 @@ impl Type {
         }
         match flattened.len() {
             0 => Type::Never,
-            1 => flattened.pop().unwrap(),
+            // SAFETY: We checked that len() == 1, so pop() will always return Some
+            1 => flattened.pop().expect("flattened vec has exactly one element"),
             _ => Type::Union(flattened),
         }
     }
