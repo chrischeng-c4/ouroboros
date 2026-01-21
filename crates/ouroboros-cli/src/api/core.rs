@@ -8,8 +8,19 @@ use std::fs;
 
 use super::codegen;
 use super::config::{find_pyproject, DbType};
-use super::fields::{parse_fields, FieldDef};
+use super::fields::{parse_fields, parse_fields_json, FieldDef};
 use super::CoreAction;
+
+/// Parse fields from either simple syntax or JSON syntax
+fn parse_fields_arg(fields: &Option<String>, fields_json: &Option<String>) -> Result<Vec<FieldDef>> {
+    if let Some(ref json) = fields_json {
+        parse_fields_json(json)
+    } else if let Some(ref simple) = fields {
+        parse_fields(simple)
+    } else {
+        Ok(Vec::new())
+    }
+}
 
 /// Arguments for `ob api core create`
 #[derive(Debug, Args)]
@@ -35,9 +46,13 @@ pub struct ModelArgs {
     #[arg(long)]
     pub db: Option<DbType>,
 
-    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api core service`
@@ -53,9 +68,13 @@ pub struct ServiceArgs {
     #[arg(long)]
     pub db: Option<DbType>,
 
-    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api core route`
@@ -72,9 +91,13 @@ pub struct RouteArgs {
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Field definitions for route generation
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api core endpoint`
@@ -108,9 +131,13 @@ pub struct SchemaArgs {
     #[arg(long, default_value = "both")]
     pub r#type: String,
 
-    /// Field definitions (e.g., "name:str,email:str,age:int?")
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Execute a core action
@@ -280,12 +307,8 @@ async fn model(args: ModelArgs) -> Result<()> {
     let models_path = module_dir.join("models.py");
     let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, true));
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        vec![]
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     let model_code = codegen::generate_model_code(&args.name, &fields, db_type);
 
@@ -318,12 +341,8 @@ async fn service(args: ServiceArgs) -> Result<()> {
     let services_path = module_dir.join("services.py");
     let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, true));
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        vec![]
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     let service_code = codegen::generate_service_code(&args.name, &fields, db_type);
 
@@ -353,16 +372,28 @@ async fn route(args: RouteArgs) -> Result<()> {
     }
 
     let routes_path = module_dir.join("routes.py");
-    if routes_path.exists() {
-        anyhow::bail!("Routes already exist for core/{}. Use 'ob api core endpoint' to add endpoints.", args.module);
+    let routes_exist = routes_path.exists();
+
+    // If routes already exist, just register to app (if specified)
+    if routes_exist {
+        if let Some(ref app_name) = args.app {
+            let app_path = project_root.join("apps").join(app_name).join("app.py");
+            if app_path.exists() {
+                codegen::register_router_in_app(&app_path, &args.module, true)?;
+                println!("Registered core/{} router in apps/{}/app.py", args.module, app_name);
+            } else {
+                println!("App '{}' not found. Create it first with: ob api app create {}", app_name, app_name);
+            }
+        } else {
+            println!("Routes already exist for core/{}.", args.module);
+            println!("  - To register in an app: ob api core route {} --app <app_name>", args.module);
+            println!("  - To add endpoints: ob api core endpoint {} <name>", args.module);
+        }
+        return Ok(());
     }
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        vec![]
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     // Use model name if provided, otherwise use module name (PascalCase)
     let model_name = args.model.unwrap_or_else(|| codegen::to_pascal_case(&args.module));
@@ -400,7 +431,7 @@ async fn route(args: RouteArgs) -> Result<()> {
         let app_path = project_root.join("apps").join(app).join("app.py");
         if app_path.exists() {
             codegen::register_router_in_app(&app_path, &args.module, true)?;
-            println!("  ✓ Registered in apps/{}/app.py", app);
+            println!("  Registered in apps/{}/app.py", app);
         } else {
             println!("\nAdd to apps/{}/app.py:", app);
             println!("  from core.{}.routes import router as {}_router", args.module, args.module);
@@ -527,12 +558,8 @@ async fn schema(args: SchemaArgs) -> Result<()> {
 
     let schemas_path = module_dir.join("schemas.py");
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        vec![]
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     let schema_code = codegen::generate_schema_code(&args.name, &fields);
 

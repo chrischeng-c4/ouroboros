@@ -8,8 +8,19 @@ use std::fs;
 
 use super::codegen;
 use super::config::{find_pyproject, DbType};
-use super::fields::{parse_fields, FieldDef};
+use super::fields::{parse_fields, parse_fields_json, FieldDef};
 use super::FeatAction;
+
+/// Parse fields from either simple syntax or JSON syntax
+fn parse_fields_arg(fields: &Option<String>, fields_json: &Option<String>) -> Result<Vec<FieldDef>> {
+    if let Some(ref json) = fields_json {
+        parse_fields_json(json)
+    } else if let Some(ref simple) = fields {
+        parse_fields(simple)
+    } else {
+        Ok(Vec::new())
+    }
+}
 
 /// Arguments for `ob api feat create`
 #[derive(Debug, Args)]
@@ -35,9 +46,14 @@ pub struct ModelArgs {
     #[arg(long)]
     pub db: Option<DbType>,
 
-    /// Field definitions (e.g., "title:str,completed:bool=false,priority:int?")
+    /// Field definitions - simple syntax (e.g., "title:str,done:bool=false")
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax with full PostgreSQL support
+    /// Example: '[{"name":"title","type":"str","max_length":255,"index":true}]'
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api feat service`
@@ -49,9 +65,13 @@ pub struct ServiceArgs {
     /// Name of the service to create
     pub name: String,
 
-    /// Field definitions for CRUD generation
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api feat route`
@@ -68,9 +88,13 @@ pub struct RouteArgs {
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Field definitions for route generation
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Arguments for `ob api feat endpoint`
@@ -104,9 +128,13 @@ pub struct SchemaArgs {
     #[arg(long, default_value = "both")]
     pub r#type: String,
 
-    /// Field definitions for schema generation
+    /// Field definitions - simple syntax
     #[arg(long)]
     pub fields: Option<String>,
+
+    /// Field definitions - JSON syntax
+    #[arg(long, conflicts_with = "fields")]
+    pub fields_json: Option<String>,
 }
 
 /// Execute a feat action
@@ -275,12 +303,8 @@ async fn model(args: ModelArgs) -> Result<()> {
     let models_path = module_dir.join("models.py");
     let db_type = args.db.unwrap_or_else(|| pyproject.ouroboros().get_db_for_module(&args.module, false));
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        Vec::new()
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     // Generate model code
     let model_code = if fields.is_empty() {
@@ -407,12 +431,8 @@ async fn service(args: ServiceArgs) -> Result<()> {
     let services_path = module_dir.join("services.py");
     let db_type = pyproject.ouroboros().get_db_for_module(&args.module, false);
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        Vec::new()
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     // Generate service code
     let service_code = if fields.is_empty() {
@@ -484,16 +504,28 @@ async fn route(args: RouteArgs) -> Result<()> {
     }
 
     let routes_path = module_dir.join("routes.py");
-    if routes_path.exists() {
-        anyhow::bail!("Routes already exist for features/{}. Use 'ob api feat endpoint' to add endpoints.", args.module);
+    let routes_exist = routes_path.exists();
+
+    // If routes already exist, just register to app (if specified)
+    if routes_exist {
+        if let Some(ref app_name) = args.app {
+            let app_path = project_root.join("apps").join(app_name).join("app.py");
+            if app_path.exists() {
+                codegen::register_router_in_app(&app_path, &args.module, false)?;
+                println!("Registered features/{} router in apps/{}/app.py", args.module, app_name);
+            } else {
+                println!("App '{}' not found. Create it first with: ob api app create {}", app_name, app_name);
+            }
+        } else {
+            println!("Routes already exist for features/{}.", args.module);
+            println!("  - To register in an app: ob api feat route {} --app <app_name>", args.module);
+            println!("  - To add endpoints: ob api feat endpoint {} <name>", args.module);
+        }
+        return Ok(());
     }
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        Vec::new()
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     // Get model name (default to PascalCase of module name)
     let model_name = args.model.clone().unwrap_or_else(|| to_pascal_case(&args.module));
@@ -662,12 +694,8 @@ async fn schema(args: SchemaArgs) -> Result<()> {
 
     let schemas_path = module_dir.join("schemas.py");
 
-    // Parse fields if provided
-    let fields: Vec<FieldDef> = if let Some(ref fields_str) = args.fields {
-        parse_fields(fields_str)?
-    } else {
-        Vec::new()
-    };
+    // Parse fields (simple or JSON syntax)
+    let fields = parse_fields_arg(&args.fields, &args.fields_json)?;
 
     // Generate schema code
     let schema_code = if fields.is_empty() {

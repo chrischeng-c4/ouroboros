@@ -24,10 +24,10 @@ pub async fn execute(action: GenerateAction) -> Result<()> {
         }
         GenerateAction::Route { module, app, core: is_core } => {
             if is_core {
-                let args = core::RouteArgs { module, app: Some(app), model: None, fields: None };
+                let args = core::RouteArgs { module, app: Some(app), model: None, fields: None, fields_json: None };
                 core::execute(super::CoreAction::Route(args)).await
             } else {
-                let args = feat::RouteArgs { module, app: Some(app), model: None, fields: None };
+                let args = feat::RouteArgs { module, app: Some(app), model: None, fields: None, fields_json: None };
                 feat::execute(super::FeatAction::Route(args)).await
             }
         }
