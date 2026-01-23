@@ -1,0 +1,27 @@
+[package]
+name = "ouroboros-agent-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core agent abstractions and execution engine for ouroboros-agent"
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+futures.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+
+# Shared utilities
+ouroboros-common = { path = "../ouroboros-common" }
+ouroboros-validation = { path = "../ouroboros-validation" }
+ouroboros-pyloop = { path = "../ouroboros-pyloop" }
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -69,11 +69,12 @@ impl CompressionAlgorithm {
 }
 
 /// Compression level
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CompressionLevel {
     /// Fastest compression (level 1)
     Fast,
     /// Default compression (level 6)
+    #[default]
     Default,
     /// Best compression (level 9)
     Best,
@@ -90,12 +91,6 @@ impl CompressionLevel {
             CompressionLevel::Best => 9,
             CompressionLevel::Custom(l) => *l,
         }
-    }
-}
-
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        CompressionLevel::Default
     }
 }
 

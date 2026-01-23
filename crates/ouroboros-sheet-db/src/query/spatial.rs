@@ -5,8 +5,8 @@
 //! - Cluster detection
 //! - Sparse region identification
 
-use crate::storage::{MortonKey, StoredCell};
-use crate::{Result, SheetDbError};
+use crate::storage::StoredCell;
+use crate::Result;
 use serde::{Deserialize, Serialize};
 
 /// Spatial query builder

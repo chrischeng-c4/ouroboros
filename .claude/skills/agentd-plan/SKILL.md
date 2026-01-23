@@ -47,23 +47,28 @@ AskUserQuestion with questions array:
 
 **Important**: Always use the AskUserQuestion tool for interactive clarification, not text-based questions.
 
-3. After user answers, write to `agentd/changes/<change-id>/clarifications.md`:
+3. After user answers, use the **create_clarifications MCP tool**:
 
-```markdown
----
-change: <change-id>
-date: YYYY-MM-DD
----
-
-# Clarifications
-
-## Q1: [Topic]
-- **Question**: [the question asked]
-- **Answer**: [user's answer]
-- **Rationale**: [why this choice]
+```json
+{
+  "change_id": "<change-id>",
+  "questions": [
+    {
+      "topic": "Short Label",
+      "question": "What is your preferred approach for X?",
+      "answer": "User's answer from AskUserQuestion",
+      "rationale": "Why this choice makes sense"
+    }
+  ]
+}
 ```
 
-4. Then run `agentd proposal` with the clarified context
+The tool will:
+- Create `agentd/changes/<change-id>/` directory if needed
+- Write `clarifications.md` with proper frontmatter
+- Return success message
+
+4. Then run `agentd plan` with the clarified context
 
 ### Skip clarification if
 - User explicitly says "skip" or uses `--skip-clarify`
@@ -86,7 +91,7 @@ Skip if change already exists.
 # New change (description required)
 /agentd:plan <change-id> "<description>"
 
-# Existing change (continue planning)
+# Existing change (description optional)
 /agentd:plan <change-id>
 ```
 
@@ -106,23 +111,88 @@ The skill determines the next action based on the `phase` field in `STATE.yaml`:
 
 | Phase | Action |
 |-------|--------|
-| No STATE.yaml | **Clarify** → write `clarifications.md` → run `agentd proposal` |
-| `proposed` | Run `agentd proposal` to continue planning cycle |
+| No STATE.yaml | **Clarify** → write `clarifications.md` → run `agentd plan` |
+| `proposed` | Run `agentd plan` to continue planning cycle |
 | `challenged` | ✅ Planning complete, suggest `/agentd:impl` |
 | `rejected` | ⛔ Rejected, suggest reviewing CHALLENGE.md |
 | Other phases | ℹ️ Beyond planning phase |
 
-**Note**: The `agentd proposal` command internally handles challenge analysis and auto-reproposal loops. It will iterate until the proposal is either APPROVED (phase → `challenged`) or REJECTED (phase → `rejected`).
+## After `agentd plan` completes
 
-## State transitions
+The proposal engine returns a result with:
+- `verdict`: APPROVED, NEEDS_REVISION, or REJECTED
+- `iteration_count`: Number of reproposal iterations completed
+- `has_only_minor_issues`: True if only LOW severity issues remain (or at most 1 MEDIUM)
+
+Use **AskUserQuestion** based on the verdict and context:
+
+### If verdict is APPROVED
 
 ```
-No STATE.yaml → [Clarify] → proposed → challenged  (APPROVED)
-                          ↓         ↗ (NEEDS_REVISION - auto-reproposal)
-                          → rejected (REJECTED)
+AskUserQuestion:
+  question: "Proposal approved! What would you like to do?"
+  header: "Next Action"
+  options:
+    - label: "Proceed to implementation (Recommended)"
+      description: "Run /agentd:impl to start implementing the change"
+    - label: "Open viewer"
+      description: "Review the approved plan in the UI viewer"
 ```
 
-## Next steps
+- **Proceed to implementation**: Suggest `/agentd:impl <change-id>`
+- **Open viewer**: Run `agentd view <change-id>`
 
-- **If challenged**: Run `/agentd:impl <change-id>` to implement
-- **If rejected**: Review `CHALLENGE.md` and fix fundamental issues manually
+### If verdict is NEEDS_REVISION
+
+The options depend on context:
+
+#### When `iteration_count >= planning_iterations` OR `has_only_minor_issues`:
+
+```
+AskUserQuestion:
+  question: "Reproposal complete. Minor issues remain - can proceed to implementation."
+  header: "Next Action"
+  options:
+    - label: "Proceed to implementation (Recommended)"
+      description: "Minor issues can be addressed during implementation"
+    - label: "Open viewer"
+      description: "Review the remaining issues before deciding"
+    - label: "Continue fixing"
+      description: "Run another reproposal cycle to address issues"
+```
+
+- **Proceed to implementation**: Suggest `/agentd:impl <change-id>`
+- **Open viewer**: Run `agentd view <change-id>`
+- **Continue fixing**: Run `agentd reproposal <change-id>` then `agentd challenge <change-id>`
+
+#### When significant issues remain (not minor):
+
+```
+AskUserQuestion:
+  question: "Issues found. How would you like to proceed?"
+  header: "Next Action"
+  options:
+    - label: "Open viewer (Recommended)"
+      description: "Review the issues before deciding"
+    - label: "Continue fixing"
+      description: "Run another reproposal cycle"
+    - label: "Proceed anyway"
+      description: "Skip to implementation despite issues"
+```
+
+- **Open viewer**: Run `agentd view <change-id>`
+- **Continue fixing**: Run `agentd reproposal <change-id>` then `agentd challenge <change-id>`
+- **Proceed anyway**: Suggest `/agentd:impl <change-id>`
+
+### If verdict is REJECTED
+
+Display rejection message and suggest reviewing the review block in proposal.md:
+
+```
+The proposal was rejected due to fundamental issues.
+Please review: agentd/changes/<change-id>/proposal.md
+
+Consider:
+- Revising the description and requirements
+- Starting a new proposal with a different approach
+```

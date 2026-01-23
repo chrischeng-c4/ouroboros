@@ -7,6 +7,7 @@ Features:
     - HTTP Client
     - Task Queue
     - KV Store
+    - Agent Framework (LLM-powered agents with tool calling)
     - All with Rust backend for maximum performance
 
 Quick Start:
@@ -36,6 +37,12 @@ from . import mongodb
 from . import http
 from . import postgres
 from . import qc
+
+# Import Agent module if available (feature-gated)
+try:
+    from . import agent
+except ImportError:
+    agent = None  # Agent feature not enabled
 
 # Import KV module if available (feature-gated)
 try:
@@ -82,6 +89,7 @@ __all__ = [
     "postgres",
     "test",
     "kv",
+    "agent",
     # Core Types
     "ObjectId",
     # Connection

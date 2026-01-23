@@ -233,6 +233,24 @@ pub mod pydantic_validation;
 /// (Mermaid, JSON, Markdown) for migration history.
 pub mod history_vis;
 
+/// Parallel bulk operations using Rayon.
+///
+/// High-performance bulk insert, update, and delete operations that
+/// leverage Rayon for parallel execution across batches.
+pub mod bulk;
+
+/// Connection pool metrics and monitoring.
+///
+/// Provides metrics collection, health checks, and export functionality
+/// for monitoring PostgreSQL connection pool performance.
+pub mod metrics;
+
+/// Back-reference loading for relationships.
+///
+/// Enables loading related records from the "many" side of a relationship
+/// when you have a record from the "one" side (e.g., User -> Posts).
+pub mod backref;
+
 pub use connection::{Connection, PoolConfig, RetryConfig};
 pub use query::{
     QueryBuilder, Operator, OrderDirection, JoinType, JoinCondition,
@@ -270,5 +288,14 @@ pub use history_vis::{
     MigrationTree, MigrationNode, AsciiRenderer, AsciiConfig,
     HistoryExporter, ExportFormat, HistoryVisualizer,
 };
+
+// Bulk operations re-exports
+pub use bulk::{BulkConfig, BulkResult, BulkExecutor};
+
+// Pool metrics re-exports
+pub use metrics::{PoolMetrics, HealthStatus, HealthCheck, LatencyStats, MetricsCollector};
+
+// Back-reference re-exports
+pub use backref::{BackRefConfig, BackRefLoader, EagerLoader, EagerRelation};
 
 pub use ouroboros_common::{DataBridgeError, Result};

@@ -1,0 +1,37 @@
+[package]
+name = "ouroboros-talos-dev-server"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace dependencies
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# HTTP server
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# WebSocket
+tokio-tungstenite = { workspace = true }
+
+# File watching
+notify = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+futures-util = { workspace = true }
+
+# Talos internal crates
+ouroboros-talos-bundler = { path = "../ouroboros-talos-bundler" }
+
+[dev-dependencies]

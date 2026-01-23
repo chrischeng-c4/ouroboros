@@ -52,7 +52,7 @@ pub enum ExtractedValue {
     /// Array of values (ARRAY)
     Array(Vec<ExtractedValue>),
     /// Decimal/Numeric (NUMERIC, DECIMAL)
-    Decimal(String), // Store as string to avoid precision loss
+    Decimal(Decimal),
 }
 
 impl ExtractedValue {
@@ -428,9 +428,8 @@ impl ExtractedValue {
                 }
             }
             ExtractedValue::Decimal(v) => {
-                // For now, bind decimals as strings
-                // TODO: Enable rust_decimal feature in sqlx for native decimal support
-                arguments.add(v.as_str())
+                // Use native rust_decimal binding for precision
+                arguments.add(*v)
                     .map_err(|e| DataBridgeError::Query(format!("Failed to bind DECIMAL: {}", e)))?;
             }
         }
@@ -591,7 +590,7 @@ pub fn row_to_extracted(row: &PgRow) -> Result<HashMap<String, ExtractedValue>> 
                 // Try extracting as rust_decimal::Decimal first (native NUMERIC support)
                 if let Ok(v) = row.try_get::<Option<Decimal>, _>(idx) {
                     match v {
-                        Some(val) => ExtractedValue::Decimal(val.to_string()),
+                        Some(val) => ExtractedValue::Decimal(val),
                         None => ExtractedValue::Null,
                     }
                 } else if let Ok(v) = row.try_get::<Option<f64>, _>(idx) {
@@ -601,9 +600,16 @@ pub fn row_to_extracted(row: &PgRow) -> Result<HashMap<String, ExtractedValue>> 
                         None => ExtractedValue::Null,
                     }
                 } else if let Ok(v) = row.try_get::<Option<String>, _>(idx) {
-                    // Fallback to String
+                    // Fallback to String - parse to Decimal
                     match v {
-                        Some(val) => ExtractedValue::Decimal(val),
+                        Some(val) => {
+                            let dec = val.parse::<Decimal>().map_err(|e| {
+                                DataBridgeError::Query(format!(
+                                    "Failed to parse DECIMAL from string '{}': {}", val, e
+                                ))
+                            })?;
+                            ExtractedValue::Decimal(dec)
+                        }
                         None => ExtractedValue::Null,
                     }
                 } else {
@@ -720,14 +726,15 @@ fn extracted_to_json(value: &ExtractedValue) -> Result<JsonValue> {
                 .collect::<Result<Vec<_>>>()?;
             JsonValue::Array(json_values)
         }
-        ExtractedValue::Decimal(v) => JsonValue::String(v.clone()),
+        ExtractedValue::Decimal(v) => JsonValue::String(v.to_string()),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use std::str::FromStr;
+
 
     #[test]
     #[allow(clippy::approx_constant)] // 3.14 is just a test value, not meant to be PI
@@ -744,7 +751,7 @@ mod tests {
         assert_eq!(ExtractedValue::Uuid(Uuid::nil()).pg_type_name(), "UUID");
         assert_eq!(ExtractedValue::Json(JsonValue::Null).pg_type_name(), "JSONB");
         assert_eq!(ExtractedValue::Array(vec![]).pg_type_name(), "ARRAY");
-        assert_eq!(ExtractedValue::Decimal("123.45".to_string()).pg_type_name(), "NUMERIC");
+        assert_eq!(ExtractedValue::Decimal(Decimal::from_str("123.45").unwrap()).pg_type_name(), "NUMERIC");
     }
 
     #[test]
@@ -1156,7 +1163,7 @@ mod tests {
             )),
             ExtractedValue::Json(serde_json::json!(null)),
             ExtractedValue::Array(vec![]),
-            ExtractedValue::Decimal("123.45".to_string()),
+            ExtractedValue::Decimal(Decimal::from_str("123.45").unwrap()),
         ];
 
         // Verify all types have non-empty type names
@@ -1251,8 +1258,8 @@ mod tests {
         );
 
         // Decimal
-        assert_eq!(ExtractedValue::Decimal("0".to_string()).pg_type_name(), "NUMERIC");
-        assert_eq!(ExtractedValue::Decimal("123.45".to_string()).pg_type_name(), "NUMERIC");
+        assert_eq!(ExtractedValue::Decimal(Decimal::from_str("0").unwrap()).pg_type_name(), "NUMERIC");
+        assert_eq!(ExtractedValue::Decimal(Decimal::from_str("123.45").unwrap()).pg_type_name(), "NUMERIC");
     }
 
     #[test]
@@ -1280,22 +1287,22 @@ mod tests {
         use serde_json::json;
 
         // Test basic decimal
-        let decimal = ExtractedValue::Decimal("123.45".to_string());
+        let decimal = ExtractedValue::Decimal(Decimal::from_str("123.45").unwrap());
         assert_eq!(decimal.pg_type_name(), "NUMERIC");
         assert!(decimal.bind_to_arguments(&mut PgArguments::default()).is_ok());
         assert_eq!(extracted_to_json(&decimal).unwrap(), json!("123.45"));
 
         // Test large decimal
-        let large_decimal = ExtractedValue::Decimal("999999999999999.999999".to_string());
+        let large_decimal = ExtractedValue::Decimal(Decimal::from_str("999999999999999.999999").unwrap());
         assert!(large_decimal.bind_to_arguments(&mut PgArguments::default()).is_ok());
         assert_eq!(extracted_to_json(&large_decimal).unwrap(), json!("999999999999999.999999"));
 
         // Test negative decimal
-        let negative_decimal = ExtractedValue::Decimal("-123.45".to_string());
+        let negative_decimal = ExtractedValue::Decimal(Decimal::from_str("-123.45").unwrap());
         assert_eq!(extracted_to_json(&negative_decimal).unwrap(), json!("-123.45"));
 
         // Test zero decimal
-        let zero_decimal = ExtractedValue::Decimal("0.00".to_string());
+        let zero_decimal = ExtractedValue::Decimal(Decimal::from_str("0.00").unwrap());
         assert_eq!(extracted_to_json(&zero_decimal).unwrap(), json!("0.00"));
     }
 
@@ -1675,7 +1682,7 @@ mod tests {
         let array = ExtractedValue::Array(vec![ExtractedValue::Int(1)]);
         assert!(matches!(array, ExtractedValue::Array(_)));
 
-        let decimal = ExtractedValue::Decimal("123.45".to_string());
+        let decimal = ExtractedValue::Decimal(Decimal::from_str("123.45").unwrap());
         assert!(matches!(decimal, ExtractedValue::Decimal(_)));
 
         // Test that all variants can be bound
@@ -1851,7 +1858,7 @@ mod tests {
         );
         assert_eq!(ExtractedValue::Json(serde_json::json!(null)).pg_type_name(), "JSONB");
         assert_eq!(ExtractedValue::Array(vec![]).pg_type_name(), "ARRAY");
-        assert_eq!(ExtractedValue::Decimal("1.0".to_string()).pg_type_name(), "NUMERIC");
+        assert_eq!(ExtractedValue::Decimal(Decimal::from_str("1.0").unwrap()).pg_type_name(), "NUMERIC");
 
         // Verify all type names are uppercase
         let all_types = vec![
@@ -1880,7 +1887,7 @@ mod tests {
             )),
             ExtractedValue::Json(serde_json::json!(null)),
             ExtractedValue::Array(vec![]),
-            ExtractedValue::Decimal("0".to_string()),
+            ExtractedValue::Decimal(Decimal::from_str("0").unwrap()),
         ];
 
         for extracted_value in all_types {

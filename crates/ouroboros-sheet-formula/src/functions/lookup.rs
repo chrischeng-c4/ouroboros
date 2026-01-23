@@ -41,18 +41,11 @@ fn match_less_than(target: &CellValue, array: &[CellValue]) -> CellValue {
     let mut best_idx = None;
     
     for (i, value) in array.iter().enumerate() {
-        match compare_values(value, target) {
-            Some(ordering) => {
-                if ordering <= 0 { // value <= target
-                    best_idx = Some(i + 1);
-                } else {
-                    // value > target. Since sorted ascending, we can stop.
-                    // But Excel might strictly require sorting. If not sorted, result is undefined.
-                    // We'll assume best effort or strict undefined.
-                    // Let's just update best_idx.
-                }
-            },
-            None => {} // Skip mismatching types?
+        if let Some(ordering) = compare_values(value, target) {
+            if ordering <= 0 { // value <= target
+                best_idx = Some(i + 1);
+            }
+            // value > target: Since sorted ascending, we could stop but Excel behavior varies.
         }
     }
     
@@ -69,13 +62,10 @@ fn match_greater_than(target: &CellValue, array: &[CellValue]) -> CellValue {
     let mut best_idx = None;
     
     for (i, value) in array.iter().enumerate() {
-        match compare_values(value, target) {
-            Some(ordering) => {
-                if ordering >= 0 { // value >= target
-                    best_idx = Some(i + 1);
-                }
-            },
-            None => {}
+        if let Some(ordering) = compare_values(value, target) {
+            if ordering >= 0 { // value >= target
+                best_idx = Some(i + 1);
+            }
         }
     }
     

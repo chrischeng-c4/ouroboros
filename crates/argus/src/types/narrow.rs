@@ -389,6 +389,7 @@ pub fn negate_condition(condition: &NarrowingCondition) -> NarrowingCondition {
 }
 
 /// Represents a match case pattern for type narrowing (PEP 634)
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum MatchPattern {
     /// Literal pattern: case 42, case "hello"
@@ -412,6 +413,7 @@ pub enum MatchPattern {
 }
 
 /// Parse a match case pattern and derive narrowing condition
+#[allow(dead_code)]
 pub fn parse_match_pattern(
     source: &str,
     subject_var: &str,
@@ -492,6 +494,7 @@ pub fn parse_match_pattern(
 }
 
 /// Parse a match statement and get the subject variable
+#[allow(dead_code)]
 pub fn get_match_subject(source: &str, node: &tree_sitter::Node) -> Option<String> {
     if node.kind() != "match_statement" {
         return None;
@@ -510,6 +513,7 @@ pub fn get_match_subject(source: &str, node: &tree_sitter::Node) -> Option<Strin
 /// Parse an assert statement and extract the narrowing condition
 /// e.g., `assert isinstance(x, int)` -> IsInstance { var_name: "x", types: [int] }
 /// e.g., `assert x is not None` -> IsNotNone { var_name: "x" }
+#[allow(dead_code)]
 pub fn parse_assert(source: &str, node: &tree_sitter::Node) -> NarrowingCondition {
     // assert statements have the condition as the first child
     if node.kind() != "assert_statement" {

@@ -3,20 +3,15 @@ use serde::{Deserialize, Serialize};
 use super::selection::SelectionRange;
 
 /// Clipboard mode determines what operation was last performed
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ClipboardMode {
     /// Clipboard is empty
+    #[default]
     Empty,
     /// Content was copied
     Copy,
     /// Content was cut
     Cut,
-}
-
-impl Default for ClipboardMode {
-    fn default() -> Self {
-        Self::Empty
-    }
 }
 
 /// Represents clipboard data

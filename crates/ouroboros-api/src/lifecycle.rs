@@ -380,4 +380,191 @@ mod tests {
         assert_eq!(counter.load(Ordering::SeqCst), 1);
         assert!(lifecycle.is_started().await);
     }
+
+    // ========================================================================
+    // Additional Tests for Edge Cases
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_startup_execution_order() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let mut lifecycle = LifecycleManager::new();
+
+        // Register hooks in specific order
+        let o = order.clone();
+        lifecycle.on_startup_named("first", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("first");
+                Ok(())
+            }
+        });
+
+        let o = order.clone();
+        lifecycle.on_startup_named("second", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("second");
+                Ok(())
+            }
+        });
+
+        let o = order.clone();
+        lifecycle.on_startup_named("third", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("third");
+                Ok(())
+            }
+        });
+
+        lifecycle.startup().await.unwrap();
+
+        let result = order.lock().await;
+        assert_eq!(*result, vec!["first", "second", "third"]);
+    }
+
+    #[tokio::test]
+    async fn test_startup_stops_on_first_error() {
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let mut lifecycle = LifecycleManager::new();
+
+        let o = order.clone();
+        lifecycle.on_startup_named("succeeds", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("succeeds");
+                Ok(())
+            }
+        });
+
+        let o = order.clone();
+        lifecycle.on_startup_named("fails", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("fails");
+                Err("Error".to_string())
+            }
+        });
+
+        let o = order.clone();
+        lifecycle.on_startup_named("never_runs", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("never_runs");
+                Ok(())
+            }
+        });
+
+        let result = lifecycle.startup().await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().hook_name, Some("fails".to_string()));
+
+        let executed = order.lock().await;
+        assert_eq!(*executed, vec!["succeeds", "fails"]);
+        assert!(!executed.contains(&"never_runs"));
+    }
+
+    #[tokio::test]
+    async fn test_empty_lifecycle_manager() {
+        let mut lifecycle = LifecycleManager::new();
+
+        // Empty startup should succeed
+        let result = lifecycle.startup().await;
+        assert!(result.is_ok());
+        assert!(lifecycle.is_started());
+
+        // Empty shutdown should not panic
+        lifecycle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_hook_counts() {
+        let mut lifecycle = LifecycleManager::new();
+
+        assert_eq!(lifecycle.startup_hook_count(), 0);
+        assert_eq!(lifecycle.shutdown_hook_count(), 0);
+
+        lifecycle.on_startup(|| async { Ok(()) });
+        lifecycle.on_startup(|| async { Ok(()) });
+        lifecycle.on_shutdown(|| async {});
+
+        assert_eq!(lifecycle.startup_hook_count(), 2);
+        assert_eq!(lifecycle.shutdown_hook_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_startup_error_display() {
+        let err = StartupError {
+            hook_name: Some("database".to_string()),
+            message: "Connection refused".to_string(),
+        };
+
+        let display = format!("{}", err);
+        assert!(display.contains("database"));
+        assert!(display.contains("Connection refused"));
+    }
+
+    #[tokio::test]
+    async fn test_startup_error_without_name() {
+        let err = StartupError {
+            hook_name: None,
+            message: "Unknown error".to_string(),
+        };
+
+        let display = format!("{}", err);
+        assert!(display.contains("Unknown error"));
+        assert!(!display.contains("''")); // Should not show empty quotes
+    }
+
+    #[tokio::test]
+    async fn test_lifecycle_debug_format() {
+        let mut lifecycle = LifecycleManager::new();
+        lifecycle.on_startup(|| async { Ok(()) });
+        lifecycle.on_shutdown(|| async {});
+
+        let debug_str = format!("{:?}", lifecycle);
+        assert!(debug_str.contains("LifecycleManager"));
+        assert!(debug_str.contains("startup_hooks"));
+        assert!(debug_str.contains("1")); // 1 startup hook
+    }
+
+    #[tokio::test]
+    async fn test_shared_lifecycle_debug_format() {
+        let lifecycle = SharedLifecycleManager::new();
+        let debug_str = format!("{:?}", lifecycle);
+        assert!(debug_str.contains("SharedLifecycleManager"));
+    }
+
+    #[tokio::test]
+    async fn test_all_shutdown_hooks_run_even_with_slow_hook() {
+        use std::time::Duration;
+
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let mut lifecycle = LifecycleManager::new();
+
+        let o = order.clone();
+        lifecycle.on_shutdown_named("slow", move || {
+            let o = o.clone();
+            async move {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                o.lock().await.push("slow");
+            }
+        });
+
+        let o = order.clone();
+        lifecycle.on_shutdown_named("fast", move || {
+            let o = o.clone();
+            async move {
+                o.lock().await.push("fast");
+            }
+        });
+
+        lifecycle.shutdown().await;
+
+        let result = order.lock().await;
+        // Both should run (reverse order: fast then slow)
+        assert_eq!(result.len(), 2);
+        assert_eq!(*result, vec!["fast", "slow"]);
+    }
 }

@@ -14,10 +14,6 @@ pub mod validation;
 
 // Re-export for external use
 pub use document::RustDocument;
-pub use validation::{
-    ValidatedCollectionName, ValidatedFieldName, ObjectIdParser,
-    BsonConstraints, BsonTypeDescriptor,
-};
 
 /// Register the mongodb module
 pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {

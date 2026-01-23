@@ -11,37 +11,27 @@ use std::time::Duration;
 // ============================================================================
 
 /// Address family
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AddressFamily {
     /// IPv4
     Inet,
     /// IPv6
     Inet6,
     /// Any
+    #[default]
     Unspec,
 }
 
-impl Default for AddressFamily {
-    fn default() -> Self {
-        AddressFamily::Unspec
-    }
-}
-
 /// Socket type
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SocketType {
     /// Stream socket (TCP)
     Stream,
     /// Datagram socket (UDP)
     Dgram,
     /// Any
+    #[default]
     Any,
-}
-
-impl Default for SocketType {
-    fn default() -> Self {
-        SocketType::Any
-    }
 }
 
 /// Address info result
@@ -206,7 +196,7 @@ pub async fn getaddrinfo(
         }
     })
     .await
-    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+    .map_err(io::Error::other)?
 }
 
 /// Async getaddrinfo with timeout
@@ -239,7 +229,7 @@ pub async fn getnameinfo(sockaddr: SocketAddr) -> io::Result<NameInfo> {
         })
     })
     .await
-    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+    .map_err(io::Error::other)?
 }
 
 /// Simple hostname resolution

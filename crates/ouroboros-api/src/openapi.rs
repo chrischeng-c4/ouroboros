@@ -568,7 +568,28 @@ pub fn type_descriptor_to_schema(desc: &TypeDescriptor) -> Schema {
                 ..Default::default()
             }
         }
+        // BSON types (always handle them, even if bson feature not enabled in ouroboros-api)
+        // These may be present if ouroboros-validation is built with bson feature
+        #[cfg(feature = "bson")]
+        TypeDescriptor::ObjectId => Schema::string()
+            .format("objectid")
+            .description("MongoDB ObjectId (24-character hex string)"),
+        #[cfg(feature = "bson")]
+        TypeDescriptor::BsonDateTime => Schema::string()
+            .format("date-time")
+            .description("BSON DateTime (ISO 8601 UTC timestamp)"),
+        #[cfg(feature = "bson")]
+        TypeDescriptor::BsonDecimal128 => Schema::string()
+            .format("decimal128")
+            .description("BSON Decimal128 (high-precision decimal)"),
+        #[cfg(feature = "bson")]
+        TypeDescriptor::BsonBinary => Schema::string()
+            .format("binary")
+            .description("BSON Binary data with subtype"),
         TypeDescriptor::Any => Schema::default(),
+        // Catch-all for any other variants (e.g., BSON types when bson feature not enabled here)
+        #[allow(unreachable_patterns)]
+        _ => Schema::default(),
     }
 }
 

@@ -35,6 +35,7 @@ ouroboros-common = { path = "../ouroboros-common", features = ["postgres-errors"
 
 # Parallel processing
 rayon = "1.10"
+num_cpus = "1.16"
 
 # Tracing
 tracing = { workspace = true }

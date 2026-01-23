@@ -1,0 +1,28 @@
+[package]
+name = "ouroboros-agent-tools"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Tool registration and execution system for ouroboros-agent"
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+futures.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+dashmap.workspace = true
+once_cell.workspace = true
+
+# Agent core types
+ouroboros-agent-core = { path = "../ouroboros-agent-core" }
+ouroboros-validation = { path = "../ouroboros-validation" }
+
+[dev-dependencies]
+tokio-test = "0.4"

@@ -16,6 +16,10 @@ observability = [
     "dep:opentelemetry_sdk",
     "dep:opentelemetry-otlp"
 ]
+# BSON support for MongoDB types (ObjectId, BsonDateTime, etc.)
+bson = ["ouroboros-validation/bson"]
+# Development server with hot reload support
+dev = ["dep:notify"]
 
 [dependencies]
 # Core
@@ -83,6 +87,9 @@ sha1 = "0.10"  # For WebSocket handshake
 
 # Python integration
 pyo3 = { workspace = true }
+
+# File watching for hot reload (optional, behind "dev" feature)
+notify = { version = "7", optional = true }
 
 # Internal
 ouroboros-common = { path = "../ouroboros-common" }

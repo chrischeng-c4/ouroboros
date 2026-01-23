@@ -21,6 +21,16 @@ members = [
     "crates/ouroboros-sheet-history",
     "crates/ouroboros-sheet-server",
     "crates/ouroboros-sheet-wasm",
+    "crates/ouroboros-agent-core",
+    "crates/ouroboros-agent-llm",
+    "crates/ouroboros-agent-tools",
+    "crates/ouroboros-talos",
+    "crates/ouroboros-talos-asset",
+    "crates/ouroboros-talos-bundler",
+    "crates/ouroboros-talos-dev-server",
+    "crates/ouroboros-talos-pkg-manager",
+    "crates/ouroboros-talos-resolver",
+    "crates/ouroboros-talos-transform",
 ]
 resolver = "2"
 
@@ -33,7 +43,8 @@ repository = "https://github.com/chrischeng-c4/ouroboros"
 
 [workspace.dependencies]
 # Python bindings (upgraded to 0.24 for RUSTSEC-2025-0020 fix)
-pyo3 = { version = "0.24", features = ["extension-module", "abi3-py312"] }
+# NOTE: Do NOT add "extension-module" here - it should only be in the final Python extension crate
+pyo3 = { version = "0.24", features = ["abi3-py312"] }
 pyo3-async-runtimes = { version = "0.24", features = ["tokio-runtime"] }
 
 # Async runtime
@@ -82,7 +93,12 @@ tracing-subscriber = "0.3"
 regex = "1.11"
 rayon = "1.10"
 walkdir = "2.5"
+petgraph = "0.6"
+notify = "6.1"
+semver = "1.0"
+image = "0.25"
 jwalk = "0.8"
+node-resolve = "2.2"
 parking_lot = "0.12"
 rust_decimal = { version = "1.36", features = ["serde"] }
 
@@ -100,6 +116,9 @@ async-nats = "0.38"
 deadpool-redis = "0.18"
 cron = "0.12"
 tokio-util = { version = "0.7", features = ["rt"] }
+
+# LLM providers (for ouroboros-agent-llm crate)
+async-openai = "0.27"
 
 [profile.release]
 opt-level = 3

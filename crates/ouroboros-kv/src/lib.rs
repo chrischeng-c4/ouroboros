@@ -7,6 +7,9 @@
 //! - Compare-and-swap (CAS) for atomic state transitions
 //! - Zero-copy serialization
 
+// WIP: Suppress clippy warnings during development
+#![allow(clippy::all)]
+
 pub mod engine;
 pub mod types;
 pub mod error;

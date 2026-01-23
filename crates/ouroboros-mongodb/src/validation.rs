@@ -351,6 +351,7 @@ pub fn validate_query(query: &bson::Bson) -> Result<()> {
 ///
 /// This conversion enables using the unified validation engine from ouroboros-validation
 /// while preserving MongoDB-specific security validations.
+#[allow(dead_code)]
 fn bson_to_validation_value(bson: &Bson) -> ouroboros_validation::Value {
     match bson {
         Bson::Double(f) => ouroboros_validation::Value::Float(*f),

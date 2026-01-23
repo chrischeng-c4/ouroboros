@@ -417,7 +417,7 @@ impl DependencyResolver {
         })
     }
 
-    /// Get a dependency as Arc<T> without cloning
+    /// Get a dependency as `Arc<T>` without cloning
     pub fn resolve_arc<T: Any + Send + Sync>(&self, id: &str) -> ApiResult<Arc<T>> {
         let cached = self.get_cached(id).ok_or_else(|| {
             ApiError::Internal(format!("Dependency '{}' not resolved", id))

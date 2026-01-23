@@ -275,6 +275,7 @@ impl AnalysisResult {
 /// Incremental type analyzer.
 pub struct IncrementalAnalyzer {
     /// Configuration
+    #[allow(dead_code)]
     config: IncrementalConfig,
     /// Change tracker
     change_tracker: ChangeTracker,

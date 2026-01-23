@@ -10,11 +10,21 @@ description = "Unified CLI for ouroboros - ob command"
 name = "ob"
 path = "src/main.rs"
 
+[features]
+default = ["dev"]
+dev = ["ouroboros-api/dev"]
+
 [dependencies]
+chrono = "0.4"
 clap.workspace = true
+dialoguer = { version = "0.11", features = ["completion"] }
 tokio.workspace = true
 anyhow.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+toml = "0.8"
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # PyO3 for embedding Python (NOT using workspace - need to link against libpython)
 # Workspace pyo3 has extension-module which prevents linking, but we need to embed Python
@@ -23,3 +33,6 @@ pyo3 = { version = "0.24", features = ["auto-initialize"] }
 # Internal crates
 ouroboros-qc = { path = "../ouroboros-qc" }
 argus = { path = "../argus" }
+ouroboros-postgres = { path = "../ouroboros-postgres" }
+ouroboros-api = { path = "../ouroboros-api", features = ["dev"] }
+ouroboros-pyloop = { path = "../ouroboros-pyloop" }

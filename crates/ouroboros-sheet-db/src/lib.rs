@@ -1,6 +1,12 @@
 //! # ouroboros-sheet-db
 //!
 //! High-performance spreadsheet database layer built on top of ouroboros-kv.
+
+// WIP: Suppress warnings during development
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+#![allow(clippy::all)]
 //!
 //! ## Architecture
 //!

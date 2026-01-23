@@ -1373,7 +1373,7 @@ fn extracted_value_to_json(value: &ExtractedValue) -> Result<JsonValue> {
                 .collect::<Result<Vec<_>>>()?;
             JsonValue::Array(json_values)
         }
-        ExtractedValue::Decimal(v) => JsonValue::String(v.clone()),
+        ExtractedValue::Decimal(v) => JsonValue::String(v.to_string()),
     })
 }
 

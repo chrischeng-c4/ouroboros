@@ -56,6 +56,7 @@ fn dirs_cache_dir() -> Option<PathBuf> {
 }
 
 /// Cache entry metadata
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct CacheEntry {
     /// When this entry was last updated

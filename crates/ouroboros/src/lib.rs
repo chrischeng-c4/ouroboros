@@ -69,6 +69,9 @@ mod tasks;
 #[cfg(feature = "pyloop")]
 mod pyloop;
 
+#[cfg(feature = "agent")]
+mod agent;
+
 /// ouroboros Python module
 #[pymodule]
 fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -148,6 +151,14 @@ fn ouroboros(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         let pyloop_module = PyModule::new(py, "_pyloop")?;
         pyloop::register_module(&pyloop_module)?;
         m.add_submodule(&pyloop_module)?;
+    }
+
+    // Add Agent module if enabled
+    #[cfg(feature = "agent")]
+    {
+        let agent_module = PyModule::new(py, "agent")?;
+        agent::register_module(&agent_module)?;
+        m.add_submodule(&agent_module)?;
     }
 
     Ok(())

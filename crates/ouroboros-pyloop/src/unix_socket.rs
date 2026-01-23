@@ -328,7 +328,7 @@ impl UnixStreamReader {
     /// Check if at EOF
     pub async fn at_eof(&self) -> bool {
         // Try to peek; if 0 bytes, we're at EOF
-        let transport = self.transport.lock().await;
+        let _transport = self.transport.lock().await;
         // Can't easily implement without peek, return false
         false
     }
@@ -403,23 +403,18 @@ where
     tokio::spawn(async move {
         // We need to re-bind since we moved server
         if let Ok(listener) = UnixListener::bind(&listener_path) {
-            loop {
-                match listener.accept().await {
-                    Ok((stream, _addr)) => {
-                        let transport = UnixTransport::from_stream(stream);
-                        let transport = Arc::new(tokio::sync::Mutex::new(transport));
-                        let reader = UnixStreamReader {
-                            transport: Arc::clone(&transport),
-                        };
-                        let writer = UnixStreamWriter { transport };
+            while let Ok((stream, _addr)) = listener.accept().await {
+                let transport = UnixTransport::from_stream(stream);
+                let transport = Arc::new(tokio::sync::Mutex::new(transport));
+                let reader = UnixStreamReader {
+                    transport: Arc::clone(&transport),
+                };
+                let writer = UnixStreamWriter { transport };
 
-                        let cb = client_connected_cb.clone();
-                        tokio::spawn(async move {
-                            cb(reader, writer).await;
-                        });
-                    }
-                    Err(_) => break,
-                }
+                let cb = client_connected_cb.clone();
+                tokio::spawn(async move {
+                    cb(reader, writer).await;
+                });
             }
         }
     });

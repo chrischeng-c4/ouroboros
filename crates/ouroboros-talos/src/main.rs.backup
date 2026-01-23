@@ -1,0 +1,164 @@
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+#[command(
+    name = "talos",
+    version,
+    about = "Ouroboros-Talos: Rust-based build tool for modern web applications",
+    long_about = None
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Initialize a new project
+    Init {
+        /// Project name
+        name: Option<String>,
+    },
+
+    /// Install dependencies from package.json
+    Install {
+        /// Specific packages to install
+        packages: Vec<String>,
+    },
+
+    /// Add a new dependency
+    Add {
+        /// Package to add
+        package: String,
+
+        /// Add as dev dependency
+        #[arg(short, long)]
+        dev: bool,
+    },
+
+    /// Remove a dependency
+    Remove {
+        /// Package to remove
+        package: String,
+    },
+
+    /// Update dependencies
+    Update {
+        /// Specific package to update
+        package: Option<String>,
+    },
+
+    /// Start development server with HMR
+    Dev {
+        /// Port to run on
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Host to bind to
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+
+    /// Build for production
+    Build {
+        /// Watch mode
+        #[arg(short, long)]
+        watch: bool,
+
+        /// Output directory
+        #[arg(short, long, default_value = "dist")]
+        output: String,
+    },
+
+    /// Type check TypeScript files
+    Check,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .with_level(true)
+        .init();
+
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::Init { name } => {
+            let project_name = name.unwrap_or_else(|| "my-app".to_string());
+            tracing::info!("Initializing project: {}", project_name);
+            println!("🚀 Initializing project: {}", project_name);
+            println!("📦 This feature is under development");
+            Ok(())
+        }
+
+        Commands::Install { packages } => {
+            if packages.is_empty() {
+                tracing::info!("Installing dependencies from package.json");
+                println!("📦 Installing dependencies...");
+            } else {
+                tracing::info!("Installing packages: {:?}", packages);
+                println!("📦 Installing: {}", packages.join(", "));
+            }
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Add { package, dev } => {
+            tracing::info!("Adding package: {} (dev: {})", package, dev);
+            println!("➕ Adding package: {}", package);
+            if dev {
+                println!("   (as dev dependency)");
+            }
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Remove { package } => {
+            tracing::info!("Removing package: {}", package);
+            println!("➖ Removing package: {}", package);
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Update { package } => {
+            if let Some(pkg) = package {
+                tracing::info!("Updating package: {}", pkg);
+                println!("🔄 Updating package: {}", pkg);
+            } else {
+                tracing::info!("Updating all dependencies");
+                println!("🔄 Updating all dependencies...");
+            }
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Dev { port, host } => {
+            tracing::info!("Starting dev server on {}:{}", host, port);
+            println!("🚀 Starting development server...");
+            println!("   Local: http://{}:{}", host, port);
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Build { watch, output } => {
+            tracing::info!("Building for production (output: {}, watch: {})", output, watch);
+            println!("🔨 Building for production...");
+            println!("   Output: {}", output);
+            if watch {
+                println!("   Watch mode enabled");
+            }
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+
+        Commands::Check => {
+            tracing::info!("Type checking TypeScript files");
+            println!("🔍 Type checking...");
+            println!("⚠️  This feature is under development");
+            Ok(())
+        }
+    }
+}

@@ -555,6 +555,7 @@ impl Sheet {
         let num_rows = (end_row - start_row + 1) as usize;
 
         // Collect row data: (original_row_index, sort_value, all cells in row)
+        #[allow(clippy::type_complexity)]
         let mut row_data: Vec<(u32, Option<CellValue>, Vec<(u32, Cell)>)> = Vec::with_capacity(num_rows);
 
         for row in start_row..=end_row {
@@ -1157,8 +1158,8 @@ pub fn parse_cell_input(input: &str) -> CellContent {
     }
 
     // Percentage
-    if trimmed.ends_with('%') {
-        if let Ok(num) = trimmed[..trimmed.len() - 1].parse::<f64>() {
+    if let Some(stripped) = trimmed.strip_suffix('%') {
+        if let Ok(num) = stripped.parse::<f64>() {
             return CellContent::Value {
                 value: CellValue::Number(num / 100.0),
                 original_input: Some(original),
