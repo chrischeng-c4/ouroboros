@@ -5,9 +5,8 @@
 use anyhow::{Context, Result};
 use clap::Args;
 use std::fs;
-use std::path::Path;
 
-use super::config::{find_pyproject, PyProject};
+use super::config::find_pyproject;
 use super::AppAction;
 
 /// Arguments for `ob api app create`

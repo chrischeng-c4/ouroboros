@@ -1,8 +1,6 @@
 use crate::error::{ToolError, ToolResult};
 use async_trait::async_trait;
-use ouroboros_agent_core::ToolCall;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Tool parameter definition
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -95,6 +95,7 @@ pub struct Bundler {
     transformer: Arc<ouroboros_talos_transform::Transformer>,
 
     /// Asset processor
+    #[allow(dead_code)]
     asset_processor: Arc<ouroboros_talos_asset::AssetProcessor>,
 
     /// Module graph

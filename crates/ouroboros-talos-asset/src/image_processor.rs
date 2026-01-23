@@ -8,7 +8,7 @@ pub fn optimize_image(path: &Path, options: &AssetOptions) -> Result<ProcessedAs
     tracing::debug!("Optimizing image: {:?}", path);
 
     // Read image
-    let img = image::open(path)?;
+    let _img = image::open(path)?;
 
     // Check size
     let original_size = std::fs::metadata(path)?.len() as usize;
@@ -53,8 +53,6 @@ pub fn optimize_image(path: &Path, options: &AssetOptions) -> Result<ProcessedAs
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_optimize_placeholder() {
         // Placeholder test

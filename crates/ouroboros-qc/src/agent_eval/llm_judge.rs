@@ -264,6 +264,7 @@ impl LLMJudge {
 
     /// Build evaluation prompt (legacy method, kept for backward compatibility)
     #[deprecated(since = "0.1.0", note = "Use build_prompt_from_template instead")]
+    #[allow(dead_code)]
     fn build_prompt(&self, input: &str, expected: Option<&str>, actual: &str) -> String {
         self.build_prompt_from_template(input, expected, actual)
             .unwrap_or_else(|_| {
